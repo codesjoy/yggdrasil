@@ -1,0 +1,36 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    # 基础检查
+    - govet
+    - staticcheck
+    - errcheck
+    - unused
+
+    # 风格
+    - revive
+    - unconvert
+
+    # 安全
+    - gosec
+
+    # 并发
+    - bodyclose
+    - noctx
+
+  exclusions:
+    rules:
+      - path: (.+)_test\.go
+        linters:
+          - dupl
+          - mnd
+          - lll
+
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+    - golines
