@@ -1,0 +1,21 @@
+yggdrasil:
+  client:
+    example.polaris.server:
+      grpc:
+        target: 127.0.0.1:30001
+
+  logger:
+    default:
+      - handler: "json"
+        writer: "file"
+        handlerConfig:
+          level: "debug"
+          addSource: true
+      - handler: "console"
+        writer: "console"
+        handlerConfig:
+          level: "debug"
+          addSource: true
+
+TestTag:
+  data: "test"
