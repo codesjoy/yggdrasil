@@ -214,23 +214,41 @@ func (m *value) StringMap(def ...map[string]string) map[string]string {
 	return def[0]
 }
 
-func (m *value) Map(def ...map[string]interface{}) map[string]interface{} {
-	res, ok := m.val.(map[string]interface{})
+func (m *value) Map(def ...map[string]any) map[string]any {
+	res, ok := m.val.(map[string]any)
 	if ok {
 		return maps.Clone(res)
 	}
 	if len(def) == 0 {
-		return map[string]interface{}{}
+		return map[string]any{}
 	}
 	return def[0]
 }
 
 func (m *value) Scan(val interface{}) error {
 	switch m.val.(type) {
-	case map[string]interface{}:
-	case []interface{}:
+	case map[string]any:
+	case []any:
 	default:
-		if reflect.TypeOf(val).Kind() != reflect.Ptr || reflect.ValueOf(val).Elem().Kind() != reflect.Struct {
+		if m.val == nil {
+			return defaults.Set(val)
+		}
+		v := reflect.ValueOf(val)
+		if v.Kind() != reflect.Ptr || v.IsNil() {
+			return nil
+		}
+		// 获取指针指向的实际元素
+		elem := v.Elem()
+		// 3. 如果不是结构体，尝试直接赋值
+		if elem.Kind() != reflect.Struct {
+			// 检查是否可以进行赋值操作
+			if elem.CanSet() {
+				mVal := reflect.ValueOf(m.val)
+				// 严谨起见，检查类型是否匹配或可以分配
+				if mVal.Type().AssignableTo(elem.Type()) {
+					elem.Set(mVal)
+				}
+			}
 			return nil
 		}
 		return defaults.Set(val)
