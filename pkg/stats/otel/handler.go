@@ -293,7 +293,7 @@ func (h *handler) handleWithOutMetrics(ctx context.Context, rs stats.RPCStats, i
 }
 
 func serverStatus(st *status.Status) (codes.Code, string) {
-	switch code.Code(st.Code()) {
+	switch st.Code() {
 	case code.Code_UNKNOWN,
 		code.Code_INTERNAL,
 		code.Code_DEADLINE_EXCEEDED,

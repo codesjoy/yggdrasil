@@ -21,9 +21,11 @@ import (
 	"sync"
 )
 
-type inKey struct{}
-type outKey struct{}
-type streamKey struct{}
+type (
+	inKey     struct{}
+	outKey    struct{}
+	streamKey struct{}
+)
 
 type stream struct {
 	mu      sync.Mutex

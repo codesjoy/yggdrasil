@@ -102,11 +102,11 @@ func TestPairs(t *testing.T) {
 
 	t.Run("odd number of arguments panics", func(t *testing.T) {
 		assert.Panics(t, func() {
-			Pairs("key1", "value1", "key2")
+			Pairs("key1", "value1", "key2") // nolint:staticcheck
 		})
 
 		assert.Panics(t, func() {
-			Pairs("key1")
+			Pairs("key1") // nolint:staticcheck
 		})
 
 		// Empty (even) doesn't panic
@@ -186,11 +186,11 @@ func TestMD_Copy(t *testing.T) {
 			"key2": "value2",
 		})
 
-		copy := original.Copy()
+		cpMd := original.Copy()
 
 		// Modify copy
-		copy.Set("key3", "value3")
-		copy["key2"] = []string{"modified"}
+		cpMd.Set("key3", "value3")
+		cpMd["key2"] = []string{"modified"}
 
 		// Original should be unchanged
 		assert.Equal(t, []string{"value1"}, original["key1"])
@@ -200,18 +200,18 @@ func TestMD_Copy(t *testing.T) {
 
 	t.Run("copy empty metadata", func(t *testing.T) {
 		original := MD{}
-		copy := original.Copy()
+		cpMd := original.Copy()
 
-		assert.Empty(t, copy)
-		assert.Equal(t, 0, copy.Len())
+		assert.Empty(t, cpMd)
+		assert.Equal(t, 0, cpMd.Len())
 	})
 
 	t.Run("copy preserves all values", func(t *testing.T) {
 		original := Pairs("key", "v1", "key", "v2", "key", "v3")
 
-		copy := original.Copy()
+		cpMd := original.Copy()
 
-		assert.Equal(t, []string{"v1", "v2", "v3"}, copy["key"])
+		assert.Equal(t, []string{"v1", "v2", "v3"}, cpMd["key"])
 	})
 
 	t.Run("copy with multiple values per key", func(t *testing.T) {
@@ -220,10 +220,10 @@ func TestMD_Copy(t *testing.T) {
 			"key2": []string{"value3"},
 		}
 
-		copy := original.Copy()
+		cpMD := original.Copy()
 
-		assert.Equal(t, original["key1"], copy["key1"])
-		assert.Equal(t, original["key2"], copy["key2"])
+		assert.Equal(t, original["key1"], cpMD["key1"])
+		assert.Equal(t, original["key2"], cpMD["key2"])
 	})
 }
 
@@ -500,7 +500,11 @@ func TestMD_RealWorldScenarios(t *testing.T) {
 			"Accept", "application/xml",
 		)
 
-		assert.Equal(t, []string{"text/html", "application/xhtml+xml", "application/xml"}, md["accept"])
+		assert.Equal(
+			t,
+			[]string{"text/html", "application/xhtml+xml", "application/xml"},
+			md["accept"],
+		)
 	})
 
 	t.Run("metadata propagation", func(t *testing.T) {

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package pkg provides common functionality for yggdrasil.
 package pkg
 
 import (
@@ -20,17 +21,23 @@ import (
 	"github.com/codesjoy/yggdrasil/pkg/config"
 )
 
+// ServerKind represents the type of server.
 type ServerKind string
 
 const (
-	ServerKindRpc      ServerKind = "rpc"
+	// ServerKindRPC represents the rpc server.
+	ServerKindRPC ServerKind = "rpc"
+	// ServerKindGovernor represents the governor server.
 	ServerKindGovernor ServerKind = "governor"
-	ServerKindRest     ServerKind = "rest"
+	// ServerKindRest represents the rest server.
+	ServerKindRest ServerKind = "rest"
 )
 
 const (
+	// FrameworkVersion is the version of the framework.
 	FrameworkVersion = "1.3.1"
-	FrameworkName    = "yggdrasil"
+	// FrameworkName is the name of the framework.
+	FrameworkName = "yggdrasil"
 )
 
 var (
@@ -38,9 +45,10 @@ var (
 	once         sync.Once
 )
 
+// InitInstanceInfo initializes the instance information.
 func InitInstanceInfo() {
 	once.Do(func() {
-		var info = struct {
+		info := struct {
 			Name      string            `mapstructure:"name"`
 			Namespace string            `mapstructure:"namespace"`
 			Version   string            `mapstructure:"version"`
@@ -65,30 +73,37 @@ func InitInstanceInfo() {
 	})
 }
 
+// Namespace returns the namespace of the instance.
 func Namespace() string {
 	return instanceInfo.Namespace()
 }
 
+// Name returns the name of the instance.
 func Name() string {
 	return instanceInfo.Name()
 }
 
+// Version returns the version of the instance.
 func Version() string {
 	return instanceInfo.Version()
 }
 
+// Region returns the region of the instance.
 func Region() string {
 	return instanceInfo.Region()
 }
 
+// Zone returns the zone of the instance.
 func Zone() string {
 	return instanceInfo.Zone()
 }
 
+// Campus returns the campus of the instance.
 func Campus() string {
 	return instanceInfo.Campus()
 }
 
+// Metadata returns the metadata of the instance.
 func Metadata() map[string]string {
 	return instanceInfo.Metadata()
 }

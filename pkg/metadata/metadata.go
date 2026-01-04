@@ -54,7 +54,12 @@ func New(m map[string]string) MD {
 // Uppercase letters are automatically converted to lowercase.
 func Pairs(kv ...string) MD {
 	if len(kv)%2 == 1 {
-		panic(fmt.Sprintf("metadata: Pairs got the odd number of input pairs for metadata: %d", len(kv)))
+		panic(
+			fmt.Sprintf(
+				"metadata: Pairs got the odd number of input pairs for metadata: %d",
+				len(kv),
+			),
+		)
 	}
 	md := MD{}
 	var key string
