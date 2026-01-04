@@ -124,7 +124,7 @@ func TestRegisterUnaryServerIntBuilder(t *testing.T) {
 func TestRegisterStreamClientIntBuilder(t *testing.T) {
 	t.Run("register builder successfully", func(t *testing.T) {
 		builder := func(_ string) StreamClientInterceptor {
-			return func(ctx context.Context, desc *stream.StreamDesc, method string, streamer Streamer) (stream.ClientStream, error) {
+			return func(ctx context.Context, desc *stream.Desc, method string, streamer Streamer) (stream.ClientStream, error) {
 				return streamer(ctx, desc, method)
 			}
 		}
@@ -143,7 +143,7 @@ func TestRegisterStreamClientIntBuilder(t *testing.T) {
 func TestRegisterStreamServerIntBuilder(t *testing.T) {
 	t.Run("register builder successfully", func(t *testing.T) {
 		builder := func() StreamServerInterceptor {
-			return func(srv interface{}, ss stream.ServerStream, _ *StreamServerInfo, handler stream.StreamHandler) error {
+			return func(srv interface{}, ss stream.ServerStream, _ *StreamServerInfo, handler stream.Handler) error {
 				return handler(srv, ss)
 			}
 		}
@@ -349,9 +349,9 @@ func TestChainStreamClientInterceptors(t *testing.T) {
 		streamerCalled := false
 		_, err := chain(
 			context.Background(),
-			&stream.StreamDesc{},
+			&stream.Desc{},
 			"/test/method",
-			func(context.Context, *stream.StreamDesc, string) (stream.ClientStream, error) {
+			func(context.Context, *stream.Desc, string) (stream.ClientStream, error) {
 				streamerCalled = true
 				return nil, nil
 			},
@@ -365,7 +365,7 @@ func TestChainStreamClientInterceptors(t *testing.T) {
 		RegisterStreamClientIntBuilder(
 			"single-stream",
 			func(_ string) StreamClientInterceptor {
-				return func(ctx context.Context, desc *stream.StreamDesc, method string, streamer Streamer) (stream.ClientStream, error) {
+				return func(ctx context.Context, desc *stream.Desc, method string, streamer Streamer) (stream.ClientStream, error) {
 					return streamer(ctx, desc, method)
 				}
 			},
@@ -376,9 +376,9 @@ func TestChainStreamClientInterceptors(t *testing.T) {
 		streamerCalled := false
 		_, err := chain(
 			context.Background(),
-			&stream.StreamDesc{},
+			&stream.Desc{},
 			"/test/method",
-			func(context.Context, *stream.StreamDesc, string) (stream.ClientStream, error) {
+			func(context.Context, *stream.Desc, string) (stream.ClientStream, error) {
 				streamerCalled = true
 				return nil, nil
 			},
@@ -393,7 +393,7 @@ func TestChainStreamClientInterceptors(t *testing.T) {
 		RegisterStreamClientIntBuilder(
 			"stream-first",
 			func(string) StreamClientInterceptor {
-				return func(ctx context.Context, desc *stream.StreamDesc, method string, streamer Streamer) (stream.ClientStream, error) {
+				return func(ctx context.Context, desc *stream.Desc, method string, streamer Streamer) (stream.ClientStream, error) {
 					callOrder = append(callOrder, "stream-first")
 					return streamer(ctx, desc, method)
 				}
@@ -402,7 +402,7 @@ func TestChainStreamClientInterceptors(t *testing.T) {
 		RegisterStreamClientIntBuilder(
 			"stream-second",
 			func(_ string) StreamClientInterceptor {
-				return func(ctx context.Context, desc *stream.StreamDesc, method string, streamer Streamer) (stream.ClientStream, error) {
+				return func(ctx context.Context, desc *stream.Desc, method string, streamer Streamer) (stream.ClientStream, error) {
 					callOrder = append(callOrder, "stream-second")
 					return streamer(ctx, desc, method)
 				}
@@ -416,9 +416,9 @@ func TestChainStreamClientInterceptors(t *testing.T) {
 
 		_, _ = chain(
 			context.Background(),
-			&stream.StreamDesc{},
+			&stream.Desc{},
 			"/test/method",
-			func(context.Context, *stream.StreamDesc, string) (stream.ClientStream, error) {
+			func(context.Context, *stream.Desc, string) (stream.ClientStream, error) {
 				callOrder = append(callOrder, "streamer")
 				return nil, nil
 			},
@@ -563,7 +563,7 @@ func TestChainStreamServerInterceptors(t *testing.T) {
 
 	t.Run("single interceptor", func(t *testing.T) {
 		RegisterStreamServerIntBuilder("single-stream-server", func() StreamServerInterceptor {
-			return func(srv interface{}, ss stream.ServerStream, _ *StreamServerInfo, handler stream.StreamHandler) error {
+			return func(srv interface{}, ss stream.ServerStream, _ *StreamServerInfo, handler stream.Handler) error {
 				return handler(srv, ss)
 			}
 		})
@@ -586,13 +586,13 @@ func TestChainStreamServerInterceptors(t *testing.T) {
 	t.Run("multiple interceptors in order", func(t *testing.T) {
 		callOrder := []string{}
 		RegisterStreamServerIntBuilder("stream-server-1", func() StreamServerInterceptor {
-			return func(srv interface{}, ss stream.ServerStream, _ *StreamServerInfo, handler stream.StreamHandler) error {
+			return func(srv interface{}, ss stream.ServerStream, _ *StreamServerInfo, handler stream.Handler) error {
 				callOrder = append(callOrder, "stream-server-1")
 				return handler(srv, ss)
 			}
 		})
 		RegisterStreamServerIntBuilder("stream-server-2", func() StreamServerInterceptor {
-			return func(srv interface{}, ss stream.ServerStream, _ *StreamServerInfo, handler stream.StreamHandler) error {
+			return func(srv interface{}, ss stream.ServerStream, _ *StreamServerInfo, handler stream.Handler) error {
 				callOrder = append(callOrder, "stream-server-2")
 				return handler(srv, ss)
 			}
@@ -616,7 +616,7 @@ func TestChainStreamServerInterceptors(t *testing.T) {
 
 	t.Run("interceptor receives correct stream info", func(t *testing.T) {
 		RegisterStreamServerIntBuilder("stream-info-test", func() StreamServerInterceptor {
-			return func(srv interface{}, ss stream.ServerStream, info *StreamServerInfo, handler stream.StreamHandler) error {
+			return func(srv interface{}, ss stream.ServerStream, info *StreamServerInfo, handler stream.Handler) error {
 				assert.Equal(t, "/my.service/stream", info.FullMethod)
 				assert.True(t, info.IsClientStream)
 				assert.False(t, info.IsServerStream)

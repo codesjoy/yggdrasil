@@ -44,7 +44,7 @@ type UnaryInvoker func(ctx context.Context, method string, req, reply any) error
 type UnaryClientInterceptor func(ctx context.Context, method string, req, reply any, invoker UnaryInvoker) error
 
 // Streamer is called by StreamClientInterceptor to create a ClientStream.
-type Streamer func(ctx context.Context, desc *stream.StreamDesc, method string) (stream.ClientStream, error)
+type Streamer func(ctx context.Context, desc *stream.Desc, method string) (stream.ClientStream, error)
 
 // StreamClientInterceptor intercepts the creation of a ClientStream. Stream
 // interceptors can be specified as a DialOption, using WithStreamInterceptor()
@@ -61,7 +61,7 @@ type Streamer func(ctx context.Context, desc *stream.StreamDesc, method string) 
 //
 // StreamClientInterceptor may return a custom ClientStream to intercept all I/O
 // operations. The returned reason must be compatible with the status package.
-type StreamClientInterceptor func(ctx context.Context, desc *stream.StreamDesc, method string, streamer Streamer) (stream.ClientStream, error)
+type StreamClientInterceptor func(ctx context.Context, desc *stream.Desc, method string, streamer Streamer) (stream.ClientStream, error)
 
 // UnaryServerInfo consists of various information about a unary RPC on
 // server side. All per-rpc information may be mutated by the interceptor.
@@ -102,7 +102,7 @@ type StreamServerInfo struct {
 // info contains all the information of this RPC the interceptor can operate on. And handler is the
 // service method implementation. It is the responsibility of the interceptor to invoke handler to
 // complete the RPC.
-type StreamServerInterceptor func(srv interface{}, ss stream.ServerStream, info *StreamServerInfo, handler stream.StreamHandler) error
+type StreamServerInterceptor func(srv interface{}, ss stream.ServerStream, info *StreamServerInfo, handler stream.Handler) error
 
 type (
 	// UnaryClientIntBuilder is the type of function that builds a unary client interceptor.
@@ -238,13 +238,13 @@ func ChainStreamClientInterceptors(serviceName string, names []string) StreamCli
 		}
 	}
 	if len(interceptors) == 0 {
-		return func(ctx context.Context, desc *stream.StreamDesc, method string, streamer Streamer) (stream.ClientStream, error) {
+		return func(ctx context.Context, desc *stream.Desc, method string, streamer Streamer) (stream.ClientStream, error) {
 			return streamer(ctx, desc, method)
 		}
 	} else if len(interceptors) == 1 {
 		return interceptors[0]
 	}
-	return func(ctx context.Context, desc *stream.StreamDesc, method string, streamer Streamer) (stream.ClientStream, error) {
+	return func(ctx context.Context, desc *stream.Desc, method string, streamer Streamer) (stream.ClientStream, error) {
 		return interceptors[0](ctx, desc, method, getChainStreamer(interceptors, 0, streamer))
 	}
 }
@@ -258,7 +258,7 @@ func getChainStreamer(
 	if curr == len(interceptors)-1 {
 		return finalStreamer
 	}
-	return func(ctx context.Context, desc *stream.StreamDesc, method string) (stream.ClientStream, error) {
+	return func(ctx context.Context, desc *stream.Desc, method string) (stream.ClientStream, error) {
 		return interceptors[curr+1](
 			ctx,
 			desc,
@@ -325,13 +325,13 @@ func ChainStreamServerInterceptors(names []string) StreamServerInterceptor {
 	}
 
 	if len(interceptors) == 0 {
-		return func(srv interface{}, ss stream.ServerStream, _ *StreamServerInfo, handler stream.StreamHandler) error {
+		return func(srv interface{}, ss stream.ServerStream, _ *StreamServerInfo, handler stream.Handler) error {
 			return handler(srv, ss)
 		}
 	} else if len(interceptors) == 1 {
 		return interceptors[0]
 	}
-	return func(srv interface{}, ss stream.ServerStream, info *StreamServerInfo, handler stream.StreamHandler) error {
+	return func(srv interface{}, ss stream.ServerStream, info *StreamServerInfo, handler stream.Handler) error {
 		return interceptors[0](srv, ss, info, getChainStreamHandler(interceptors, 0, info, handler))
 	}
 }
@@ -340,8 +340,8 @@ func getChainStreamHandler(
 	interceptors []StreamServerInterceptor,
 	curr int,
 	info *StreamServerInfo,
-	finalHandler stream.StreamHandler,
-) stream.StreamHandler {
+	finalHandler stream.Handler,
+) stream.Handler {
 	if curr == len(interceptors)-1 {
 		return finalHandler
 	}

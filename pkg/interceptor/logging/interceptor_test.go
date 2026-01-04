@@ -474,13 +474,13 @@ func TestLogging_StreamClientInterceptor(t *testing.T) {
 	t.Run("successful call", func(t *testing.T) {
 		l := &logging{cfg: &Config{SlowThreshold: time.Second}}
 
-		streamer := func(_ context.Context, _ *stream.StreamDesc, _ string) (stream.ClientStream, error) {
+		streamer := func(_ context.Context, _ *stream.Desc, _ string) (stream.ClientStream, error) {
 			return &mockClientStream{}, nil
 		}
 
 		cs, err := l.StreamClientInterceptor(
 			context.Background(),
-			&stream.StreamDesc{},
+			&stream.Desc{},
 			"/test.service/StreamMethod",
 			streamer,
 		)
@@ -492,13 +492,13 @@ func TestLogging_StreamClientInterceptor(t *testing.T) {
 	t.Run("error call", func(t *testing.T) {
 		l := &logging{cfg: &Config{SlowThreshold: time.Second}}
 
-		streamer := func(_ context.Context, _ *stream.StreamDesc, _ string) (stream.ClientStream, error) {
+		streamer := func(_ context.Context, _ *stream.Desc, _ string) (stream.ClientStream, error) {
 			return nil, errors.New("streamer error")
 		}
 
 		cs, err := l.StreamClientInterceptor(
 			context.Background(),
-			&stream.StreamDesc{},
+			&stream.Desc{},
 			"/test.service/StreamMethod",
 			streamer,
 		)
@@ -511,13 +511,13 @@ func TestLogging_StreamClientInterceptor(t *testing.T) {
 	t.Run("panic recovery", func(t *testing.T) {
 		l := &logging{cfg: &Config{SlowThreshold: time.Second}}
 
-		streamer := func(_ context.Context, _ *stream.StreamDesc, _ string) (stream.ClientStream, error) {
+		streamer := func(_ context.Context, _ *stream.Desc, _ string) (stream.ClientStream, error) {
 			panic("stream client panic")
 		}
 
 		cs, err := l.StreamClientInterceptor(
 			context.Background(),
-			&stream.StreamDesc{},
+			&stream.Desc{},
 			"/test.service/StreamMethod",
 			streamer,
 		)

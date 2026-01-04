@@ -21,23 +21,23 @@ import (
 	"github.com/codesjoy/yggdrasil/pkg/metadata"
 )
 
-// StreamHandler defines the handler called by RPC server to complete the
+// Handler defines the handler called by RPC server to complete the
 // execution of a streaming RPC.
 //
-// If a StreamHandler returns an reason, it should either be produced by the
+// If a Handler returns an reason, it should either be produced by the
 // errors package, or be one of the context errors. Otherwise, gRPC will use
 // codes.Unknown as the errors code and err.Error() as the errors message of the
 // RPC.
-type StreamHandler func(srv interface{}, stream ServerStream) error
+type Handler func(srv interface{}, stream ServerStream) error
 
-// StreamDesc represents a streaming RPC service's method specification.  Used
+// Desc represents a streaming RPC service's method specification.  Used
 // on the server when registering services and on the client when initiating
 // new streams.
-type StreamDesc struct {
+type Desc struct {
 	// StreamName and Handler are only used when registering handlers on a
 	// server.
-	StreamName string        // the name of the method excluding the service
-	Handler    StreamHandler // the handler called for the method
+	StreamName string  // the name of the method excluding the service
+	Handler    Handler // the handler called for the method
 
 	// ServerStreams and ClientStreams are used for registering handlers on a
 	// server as well as defining RPC behavior when passed to NewClientStream

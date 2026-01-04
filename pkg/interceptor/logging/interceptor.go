@@ -149,7 +149,7 @@ func (l *logging) StreamServerInterceptor(
 	srv interface{},
 	ss stream.ServerStream,
 	info *interceptor.StreamServerInfo,
-	handler stream.StreamHandler,
+	handler stream.Handler,
 ) (err error) {
 	startTime := time.Now()
 	defer func() {
@@ -262,7 +262,7 @@ func (l *logging) UnaryClientInterceptor(
 // StreamClientInterceptor is a stream client interceptor.
 func (l *logging) StreamClientInterceptor(
 	ctx context.Context,
-	desc *stream.StreamDesc,
+	desc *stream.Desc,
 	method string,
 	streamer interceptor.Streamer,
 ) (res stream.ClientStream, err error) {
