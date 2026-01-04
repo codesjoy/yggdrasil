@@ -39,7 +39,7 @@ function lint() {
 function lint_one() {
 	local mod=$1
 	local in_failing
-	util::array_contains "$mod" "${failing_modules[*]}" && in_failing=$? || in_failing=$?
+	util::array_contains "$mod" "${failing_modules[*]:-}" && in_failing=$? || in_failing=$?
 	if [[ "$in_failing" -ne "0" ]]; then
 		pushd "$mod" >/dev/null &&
 			echo "golangci lint $(sed -n 1p go.mod | cut -d ' ' -f2)" &&
@@ -61,7 +61,7 @@ function fix() {
 function fix_one() {
 	local mod=$1
 	local in_failing
-	util::array_contains "$mod" "${failing_modules[*]}" && in_failing=$? || in_failing=$?
+	util::array_contains "$mod" "${failing_modules[*]:-}" && in_failing=$? || in_failing=$?
 	if [[ "$in_failing" -ne "0" ]]; then
 		pushd "$mod" >/dev/null &&
 			echo "golangci fix $(sed -n 1p go.mod | cut -d ' ' -f2)" &&
@@ -83,7 +83,7 @@ function test() {
 function test_one() {
 	local mod=$1
 	local in_failing
-	util::array_contains "$mod" "${ignored_modules[*]}" && in_failing=$? || in_failing=$?
+	util::array_contains "$mod" "${ignored_modules[*]:-}" && in_failing=$? || in_failing=$?
 	if [[ "$in_failing" -ne "0" ]]; then
 		pushd "$mod" >/dev/null &&
 			echo "go test $(sed -n 1p go.mod | cut -d ' ' -f2)" &&
@@ -108,7 +108,7 @@ function test_coverage_one() {
 	local base
 	base=$(pwd)
 	local in_failing
-	util::array_contains "$mod" "${ignored_modules[*]}" && in_failing=$? || in_failing=$?
+	util::array_contains "$mod" "${ignored_modules[*]:-}" && in_failing=$? || in_failing=$?
 	if [[ "$in_failing" -ne "0" ]]; then
 		pushd "$mod" >/dev/null &&
 			echo "go test $(sed -n 1p go.mod | cut -d ' ' -f2)" &&
