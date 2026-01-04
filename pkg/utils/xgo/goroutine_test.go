@@ -176,7 +176,7 @@ func TestGoWithCtx(t *testing.T) {
 		var executed atomic.Bool
 		ctx := context.Background()
 
-		GoWithCtx(ctx, func(c context.Context) {
+		GoWithCtx(ctx, func(context.Context) {
 			executed.Store(true)
 			panic("test panic in goroutine with context")
 		})
@@ -196,7 +196,7 @@ func TestGoWithCtx(t *testing.T) {
 		ctx := context.Background()
 
 		for i := 0; i < 10; i++ {
-			GoWithCtx(ctx, func(c context.Context) {
+			GoWithCtx(ctx, func(context.Context) {
 				counter.Add(1)
 			})
 		}
@@ -213,7 +213,7 @@ func TestGoWithCtx(t *testing.T) {
 		// Cancel immediately
 		cancel()
 
-		GoWithCtx(ctx, func(c context.Context) {
+		GoWithCtx(ctx, func(context.Context) {
 			executed.Store(true)
 		})
 
@@ -225,7 +225,10 @@ func TestGoWithCtx(t *testing.T) {
 
 	t.Run("context with deadline", func(t *testing.T) {
 		var deadlineReached atomic.Bool
-		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(50*time.Millisecond))
+		ctx, cancel := context.WithDeadline(
+			context.Background(),
+			time.Now().Add(50*time.Millisecond),
+		)
 		defer cancel()
 
 		GoWithCtx(ctx, func(c context.Context) {
@@ -290,8 +293,10 @@ func TestGoWithCtx_ParentContextCancellation(t *testing.T) {
 
 	parentCtx, parentCancel := context.WithCancel(context.Background())
 
-	child1Ctx, _ := context.WithCancel(parentCtx)
-	child2Ctx, _ := context.WithCancel(parentCtx)
+	child1Ctx, child1Cancel := context.WithCancel(parentCtx)
+	defer child1Cancel()
+	child2Ctx, child2Cancel := context.WithCancel(parentCtx)
+	defer child2Cancel()
 
 	GoWithCtx(child1Ctx, func(c context.Context) {
 		<-c.Done()

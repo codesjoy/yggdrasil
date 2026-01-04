@@ -221,8 +221,8 @@ func TestServerStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a real status.Status with the given code using status.Errorf
-			st := status.Errorf(tt.code, "test message")
+			// Create a real status.Status with the given code using status.New
+			st := status.New(tt.code, "test message")
 
 			statusCode, _ := serverStatus(st)
 			assert.Equal(t, tt.expectStatus, statusCode)

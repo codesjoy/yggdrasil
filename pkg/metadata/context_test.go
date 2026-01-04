@@ -300,7 +300,7 @@ func TestSetHeader(t *testing.T) {
 
 		for i := 0; i < 100; i++ {
 			wg.Add(1)
-			go func(idx int) {
+			go func(int) {
 				defer wg.Done()
 				md := New(map[string]string{"key": "value"})
 				_ = SetHeader(ctx, md)
@@ -436,7 +436,7 @@ func TestSetTrailer(t *testing.T) {
 
 		for i := 0; i < 100; i++ {
 			wg.Add(1)
-			go func(idx int) {
+			go func(int) {
 				defer wg.Done()
 				md := New(map[string]string{"key": "value"})
 				_ = SetTrailer(ctx, md)
@@ -608,7 +608,7 @@ func TestConcurrentAccess(t *testing.T) {
 		// Writers
 		for i := 0; i < 50; i++ {
 			wg.Add(1)
-			go func(idx int) {
+			go func(int) {
 				defer wg.Done()
 				md := New(map[string]string{"key": "value"})
 				_ = SetHeader(ctx, md)
