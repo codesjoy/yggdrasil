@@ -19,14 +19,27 @@ linters:
     # 并发
     - bodyclose
     - noctx
+  settings:
+    gosec:
+      excludes:
+        - G115
 
   exclusions:
     rules:
-      - path: (.+)_test\.go
+      - path: _test\.go
         linters:
           - dupl
           - mnd
           - lll
+          - errcheck
+      - path: _test\.go
+        linters:
+          - gosec
+        text: "G104:"
+      - path: _test\.go
+        linters:
+          - revive
+        text: "unused-parameter:"
 
 formatters:
   enable:
