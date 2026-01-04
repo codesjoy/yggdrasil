@@ -72,7 +72,7 @@ type Value interface {
 	Duration(def ...time.Duration) time.Duration
 	StringSlice(def ...[]string) []string
 	StringMap(def ...map[string]string) map[string]string
-	Map(def ...map[string]interface{}) map[string]interface{}
+	Map(def ...map[string]any) map[string]any
 	Scan(val interface{}) error
 	Bytes(def ...[]byte) []byte
 }
