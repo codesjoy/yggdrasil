@@ -29,8 +29,11 @@ type ClientState struct {
 	State    State
 }
 
+// OnStateChange is the callback function when the state of the client changes.
+type OnStateChange func(state ClientState)
+
 // ClientBuilder is the interface that wraps the Build method.
-type ClientBuilder func(context.Context, string, resolver.Endpoint, stats.Handler, func(ClientState)) (Client, error)
+type ClientBuilder func(context.Context, string, resolver.Endpoint, stats.Handler, OnStateChange) (Client, error)
 
 // ServerInfo is the information of the server.
 type ServerInfo struct {

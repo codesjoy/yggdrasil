@@ -46,7 +46,7 @@ func init() {
 	// Register mock remote client builder
 	remote.RegisterClientBuilder(
 		"mock_protocol",
-		func(ctx context.Context, s string, e resolver.Endpoint, h stats.Handler, f func(remote.ClientState)) (remote.Client, error) {
+		func(ctx context.Context, s string, e resolver.Endpoint, h stats.Handler, f remote.OnStateChange) (remote.Client, error) {
 			return newMockRemoteClient(e.Name(), remote.Ready), nil
 		},
 	)
