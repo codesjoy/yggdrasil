@@ -205,7 +205,7 @@ func CoverError(err error) (*Status, bool) {
 		return nil, true
 	}
 	var s *Status
-	ok := errors.As(errors.Unwrap(err), &s)
+	ok := errors.As(err, &s)
 	if ok {
 		return s, true
 	}

@@ -31,7 +31,7 @@ func TestNew(t *testing.T) {
 	t.Run("create status with code only", func(t *testing.T) {
 		st := WithCode(code.Code_OK, nil)
 		assert.NotNil(t, st)
-		assert.Equal(t, int32(code.Code_OK), st.Code())
+		assert.Equal(t, code.Code_OK, st.Code())
 		assert.Equal(t, code.Code_OK.String(), st.Message())
 	})
 
@@ -39,7 +39,7 @@ func TestNew(t *testing.T) {
 		err := errors.New("test error")
 		st := WithCode(code.Code_INVALID_ARGUMENT, err)
 		assert.NotNil(t, st)
-		assert.Equal(t, int32(code.Code_INVALID_ARGUMENT), st.Code())
+		assert.Equal(t, code.Code_INVALID_ARGUMENT, st.Code())
 		assert.Equal(t, "test error", st.Message())
 	})
 
@@ -66,7 +66,7 @@ func TestErrorf(t *testing.T) {
 	t.Run("create status with message", func(t *testing.T) {
 		st := New(code.Code_NOT_FOUND, "resource not found")
 		assert.NotNil(t, st)
-		assert.Equal(t, int32(code.Code_NOT_FOUND), st.Code())
+		assert.Equal(t, code.Code_NOT_FOUND, st.Code())
 		assert.Equal(t, "resource not found", st.Message())
 	})
 
@@ -76,7 +76,7 @@ func TestErrorf(t *testing.T) {
 		}
 		st := New(code.Code_INTERNAL, "internal error").WithDetails(detail)
 		assert.NotNil(t, st)
-		assert.Equal(t, int32(code.Code_INTERNAL), st.Code())
+		assert.Equal(t, code.Code_INTERNAL, st.Code())
 		assert.Equal(t, "internal error", st.Message())
 		assert.Equal(t, 1, len(st.stu.Details))
 	})
@@ -147,14 +147,14 @@ func TestFromHTTPCode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			st := WithCode(HTTPCodeToStuCode(tt.httpCode), tt.expectErr)
 			assert.NotNil(t, st)
-			assert.Equal(t, int32(tt.expectCode), st.Code())
+			assert.Equal(t, tt.expectCode, st.Code())
 		})
 	}
 
 	t.Run("499 Client Closed", func(t *testing.T) {
 		st := WithCode(HTTPCodeToStuCode(HTTPStatusClientClosed), errors.New("client closed"))
 		assert.NotNil(t, st)
-		assert.Equal(t, int32(code.Code_CANCELLED), st.Code())
+		assert.Equal(t, code.Code_CANCELLED, st.Code())
 	})
 }
 
@@ -167,7 +167,7 @@ func TestFromProto(t *testing.T) {
 		}
 		st := FromProto(pb)
 		assert.NotNil(t, st)
-		assert.Equal(t, int32(code.Code_NOT_FOUND), st.Code())
+		assert.Equal(t, code.Code_NOT_FOUND, st.Code())
 		assert.Equal(t, "not found", st.Message())
 	})
 
@@ -182,12 +182,12 @@ func TestFromProto(t *testing.T) {
 func TestStatus_Methods(t *testing.T) {
 	t.Run("Code method", func(t *testing.T) {
 		st := WithCode(code.Code_NOT_FOUND, errors.New("not found"))
-		assert.Equal(t, int32(code.Code_NOT_FOUND), st.Code())
+		assert.Equal(t, code.Code_NOT_FOUND, st.Code())
 	})
 
 	t.Run("Code on nil status", func(t *testing.T) {
 		var st *Status
-		assert.Equal(t, int32(code.Code_OK), st.Code())
+		assert.Equal(t, code.Code_OK, st.Code())
 	})
 
 	t.Run("Message method", func(t *testing.T) {
