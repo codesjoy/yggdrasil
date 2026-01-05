@@ -31,7 +31,7 @@ func testClientBuilder(
 	appName string,
 	endpoint resolver.Endpoint,
 	statsHandler stats.Handler,
-	stateListener func(remote.ClientState),
+	stateListener remote.OnStateChange,
 ) (remote.Client, error) {
 	return newMockRemoteClient(endpoint.Name(), remote.Ready), nil
 }
