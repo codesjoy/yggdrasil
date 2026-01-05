@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Angular Commit Message Validator
 # Usage: Save as .git/hooks/commit-msg and make executable
