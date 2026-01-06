@@ -30,6 +30,9 @@ var (
 	svrHandler     Handler
 	cliOnce        sync.Once
 	cliHandler     Handler
+
+	// NoOpHandler is a no-op handler.
+	NoOpHandler Handler = &handlerChain{}
 )
 
 // RegisterHandlerBuilder registers a HandlerBuilder.
