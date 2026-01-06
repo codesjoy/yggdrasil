@@ -41,7 +41,7 @@ type Desc struct {
 
 	// ServerStreams and ClientStreams are used for registering handlers on a
 	// server as well as defining RPC behavior when passed to NewClientStream
-	// and ClientConn.NewStream.  At least one must be true.
+	// and Client.NewStream.  At least one must be true.
 	ServerStreams bool // indicates the server can perform streaming sends
 	ClientStreams bool // indicates the client can perform streaming sends
 }
