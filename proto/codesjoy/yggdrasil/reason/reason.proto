@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package codesjoy.yggdrasil.reason;
+
+import "google/protobuf/descriptor.proto";
+import "google/rpc/code.proto";
+
+option go_package = "github.com/codesjoy/yggdrasil/v2/proto/codesjoy/yggdrasil/reason;reason";
+
+extend google.protobuf.EnumOptions {
+  int32 default_reason = 1108;
+}
+
+extend google.protobuf.EnumValueOptions {
+  google.rpc.Code code = 1109;
+}
