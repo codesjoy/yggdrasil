@@ -42,7 +42,7 @@ func (e *TimeEncoder) UnmarshalText(text []byte) error {
 		*e = TimeEncoderOfLayout(time.RFC1123)
 	case "RFC1123Z":
 		*e = TimeEncoderOfLayout(time.RFC1123Z)
-	case "RFC3339":
+	case "RFC3339", "":
 		*e = TimeEncoderOfLayout(time.RFC3339)
 	case "RFC3339Nano":
 		*e = TimeEncoderOfLayout(time.RFC3339Nano)
