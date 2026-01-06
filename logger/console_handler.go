@@ -30,9 +30,9 @@ import (
 // ConsoleHandlerConfig is the configuration for ConsoleHandler.
 type ConsoleHandlerConfig struct {
 	CommonHandlerConfig
-	TimeHandler string
-	Encoder     JSONEncoderConfig `yaml:"encoder"   json:"encoder"`
-	AddSource   bool              `yaml:"addSource" json:"addSource"`
+	TimeHandler string            `mapstruct:"time_handler"`
+	Encoder     JSONEncoderConfig `mapstruct:"encoder"`
+	AddSource   bool              `mapstruct:"add_source"`
 
 	Writer io.Writer
 }
@@ -97,7 +97,7 @@ func NewConsoleHandler(cfg *ConsoleHandlerConfig) (slog.Handler, error) {
 		h.timeHandle = func(t time.Time, b *buffer.Buffer) {
 			b.AppendInt(t.UnixNano())
 		}
-	case "RFC3339":
+	case "RFC3339", "":
 		h.timeHandle = func(t time.Time, b *buffer.Buffer) {
 			b.AppendString(t.Format(time.RFC3339))
 		}
