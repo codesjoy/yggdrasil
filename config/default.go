@@ -41,12 +41,12 @@ func ValueToValues(v Value) Values {
 }
 
 // Set sets the value of the specified key.
-func Set(key string, val interface{}) error {
+func Set(key string, val any) error {
 	return cfg.Set(key, val)
 }
 
 // SetMulti sets the values of the specified keys.
-func SetMulti(keys []string, values []interface{}) error {
+func SetMulti(keys []string, values []any) error {
 	return cfg.SetMulti(keys, values)
 }
 
@@ -91,7 +91,7 @@ func GetStringMap(key string, def ...map[string]string) map[string]string {
 }
 
 // GetMap returns the map value of the specified key.
-func GetMap(key string, def ...map[string]interface{}) map[string]interface{} {
+func GetMap(key string, def ...map[string]any) map[string]any {
 	return cfg.Get(key).Map(def...)
 }
 
@@ -106,7 +106,7 @@ func GetDuration(key string, def ...time.Duration) time.Duration {
 }
 
 // Scan scans the value of the specified key to the specified value.
-func Scan(key string, val interface{}) error {
+func Scan(key string, val any) error {
 	return cfg.Get(key).Scan(val)
 }
 

@@ -230,17 +230,18 @@ func (m *value) Scan(val interface{}) error {
 	case map[string]any:
 	case []any:
 	default:
-		if m.val == nil {
-			return defaults.Set(val)
-		}
 		v := reflect.ValueOf(val)
 		if v.Kind() != reflect.Ptr || v.IsNil() {
 			return nil
 		}
+
 		// 获取指针指向的实际元素
 		elem := v.Elem()
 		// 3. 如果不是结构体，尝试直接赋值
 		if elem.Kind() != reflect.Struct {
+			if m.val == nil {
+				return nil
+			}
 			// 检查是否可以进行赋值操作
 			if elem.CanSet() {
 				mVal := reflect.ValueOf(m.val)
