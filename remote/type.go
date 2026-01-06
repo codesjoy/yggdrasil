@@ -40,19 +40,36 @@ type ServerStream interface {
 }
 
 // State indicates the state of connectivity.
-// It can be the state of a ClientConn or SubConn.
+// It can be the state of a Client.
 type State int
 
+func (s State) String() string {
+	switch s {
+	case Idle:
+		return "IDLE"
+	case Connecting:
+		return "CONNECTING"
+	case Ready:
+		return "READY"
+	case TransientFailure:
+		return "TRANSIENT_FAILURE"
+	case Shutdown:
+		return "SHUTDOWN"
+	default:
+		return "INVALID_STATE"
+	}
+}
+
 const (
-	// Idle indicates the ClientConn is idle.
+	// Idle indicates the Client is idle.
 	Idle State = iota
-	// Connecting indicates the ClientConn is connecting.
+	// Connecting indicates the Client is connecting.
 	Connecting
-	// Ready indicates the ClientConn is ready for work.
+	// Ready indicates the Client is ready for work.
 	Ready
-	// TransientFailure indicates the ClientConn has seen a failure but expects to recover.
+	// TransientFailure indicates the Client has seen a failure but expects to recover.
 	TransientFailure
-	// Shutdown indicates the ClientConn has started shutting down.
+	// Shutdown indicates the Client has started shutting down.
 	Shutdown
 )
 
