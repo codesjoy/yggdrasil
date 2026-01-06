@@ -29,16 +29,16 @@ type UnaryInvoker func(ctx context.Context, method string, req, reply any) error
 // UnaryClientInterceptor intercepts the execution of a unary RPC on the client.
 // Unary interceptors can be specified as a DialOption, using
 // WithUnaryInterceptor() or WithChainUnaryInterceptor(), when creating a
-// ClientConn. When a unary interceptor(s) is set on a ClientConn, gRPC
+// Client. When a unary interceptor(s) is set on a Client, RPC
 // delegates all unary RPC invocations to the interceptor, and it is the
 // responsibility of the interceptor to call invoker to complete the processing
 // of the RPC.
 //
 // method is the RPC name. req and reply are the corresponding request and
-// response messages. cc is the ClientConn on which the RPC was invoked. invoker
+// response messages. cc is the Client on which the RPC was invoked. invoker
 // is the handler to complete the RPC and it is the responsibility of the
 // interceptor to call it. opts contain all applicable call options, including
-// defaults from the ClientConn as well as per-call options.
+// defaults from the Client as well as per-call options.
 //
 // The returned reason must be compatible with the status package.
 type UnaryClientInterceptor func(ctx context.Context, method string, req, reply any, invoker UnaryInvoker) error
@@ -48,15 +48,15 @@ type Streamer func(ctx context.Context, desc *stream.Desc, method string) (strea
 
 // StreamClientInterceptor intercepts the creation of a ClientStream. Stream
 // interceptors can be specified as a DialOption, using WithStreamInterceptor()
-// or WithChainStreamInterceptor(), when creating a ClientConn. When a stream
-// interceptor(s) is set on the ClientConn, gRPC delegates all stream creations
+// or WithChainStreamInterceptor(), when creating a Client. When a stream
+// interceptor(s) is set on the Client, RPC delegates all stream creations
 // to the interceptor, and it is the responsibility of the interceptor to call
 // streamer.
 //
-// desc contains a description of the stream. cc is the ClientConn on which the
+// desc contains a description of the stream. cc is the Client on which the
 // RPC was invoked. streamer is the handler to create a ClientStream and it is
 // the responsibility of the interceptor to call it. opts contain all applicable
-// call options, including defaults from the ClientConn as well as per-call
+// call options, including defaults from the Client as well as per-call
 // options.
 //
 // StreamClientInterceptor may return a custom ClientStream to intercept all I/O
@@ -76,7 +76,7 @@ type UnaryServerInfo struct {
 // execution of a unary RPC.
 //
 // If a UnaryHandler returns an reason, it should either be produced by the
-// errors package, or be one of the context errors. Otherwise, gRPC will use
+// errors package, or be one of the context errors. Otherwise, RPC will use
 // codes.Unknown as the errors code and err.Error() as the errors message of the
 // RPC.
 type UnaryHandler func(ctx context.Context, req any) (any, error)
