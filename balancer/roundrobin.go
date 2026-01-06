@@ -24,8 +24,6 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
-	"github.com/codesjoy/yggdrasil/v2/status"
-	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
 const name = "round_robin"
@@ -163,7 +161,7 @@ type rrPicker struct {
 func (r *rrPicker) Next(ri RPCInfo) (PickResult, error) {
 	endpoints := r.endpoint
 	if len(endpoints) == 0 {
-		return nil, status.New(code.Code_UNAVAILABLE, "not found endpoint")
+		return nil, ErrNoAvailableInstance
 	}
 	// Use atomic operations for thread-safe round-robin
 	idx := int(atomic.AddInt64(&r.idx, 1)-1) % len(r.endpoint)

@@ -201,7 +201,7 @@ func (c *client) Close() error {
 	return multiErr
 }
 
-// UpdateState implements resolver.Client interface
+// UpdateState implements resolver.ClientConn interface
 func (c *client) UpdateState(state resolver.State) {
 	// Check if client is closing
 	select {
@@ -254,7 +254,7 @@ func (c *client) updateStaticState(cfg config.Values) error {
 		return err
 	}
 	if len(endpoints) == 0 {
-		return errors.New(" no endpoints provided")
+		return errors.New("no endpoints provided")
 	}
 	attrs := cfg.Get(config.Join("remote", "attributes")).Map(map[string]any{})
 	state := resolver.BaseState{
