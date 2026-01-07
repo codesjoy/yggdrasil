@@ -274,7 +274,10 @@ func (c *client) initResolverAndBalancer(cfg config.Values) error {
 	if err != nil {
 		return err
 	}
-	c.balancer, err = balancerBuilder(c.appName, &balancerClient{cli: c})
+	c.balancer, err = balancerBuilder(
+		c.appName,
+		&balancerClient{cli: c, serializer: xsync.NewCallbackSerializer(c.ctx)},
+	)
 	if err != nil {
 		return err
 	}

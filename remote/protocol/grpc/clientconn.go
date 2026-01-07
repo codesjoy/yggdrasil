@@ -52,15 +52,6 @@ const (
 	defaultReadBufSize  = 32 * 1024
 )
 
-var (
-	// 全局只读且已关闭的 channel
-	closedCh = make(chan struct{})
-)
-
-func init() {
-	close(closedCh)
-}
-
 func init() {
 	remote.RegisterClientBuilder("grpc", newClient)
 }
@@ -101,7 +92,6 @@ type clientConn struct {
 	cfg    *Config
 
 	mu          sync.RWMutex
-	closeEvent  xsync.Event
 	state       remote.State
 	transport   transport.ClientTransport
 	backoffIdx  int
@@ -275,18 +265,24 @@ func (cc *clientConn) NewStream(
 }
 
 func (cc *clientConn) Close() error {
-	if !cc.closeEvent.Fire() {
+	cc.mu.RLock()
+	if cc.state == remote.Shutdown {
+		cc.mu.RUnlock()
 		return errors.New("remote client closed")
 	}
 	cc.mu.Lock()
+	if cc.state == remote.Shutdown {
+		cc.mu.Unlock()
+		return errors.New("remote client closed")
+	}
 	curTr := cc.transport
 	cc.transport = nil
-	cc.state = remote.Shutdown
+	cc.changeStateUnlock(remote.Shutdown)
 	cc.mu.Unlock()
-	cc.onStateChange(remote.ClientState{Endpoint: cc.endpoint, State: remote.Shutdown})
 	if curTr != nil {
 		curTr.GracefulClose()
 	}
+	cc.cancel()
 	return nil
 }
 
@@ -304,12 +300,10 @@ func (cc *clientConn) Connect() {
 	cc.resetTransport()
 }
 
-func (cc *clientConn) changeState(s remote.State) {
-	cc.mu.Lock()
-	defer cc.mu.Unlock()
+func (cc *clientConn) changeStateUnlock(s remote.State) {
 	state := cc.state
 	cc.state = s
-	if state != s {
+	if state != s && s != remote.Shutdown {
 		cc.onStateChange(remote.ClientState{Endpoint: cc.endpoint, State: s})
 	}
 }
@@ -343,7 +337,7 @@ func (cc *clientConn) connect(opts transport.ConnectOptions, connectDeadline tim
 	select {
 	case <-prefaceReceived.Done():
 		cc.mu.Lock()
-		if cc.closeEvent.HasFired() {
+		if cc.state == remote.Shutdown {
 			cc.mu.Unlock()
 			t.GracefulClose()
 			return nil
@@ -353,12 +347,9 @@ func (cc *clientConn) connect(opts transport.ConnectOptions, connectDeadline tim
 			return nil
 		}
 		cc.transport = t
-		connState := cc.state
-		cc.state = remote.Ready
+		cc.backoffIdx = 0
+		cc.changeStateUnlock(remote.Ready)
 		cc.mu.Unlock()
-		if connState != remote.Ready {
-			cc.onStateChange(remote.ClientState{Endpoint: cc.endpoint, State: remote.Ready})
-		}
 		return nil
 	case <-connClosed.Done():
 		return errors.New("connection closed before server preface received")
@@ -384,13 +375,8 @@ func (cc *clientConn) resetTransport() {
 		return
 	}
 	backoffIdx := cc.backoffIdx
+	cc.changeStateUnlock(remote.Connecting)
 	cc.mu.Unlock()
-
-	if cc.closeEvent.HasFired() {
-		return
-	}
-
-	cc.changeState(remote.Connecting)
 
 	backoffFor := cc.bs.Backoff(backoffIdx)
 	dialDuration := minConnectTimeout
@@ -400,32 +386,30 @@ func (cc *clientConn) resetTransport() {
 	connectDeadline := time.Now().Add(dialDuration)
 	err := cc.connect(cc.cfg.Transport, connectDeadline)
 	if err == nil {
-		cc.mu.Lock()
-		cc.backoffIdx = 0
-		cc.mu.Unlock()
 		return
 	}
 	remotelg.GetLogger().Error("fault to connect server", slog.Any("error", err))
 	cc.mu.Lock()
 	cc.backoffIdx++
+	cc.changeStateUnlock(remote.TransientFailure)
 	cc.mu.Unlock()
 
 	timer := time.NewTimer(backoffFor)
 	select {
 	case <-timer.C:
-	case <-cc.closeEvent.Done():
+	case <-cc.ctx.Done():
 		timer.Stop()
 		return
 	}
-
-	cc.changeState(remote.Idle)
-	return
+	cc.mu.Lock()
+	cc.changeStateUnlock(remote.Idle)
+	cc.mu.Unlock()
 }
 
 func (cc *clientConn) onClose() {
 	cc.mu.Lock()
 	cc.transport = nil
-	cc.state = remote.Shutdown
+	cc.changeStateUnlock(remote.Shutdown)
 	cc.mu.Unlock()
 	cc.resetTransport()
 }
