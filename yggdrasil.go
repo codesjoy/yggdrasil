@@ -182,9 +182,14 @@ func initLogger() error {
 	typeName := vals.Get("type").String("console")
 	writerName := vals.Get("writer").String("default")
 	if writerName == "default" {
-		writerType := config.GetString(config.Join("yggdrasil", "logger", "writer", "default", "type"))
+		writerType := config.GetString(
+			config.Join("yggdrasil", "logger", "writer", "default", "type"),
+		)
 		if writerType == "" {
-			err := config.Set(config.Join("yggdrasil", "logger", "writer", "default", "type"), "console")
+			err := config.Set(
+				config.Join("yggdrasil", "logger", "writer", "default", "type"),
+				"console",
+			)
 			if err != nil {
 				return err
 			}
@@ -200,7 +205,10 @@ func initLogger() error {
 		return err
 	}
 	slog.SetDefault(slog.New(h))
-	remoteLoggerLvStr := config.GetString(config.Join(config.KeyBase, "remote", "logger_level"), "error")
+	remoteLoggerLvStr := config.GetString(
+		config.Join(config.KeyBase, "remote", "logger_level"),
+		"error",
+	)
 	var remoteLoggerLv slog.Level
 	if err = remoteLoggerLv.UnmarshalText([]byte(remoteLoggerLvStr)); err != nil {
 		return err
@@ -219,7 +227,8 @@ func initGovernor(opts *options) error {
 }
 
 func initServer(opts *options) error {
-	if len(opts.serviceDesc) == 0 && len(opts.restServiceDesc) == 0 && len(opts.restRawHandleDesc) == 0 {
+	if len(opts.serviceDesc) == 0 && len(opts.restServiceDesc) == 0 &&
+		len(opts.restRawHandleDesc) == 0 {
 		return nil
 	}
 	svr, err := server.NewServer()

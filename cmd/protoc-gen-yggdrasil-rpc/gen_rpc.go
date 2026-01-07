@@ -35,10 +35,10 @@ func generateFiles(gen *protogen.Plugin, file *protogen.File) {
 	if len(file.Services) == 0 {
 		return
 	}
-	generateRpcFile(gen, file)
+	generateRPCFile(gen, file)
 }
 
-func generateRpcFile(gen *protogen.Plugin, file *protogen.File) {
+func generateRPCFile(gen *protogen.Plugin, file *protogen.File) {
 	filename := file.GeneratedFilenamePrefix + "_rpc.pb.go"
 	g := gen.NewGeneratedFile(filename, file.GoImportPath)
 	generateHeader(g, file)

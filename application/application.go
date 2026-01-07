@@ -261,7 +261,11 @@ func (app *application) stopServers() error {
 	for idx, svr := range app.internalSvr {
 		slog.Info("stopping internal server", slog.Int("index", idx))
 		if err := svr.Stop(); err != nil {
-			slog.Error("failed to stop internal server", slog.Int("index", idx), slog.Any("error", err))
+			slog.Error(
+				"failed to stop internal server",
+				slog.Int("index", idx),
+				slog.Any("error", err),
+			)
 			return err
 		}
 		slog.Info("internal server stopped", slog.Int("index", idx))
