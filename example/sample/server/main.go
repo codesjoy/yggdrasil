@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package main is a sample server for yggdrasil.
 package main
 
 import (
@@ -37,27 +38,39 @@ type LibraryImpl struct {
 	librarypb2.UnimplementedLibraryServiceServer
 }
 
-func (s *LibraryImpl) CreateShelf(ctx context.Context, request *librarypb2.CreateShelfRequest) (*librarypb2.Shelf, error) {
+func (s *LibraryImpl) CreateShelf(
+	ctx context.Context,
+	_ *librarypb2.CreateShelfRequest,
+) (*librarypb2.Shelf, error) {
 	_ = metadata.SetTrailer(ctx, metadata.Pairs("trailer", "test"))
 	_ = metadata.SetHeader(ctx, metadata.Pairs("header", "test"))
 	return &librarypb2.Shelf{Name: "test", Theme: "test"}, nil
 }
 
-func (s *LibraryImpl) GetShelf(ctx context.Context, request *librarypb2.GetShelfRequest) (*librarypb2.Shelf, error) {
+func (s *LibraryImpl) GetShelf(
+	ctx context.Context,
+	request *librarypb2.GetShelfRequest,
+) (*librarypb2.Shelf, error) {
 	_ = metadata.SetTrailer(ctx, metadata.Pairs("trailer", "test"))
 	_ = metadata.SetHeader(ctx, metadata.Pairs("header", "test"))
 	return &librarypb2.Shelf{Name: request.Name, Theme: "test"}, nil
 }
 
-func (s *LibraryImpl) MoveBook(ctx context.Context, request *librarypb2.MoveBookRequest) (*librarypb2.Book, error) {
+func (s *LibraryImpl) MoveBook(
+	_ context.Context,
+	_ *librarypb2.MoveBookRequest,
+) (*librarypb2.Book, error) {
 	return nil, status.FromReason(errors.New("test reason"), librarypb.Reason_BOOK_NOT_FOUND, nil)
 }
 
-func (s *LibraryImpl) GetBook(ctx context.Context, request *librarypb2.GetBookRequest) (*librarypb2.Book, error) {
+func (s *LibraryImpl) GetBook(
+	_ context.Context,
+	request *librarypb2.GetBookRequest,
+) (*librarypb2.Book, error) {
 	return &librarypb2.Book{Name: request.Name}, nil
 }
 
-func WebHandler(w http.ResponseWriter, r *http.Request) {
+func WebHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("hello web"))
 }
