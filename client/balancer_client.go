@@ -16,13 +16,18 @@
 package client
 
 import (
+	"context"
+	"log/slog"
+
 	"github.com/codesjoy/yggdrasil/v2/balancer"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
+	"github.com/codesjoy/yggdrasil/v2/utils/xsync"
 )
 
 type balancerClient struct {
-	cli *client
+	cli        *client
+	serializer *xsync.CallbackSerializer
 }
 
 // UpdateState updates the state of the client
@@ -35,9 +40,22 @@ func (bc *balancerClient) NewRemoteClient(
 	endpoint resolver.Endpoint,
 	ops balancer.NewRemoteClientOptions,
 ) (remote.Client, error) {
-	rc, err := bc.cli.remoteClientManager.GetOrCreate(endpoint, ops.StateListener)
+	rc, err := bc.cli.remoteClientManager.GetOrCreate(
+		endpoint,
+		bc.createStateListener(ops.StateListener),
+	)
 	if err != nil {
 		return nil, err
 	}
 	return rc, nil
+}
+
+func (bc *balancerClient) createStateListener(f func(remote.ClientState)) func(remote.ClientState) {
+	return func(state remote.ClientState) {
+		bc.serializer.ScheduleOr(func(_ context.Context) {
+			f(state)
+		}, func() {
+			slog.Error("createStateListener failed")
+		})
+	}
 }
