@@ -8,6 +8,7 @@ require (
 	github.com/creasty/defaults v1.8.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-chi/chi/v5 v5.2.3
+	github.com/google/go-cmp v0.7.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/stretchr/testify v1.11.1
