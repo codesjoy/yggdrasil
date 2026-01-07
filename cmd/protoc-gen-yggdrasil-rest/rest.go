@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -58,7 +72,11 @@ func generateFiles(gen *protogen.Plugin, file *protogen.File) error {
 }
 
 // generateFileContent generates the yggdrasil errors definitions, excluding the package statement.
-func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.GeneratedFile) error {
+func generateFileContent(
+	gen *protogen.Plugin,
+	file *protogen.File,
+	g *protogen.GeneratedFile,
+) error {
 	g.P("// This is a compile-time assertion to ensure that this generated file")
 	g.P("// is compatible with the yggdrasil package it is being compiled against.")
 	g.P("var _ = new(", marshalerPkg.Ident("ProtoMarshaller"), ")")
@@ -73,7 +91,12 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 	return nil
 }
 
-func genService(_ *protogen.Plugin, file *protogen.File, g *protogen.GeneratedFile, service *protogen.Service) error {
+func genService(
+	_ *protogen.Plugin,
+	_ *protogen.File,
+	g *protogen.GeneratedFile,
+	service *protogen.Service,
+) error {
 	if len(service.Methods) == 0 {
 		return nil
 	}
@@ -83,8 +106,8 @@ func genService(_ *protogen.Plugin, file *protogen.File, g *protogen.GeneratedFi
 	}
 	// HTTP Server.
 	sd := &serviceDesc{
-		//ChiPkg:         g.QualifiedGoIdent(chiPkg.Ident("")),
-		HttpPkg:        g.QualifiedGoIdent(httpPkg.Ident("")),
+		// ChiPkg:         g.QualifiedGoIdent(chiPkg.Ident("")),
+		HTTPPkg:        g.QualifiedGoIdent(httpPkg.Ident("")),
 		MarshalerPkg:   g.QualifiedGoIdent(marshalerPkg.Ident("")),
 		StatusPkg:      g.QualifiedGoIdent(statusPkg.Ident("")),
 		RestPkg:        g.QualifiedGoIdent(restPkg.Ident("")),
@@ -105,7 +128,9 @@ func genService(_ *protogen.Plugin, file *protogen.File, g *protogen.GeneratedFi
 	}
 	for _, item := range sd.Methods {
 		if len(item.PathVars) > 0 {
-			sd.ChiPkg = g.QualifiedGoIdent(protogen.GoImportPath("github.com/go-chi/chi/v5").Ident(""))
+			sd.ChiPkg = g.QualifiedGoIdent(
+				protogen.GoImportPath("github.com/go-chi/chi/v5").Ident(""),
+			)
 		}
 	}
 	g.P(sd.execute())
@@ -141,7 +166,11 @@ func buildMethod(sd *serviceDesc, g *protogen.GeneratedFile, method *protogen.Me
 	return nil
 }
 
-func buildHTTPRule(g *protogen.GeneratedFile, m *protogen.Method, rule *annotations.HttpRule) (*methodDesc, error) {
+func buildHTTPRule(
+	g *protogen.GeneratedFile,
+	m *protogen.Method,
+	rule *annotations.HttpRule,
+) (*methodDesc, error) {
 	var (
 		path   string
 		method string
@@ -195,7 +224,11 @@ func buildHTTPRule(g *protogen.GeneratedFile, m *protogen.Method, rule *annotati
 	return md, nil
 }
 
-func buildMethodDesc(g *protogen.GeneratedFile, m *protogen.Method, method, path string) (*methodDesc, error) {
+func buildMethodDesc(
+	g *protogen.GeneratedFile,
+	m *protogen.Method,
+	method, path string,
+) (*methodDesc, error) {
 	defer func() { methodSets[m.GoName]++ }()
 	desc := &methodDesc{
 		Name:    m.GoName,
@@ -240,10 +273,9 @@ func buildPathVars(path string) (string, map[string]string) {
 			return s
 		}
 
-		s = subPattern.ReplaceAllStringFunc(params[2], func(s string) string {
-			s = fmt.Sprintf("/{params%d}", paramsIdx)
+		s = subPattern.ReplaceAllStringFunc(params[2], func(string) string {
 			paramsIdx++
-			return s
+			return fmt.Sprintf("/{params%d}", paramsIdx)
 		})
 		nameVars[name] = s
 		return s

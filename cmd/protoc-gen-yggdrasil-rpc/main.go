@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package protoc-gen-yggdrasil-rpc is a plugin for the protocol buffer compiler that generates
+// yggdrasil rpc code.
 package main
 
 import (

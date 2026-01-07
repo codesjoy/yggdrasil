@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -10,7 +24,7 @@ import (
 
 var restTemplate = `
 {{range $method := .Methods }}
-func local_handler_{{$.ServiceType}}_{{ .Name }}_{{.Num}}(w {{$.HttpPkg}}ResponseWriter, r *{{$.HttpPkg}}Request, server interface{}, unaryInt {{$.InterceptorPkg}}UnaryServerInterceptor) (interface{}, error) {
+func local_handler_{{$.ServiceType}}_{{ .Name }}_{{.Num}}(w {{$.HTTPPkg}}ResponseWriter, r *{{$.HTTPPkg}}Request, server interface{}, unaryInt {{$.InterceptorPkg}}UnaryServerInterceptor) (interface{}, error) {
 		protoReq := &{{$method.Request}}{}
 		{{if $method.HasBody }}
 			inbound := {{$.MarshalerPkg}}InboundFromContext(r.Context())
@@ -61,7 +75,7 @@ var {{$.ServiceType}}RestServiceDesc = {{$.SvrPkg}}RestServiceDesc{
 `
 
 type serviceDesc struct {
-	HttpPkg        string
+	HTTPPkg        string
 	ChiPkg         string
 	MarshalerPkg   string
 	StatusPkg      string
@@ -101,13 +115,17 @@ func (s *serviceDesc) execute() string {
 	if err = tmpl.Execute(buf, s); err != nil {
 		panic(err)
 	}
-	return string(buf.Bytes())
+	return buf.String()
 }
 
 func (s *serviceDesc) parsePathValues(path string) string {
 	subPattern0 := regexp.MustCompile(`(?i)^{params[0-9]+}$`)
 	if subPattern0.MatchString(path) {
-		path = fmt.Sprintf(`%sURLParam(r, "%s")`, s.ChiPkg, strings.TrimRight(strings.TrimLeft(path, "{"), "}"))
+		path = fmt.Sprintf(
+			`%sURLParam(r, "%s")`,
+			s.ChiPkg,
+			strings.TrimRight(strings.TrimLeft(path, "{"), "}"),
+		)
 		return path
 	}
 	path = subPattern0.ReplaceAllStringFunc(path, func(subStr string) string {
@@ -125,6 +143,6 @@ func (s *serviceDesc) parsePathValues(path string) string {
 		return fmt.Sprintf(`/"+%sURLParam(r, "%s")+"`, s.ChiPkg, params[1])
 	})
 	path = fmt.Sprintf(`"%s"`, path)
-	path = strings.TrimRight(path, `+""`)
+	path = strings.TrimRight(path, `+""`) // nolint:staticcheck
 	return path
 }

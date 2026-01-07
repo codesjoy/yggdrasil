@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package protoc-gen-yggdrasil-reason is a plugin for the protocol buffer compiler that generates
+// yggdrasil reason code.
 package main
 
 import (

@@ -26,8 +26,7 @@ const (
 )
 
 func generateFile(gen *protogen.Plugin, file *protogen.File) {
-	var filename string
-	filename = file.GeneratedFilenamePrefix + "_reason.pb.go"
+	filename := file.GeneratedFilenamePrefix + "_reason.pb.go"
 
 	g := gen.NewGeneratedFile(filename, file.GoImportPath)
 	generateHeader(g, file)
