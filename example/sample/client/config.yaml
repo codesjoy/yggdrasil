@@ -1,0 +1,18 @@
+yggdrasil:
+  application:
+    namespace: "dev"
+  client:
+    github.com.codesjoy.yggdrasil.example.sample:
+      remote:
+        endpoints:
+          - address: "127.0.0.1:55879"
+            protocol: "grpc"
+  interceptor:
+    unaryClient: "logger"
+    streamClient: "logger"
+    config:
+      logger:
+        printReqAndRes: true
+
+  remote:
+    logger: debug

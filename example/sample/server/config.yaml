@@ -1,0 +1,34 @@
+yggdrasil:
+  server:
+    protocol:
+      - "grpc"
+
+  rest:
+    enable: true
+    port: 3000
+    middleware:
+      all:
+        - "logger"
+
+  remote:
+    protocol:
+      grpc:
+        address: "127.0.0.1:55879"
+    logger:
+      level: debug
+
+  interceptor:
+    unaryServer: "logger"
+    streamServer: "logger"
+    config:
+      logger:
+        printReqAndRes: true
+
+  logger:
+    handler:
+      default:
+        type: "console"
+        level: "debug"
+    writer:
+      default:
+        type: "console"

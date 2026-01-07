@@ -1,0 +1,25 @@
+# For details on buf.yaml configuration, visit https://buf.build/docs/configuration/v2/buf-yaml
+version: v2
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE
+modules:
+  - path: ./proto
+    lint:
+      except:
+        - PACKAGE_DIRECTORY_MATCH
+        - RPC_REQUEST_RESPONSE_UNIQUE
+        - RPC_RESPONSE_STANDARD_NAME
+      ignore_only:
+        PACKAGE_VERSION_SUFFIX:
+          - proto/helloworld/helloworld.proto
+          - proto/library/reason.proto
+        ENUM_VALUE_PREFIX:
+          - proto/library/reason.proto
+
+deps:
+  - buf.build/googleapis/googleapis
+  - buf.build/codesjoy/yggdrasil
