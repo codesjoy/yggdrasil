@@ -14,15 +14,14 @@ yggdrasil:
     protocol:
       grpc:
         address: "127.0.0.1:55879"
-    logger:
-      level: debug
+    logger_level: debug
 
   interceptor:
-    unaryServer: "logger"
-    streamServer: "logger"
+    unary_server: "logger"
+    stream_server: "logger"
     config:
       logger:
-        printReqAndRes: true
+        print_req_and_res: true
 
   logger:
     handler:

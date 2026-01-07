@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package main is a sample client for yggdrasil.
 package main
 
 import (
@@ -30,12 +31,6 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/status"
 )
 
-func dd() <-chan struct{} {
-	cc := make(chan struct{})
-	close(cc)
-	return cc
-}
-
 func main() {
 	if err := config.LoadSource(file.NewSource("./config.yaml", false)); err != nil {
 		slog.Error("failed to load config file", slog.Any("error", err))
@@ -44,13 +39,6 @@ func main() {
 	if err := yggdrasil.Init("github.com.codesjoy.yggdrasil.example.sample.client"); err != nil {
 		os.Exit(1)
 	}
-	waitConnCh := dd() // 声明但未初始化，值
-	fmt.Println(2222)
-	if waitConnCh == nil {
-		panic("fdsfasd")
-	}
-	<-waitConnCh
-	fmt.Println(11111)
 	cli, err := yggdrasil.NewClient("github.com.codesjoy.yggdrasil.example.sample")
 	if err != nil {
 		os.Exit(1)
@@ -72,7 +60,10 @@ func main() {
 	}
 	_, err = client.MoveBook(context.TODO(), &librarypb.MoveBookRequest{Name: "fdasf"})
 	if err != nil {
-		fmt.Println(status.FromError(err).ErrorInfo().Reason)
+		st := status.FromError(err)
+		fmt.Println("Reason:", st.ErrorInfo().Reason)
+		fmt.Println("Code:", st.Code())
+		fmt.Println("HttpCode:", st.HTTPCode())
 	}
 	slog.Info("call success")
 }
