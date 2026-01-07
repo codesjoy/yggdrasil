@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package codesjoy.yggdrasil.example.proto.library;
+
+import "codesjoy/yggdrasil/reason/reason.proto";
+
+enum Reason {
+  option (codesjoy.yggdrasil.reason.default_reason) = 500;
+  // Do not use this default value.
+  ERROR_REASON_UNSPECIFIED = 0;
+  BOOK_NOT_FOUND = 1 [(codesjoy.yggdrasil.reason.code) = NOT_FOUND];
+}

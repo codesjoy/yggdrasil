@@ -42,7 +42,7 @@ init() {
   relativePath=$(repeat "${count}" '/..')
   PROTECT_ROOT=$CURRENT_PATH$relativePath
   VENDOR_PATH=$PROTECT_ROOT/third_party
-  REMOTE_PATH=$PROTECT_ROOT/remote/protocol
+  REMOTE_PATH=$PROTECT_ROOT/remote/protocol/grpc
 }
 
 addCopyrightHeader() {

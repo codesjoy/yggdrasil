@@ -1,0 +1,27 @@
+# For details on buf.gen.yaml configuration, visit https://buf.build/docs/configuration/v2/buf-gen-yaml
+version: v2
+
+managed:
+  enabled: true
+  disable:
+    # Don't modify any files in buf.build/googleapis/googleapis
+    - module: buf.build/googleapis/googleapis
+    - module: buf.build/codesjoy/yggdrasil
+
+  override:
+    - file_option: go_package_prefix
+      value: github.com
+
+plugins:
+  - local: protoc-gen-go
+    out: ./protogen
+    opt: paths=source_relative
+  - local: protoc-gen-yggdrasil-reason
+    out: ./protogen
+    opt: paths=source_relative
+  - local: protoc-gen-yggdrasil-rpc
+    out: ./protogen
+    opt: paths=source_relative
+  - local: protoc-gen-yggdrasil-rest
+    out: ./protogen
+    opt: paths=source_relative

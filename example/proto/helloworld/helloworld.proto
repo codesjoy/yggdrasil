@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package codesjoy.yggdrasil.example.proto.helloword;
+
+service GreeterService {
+  rpc SayHello(SayHelloRequest) returns (SayHelloResponse) {}
+  rpc SayError(SayErrorRequest) returns (SayErrorResponse) {}
+  rpc SayHelloStream(stream SayHelloStreamRequest) returns (stream SayHelloStreamResponse) {}
+  rpc SayHelloClientStream(stream SayHelloClientStreamRequest) returns (SayHelloClientStreamResponse) {}
+  rpc SayHelloServerStream(SayHelloServerStreamRequest) returns (stream SayHelloServerStreamResponse) {}
+}
+
+message SayHelloRequest {
+  string name = 1;
+}
+
+message SayHelloResponse {
+  string message = 1;
+}
+
+message SayErrorRequest {
+  string name = 1;
+}
+
+message SayErrorResponse {
+  string message = 1;
+}
+
+message SayHelloStreamRequest {
+  string name = 1;
+}
+
+message SayHelloStreamResponse {
+  string message = 1;
+}
+
+message SayHelloClientStreamRequest {
+  string name = 1;
+}
+
+message SayHelloClientStreamResponse {
+  string message = 1;
+}
+
+message SayHelloServerStreamRequest {
+  string name = 1;
+}
+
+message SayHelloServerStreamResponse {
+  string message = 1;
+}
