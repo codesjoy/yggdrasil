@@ -41,6 +41,17 @@ type Config struct {
 	MaxDelay time.Duration `mapstructure:"maxDelay"   default:"2m"`
 }
 
+// DefaultConfig defines the default configuration for backoff.
+var DefaultConfig = Config{
+	BaseDelay:  1.0 * time.Second,
+	Multiplier: 1.6,
+	Jitter:     0.2,
+	MaxDelay:   120 * time.Second,
+}
+
+// DefaultExponential defines the default exponential backoff strategy.
+var DefaultExponential = Exponential{Config: DefaultConfig}
+
 // Exponential implements an exponential backoff strategy.
 type Exponential struct {
 	// Config contains all options to configure the backoff algorithm.

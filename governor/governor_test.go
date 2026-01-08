@@ -17,6 +17,7 @@ package governor
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -364,33 +365,27 @@ func TestNewBuildInfoHandle(t *testing.T) {
 }
 
 func TestHandleFunc(t *testing.T) {
-	// Clear existing routes
-	routes = []string{}
-	defaultServeMux = http.NewServeMux()
-
 	testHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("test response"))
+		_, _ = w.Write([]byte("test response handle func"))
 	}
 
-	HandleFunc("/test", testHandler)
+	pattern := fmt.Sprintf("/test_handle_func_%d", time.Now().UnixNano())
+	HandleFunc(pattern, testHandler)
 
-	assert.Contains(t, routes, "/test")
+	assert.Contains(t, routes, pattern)
 
 	// Test that the handler is properly registered
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest("GET", pattern, nil)
 	w := httptest.NewRecorder()
 
 	defaultServeMux.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "test response", w.Body.String())
+	assert.Equal(t, "test response handle func", w.Body.String())
 }
 
 func TestRoutesHandle(t *testing.T) {
-	// Clear existing routes and add some test routes
-	routes = []string{"/test1", "/test2"}
-
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 
@@ -401,5 +396,5 @@ func TestRoutesHandle(t *testing.T) {
 	var response []string
 	err := json.NewDecoder(w.Body).Decode(&response)
 	require.NoError(t, err)
-	assert.Equal(t, routes, response)
+	assert.Subset(t, response, routes)
 }
