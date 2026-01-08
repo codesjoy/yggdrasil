@@ -303,11 +303,9 @@ func TestFile_Watch_FileRename(t *testing.T) {
 	yamlData, err := yaml.Marshal(initialData)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(testFile, yamlData, 0o600))
-
 	src := NewSource(testFile, true)
 	watcher, err := src.Watch()
 	require.NoError(t, err)
-
 	defer func() {
 		_ = src.Close()
 	}()
@@ -316,13 +314,14 @@ func TestFile_Watch_FileRename(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, os.Rename(testFile, tempFile))
 
+	time.Sleep(time.Second)
+
 	newData := map[string]interface{}{
 		"key": "value2",
 	}
 	newYAML, err := yaml.Marshal(newData)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(testFile, newYAML, 0o600))
-
 	// Wait for the change event
 	select {
 	case data := <-watcher:
@@ -395,7 +394,7 @@ func TestFile_Close(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Check that stopped flag is set
-	assert.True(t, f.stopped.Load())
+	assert.True(t, f.stopped)
 }
 
 // TestFile_Close_Watcher tests closing a source with active watcher
@@ -423,7 +422,7 @@ func TestFile_Close_Watcher(t *testing.T) {
 	assert.NoError(t, err)
 
 	f := src.(*file)
-	assert.True(t, f.stopped.Load())
+	assert.True(t, f.stopped)
 }
 
 // TestFile_Read_YAMLFromTestData tests reading the actual testdata config

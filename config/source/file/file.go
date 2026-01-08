@@ -16,26 +16,35 @@
 package file
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
+	"sync"
+	"time"
 
 	"github.com/codesjoy/yggdrasil/v2/config/source"
+	"github.com/codesjoy/yggdrasil/v2/internal/backoff"
 	"github.com/codesjoy/yggdrasil/v2/utils/xgo"
 	"github.com/fsnotify/fsnotify"
 	"gopkg.in/yaml.v3"
 )
 
+var errSourceClosed = errors.New("the file source is closed")
+
 type file struct {
-	stopped       atomic.Bool
+	mu            sync.Mutex
 	exit          chan bool
 	path          string
 	parser        source.Parser
 	enableWatcher bool
-	fw            *fsnotify.Watcher
+
+	stopped bool
+	watched bool
+	fw      *fsnotify.Watcher
 }
 
 func (f *file) Read() (source.Data, error) {
@@ -61,6 +70,15 @@ func (f *file) Changeable() bool {
 }
 
 func (f *file) Watch() (<-chan source.Data, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.stopped {
+		return nil, fmt.Errorf("the file source is stopped")
+	}
+	if f.watched {
+		return nil, fmt.Errorf("file watcher is already enabled")
+	}
+	f.watched = true
 	fw, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
@@ -75,6 +93,9 @@ func (f *file) Watch() (<-chan source.Data, error) {
 		for {
 			chg, err := f.watch()
 			if err != nil {
+				if errors.Is(err, errSourceClosed) {
+					return
+				}
 				slog.Error("fault to watch file", slog.Any("error", err))
 				continue
 			}
@@ -90,21 +111,52 @@ func (f *file) Watch() (<-chan source.Data, error) {
 func (f *file) watch() (source.Data, error) {
 	select {
 	case <-f.exit:
-		return nil, nil
+		return nil, errSourceClosed
 	default:
 	}
-
-	// try get the event
+	// try to get the event
 	select {
 	case event := <-f.fw.Events:
 		if event.Op == fsnotify.Rename {
 			// check existence of file, and add watch again
 			_, err := os.Stat(event.Name)
-			if err == nil || os.IsExist(err) {
-				_ = f.fw.Add(event.Name)
+			if err == nil || !errors.Is(err, os.ErrNotExist) {
+				if err = f.fw.Add(f.path); err != nil {
+					return nil, err
+				}
 			}
+			func() {
+				bo := backoff.Exponential{Config: backoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.6,
+					Jitter:     0.2,
+					MaxDelay:   time.Second * 30,
+				}}
+				retries := 0
+				t := time.NewTimer(time.Millisecond)
+				defer t.Stop()
+				for {
+					select {
+					case <-f.exit:
+						return
+					case <-t.C:
+						_, err := os.Stat(f.path)
+						if err == nil || !errors.Is(err, os.ErrNotExist) {
+							if err = f.fw.Add(f.path); err == nil {
+								return
+							}
+						}
+						slog.Error("add watch", slog.Any("error", err))
+						retries++
+						t.Reset(bo.Backoff(retries))
+					}
+				}
+			}()
 		}
-
+		_, err := os.Stat(f.path)
+		if err != nil {
+			return nil, err
+		}
 		c, err := f.Read()
 		if err != nil {
 			return nil, err
@@ -113,14 +165,18 @@ func (f *file) watch() (source.Data, error) {
 	case err := <-f.fw.Errors:
 		return nil, err
 	case <-f.exit:
-		return nil, nil
+		return nil, errSourceClosed
 	}
 }
 
 func (f *file) Close() error {
-	if f.stopped.CompareAndSwap(false, true) {
-		close(f.exit)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.stopped {
+		return nil
 	}
+	f.stopped = true
+	close(f.exit)
 	return nil
 }
 
