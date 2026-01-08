@@ -244,7 +244,7 @@ func (app *application) startServers() error {
 }
 
 func (app *application) stopServers() error {
-	slog.Info("stopping servers...")
+	slog.Info("stopping servers")
 	eg := errgroup.Group{}
 	if app.server != nil {
 		eg.Go(func() error {

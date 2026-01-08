@@ -24,9 +24,9 @@ import (
 
 // BaseEndpoint is the base endpoint.
 type BaseEndpoint struct {
-	Address    string         `mapstruct:"address"`
-	Protocol   string         `mapstruct:"protocol"`
-	Attributes map[string]any `mapstruct:"attributes"`
+	Address    string         `mapstructure:"address"`
+	Protocol   string         `mapstructure:"protocol"`
+	Attributes map[string]any `mapstructure:"attributes"`
 }
 
 // Name returns the name of the endpoint.

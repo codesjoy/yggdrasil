@@ -29,12 +29,12 @@ import (
 
 // Config governor config
 type Config struct {
-	Host              string        `mapstruct:"host"`
-	Port              uint64        `mapstruct:"port"`
-	ReadHeaderTimeout time.Duration `mapstruct:"read_header_timeout" default:"5s"`
-	ReadTimeout       time.Duration `mapstruct:"read_timeout"        default:"15s"`
-	WriteTimeout      time.Duration `mapstruct:"write_timeout"       default:"30s"`
-	IdleTimeout       time.Duration `mapstruct:"idle_timeout"        default:"1m"`
+	Host              string        `mapstructure:"host"`
+	Port              uint64        `mapstructure:"port"`
+	ReadHeaderTimeout time.Duration `mapstructure:"read_header_timeout" default:"5s"`
+	ReadTimeout       time.Duration `mapstructure:"read_timeout"        default:"15s"`
+	WriteTimeout      time.Duration `mapstructure:"write_timeout"       default:"30s"`
+	IdleTimeout       time.Duration `mapstructure:"idle_timeout"        default:"1m"`
 }
 
 // Address returns address
