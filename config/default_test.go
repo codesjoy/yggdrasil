@@ -189,19 +189,23 @@ func TestDefaultLoadSource(t *testing.T) {
 }
 
 func TestDefaultWatchers(t *testing.T) {
-	var eventReceived WatchEvent
+	eventCh := make(chan WatchEvent, 1)
 	eventHandler := func(event WatchEvent) {
-		eventReceived = event
+		eventCh <- event
 	}
 
 	// Test AddWatcher
 	err := AddWatcher("test_watch", eventHandler)
 	require.NoError(t, err)
 
-	// Give some time for the initial event to be processed
-	time.Sleep(10 * time.Millisecond)
-
 	// Verify initial event was received
+	var eventReceived WatchEvent
+	select {
+	case eventReceived = <-eventCh:
+	case <-time.After(time.Second):
+		t.Fatal("Timeout waiting for initial event")
+	}
+
 	require.NotNil(t, eventReceived)
 	assert.Equal(t, WatchEventUpd, eventReceived.Type())
 

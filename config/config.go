@@ -165,10 +165,19 @@ func (c *config) AddWatcher(key string, watcher func(WatchEvent)) error {
 	return nil
 }
 
-func (c *config) DelWatcher(key string, _ func(WatchEvent)) error {
+func (c *config) DelWatcher(key string, w func(WatchEvent)) error {
 	c.watcherMu.Lock()
 	defer c.watcherMu.Unlock()
-	delete(c.watchers, key)
+	watchers, ok := c.watchers[key]
+	if !ok {
+		return nil
+	}
+	for i, item := range watchers {
+		if &item == &w {
+			watchers = append(watchers[:i], watchers[i+1:]...)
+		}
+	}
+	c.watchers[key] = watchers
 	return nil
 }
 
