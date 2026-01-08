@@ -106,8 +106,11 @@ func (c *mapSourceData) Data() []byte {
 
 func (c *mapSourceData) Unmarshal(v any) error {
 	config := mapstructure.DecoderConfig{
-		DecodeHook: mapstructure.StringToTimeDurationHookFunc(),
-		Result:     v,
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			mapstructure.TextUnmarshallerHookFunc(),
+			mapstructure.StringToTimeDurationHookFunc(),
+		),
+		Result: v,
 	}
 	decoder, err := mapstructure.NewDecoder(&config)
 	if err != nil {

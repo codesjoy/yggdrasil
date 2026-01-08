@@ -258,8 +258,11 @@ func (m *value) Scan(val interface{}) error {
 		return defaults.Set(val)
 	}
 	c := mapstructure.DecoderConfig{
-		DecodeHook: newCustomerDecoder(),
-		Result:     val,
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			mapstructure.TextUnmarshallerHookFunc(),
+			mapstructure.StringToTimeDurationHookFunc(),
+			newValDecoder()),
+		Result: val,
 	}
 	decoder, err := mapstructure.NewDecoder(&c)
 	if err != nil {
@@ -294,14 +297,9 @@ func (m *value) Bytes(def ...[]byte) []byte {
 	}
 }
 
-func newCustomerDecoder() mapstructure.DecodeHookFuncType {
-	return func(f reflect.Type, t reflect.Type, data interface{}) (interface{}, error) {
+func newValDecoder() mapstructure.DecodeHookFuncType {
+	return func(_ reflect.Type, t reflect.Type, data interface{}) (interface{}, error) {
 		switch {
-		case f.Kind() == reflect.String:
-			if t != reflect.TypeOf(time.Duration(5)) {
-				return data, nil
-			}
-			return time.ParseDuration(data.(string))
 		case t == reflect.TypeOf((*Value)(nil)).Elem():
 			return newValue(data), nil
 		default:
