@@ -114,8 +114,11 @@ func (vs *values) Map() map[string]any {
 
 func (vs *values) Scan(v interface{}) error {
 	c := mapstructure.DecoderConfig{
-		DecodeHook: mapstructure.StringToTimeDurationHookFunc(),
-		Result:     v,
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			mapstructure.TextUnmarshallerHookFunc(),
+			mapstructure.StringToTimeDurationHookFunc(),
+		),
+		Result: v,
 	}
 	decoder, err := mapstructure.NewDecoder(&c)
 	if err != nil {
