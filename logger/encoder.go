@@ -96,6 +96,8 @@ func (e *DurationEncoder) UnmarshalText(text []byte) error {
 		*e = NanosDurationEncoder
 	case "ms":
 		*e = MillisDurationEncoder
+	case "second":
+		*e = SecondsDurationEncoder
 	default:
 		*e = SecondsDurationEncoder
 	}

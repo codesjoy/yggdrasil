@@ -17,7 +17,6 @@ package logger
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log/slog"
 	"runtime"
@@ -30,24 +29,23 @@ import (
 // ConsoleHandlerConfig is the configuration for ConsoleHandler.
 type ConsoleHandlerConfig struct {
 	CommonHandlerConfig
-	TimeHandler string            `mapstruct:"time_handler"`
-	Encoder     JSONEncoderConfig `mapstruct:"encoder"`
-	AddSource   bool              `mapstruct:"add_source"`
+	TimeHandler string            `mapstructure:"time_handler"`
+	Encoder     JSONEncoderConfig `mapstructure:"encoder"`
+	AddSource   bool              `mapstructure:"add_source"`
 
 	Writer io.Writer
 }
 
 var consoleLevelMsg = map[slog.Level]string{
 	slog.LevelDebug: xcolor.Blue("DEBUG"),
-	slog.LevelInfo:  xcolor.Green("INFO"),
-	slog.LevelWarn:  xcolor.Yellow("WARN"),
+	slog.LevelInfo:  xcolor.Green("INFO "),
+	slog.LevelWarn:  xcolor.Yellow("WARN "),
 	slog.LevelError: xcolor.Red("ERROR"),
 }
 
 type consoleHandler struct {
 	*commonHandler
 	timeHandle   func(time.Time, *buffer.Buffer)
-	kvsMsgFormat string
 	sourceHandle func(r *slog.Record, buf *buffer.Buffer)
 }
 
@@ -71,12 +69,6 @@ func NewConsoleHandler(cfg *ConsoleHandlerConfig) (slog.Handler, error) {
 
 	if cfg.AddSource {
 		h.sourceHandle = h.addSourceHandle
-	}
-
-	if runtime.GOOS == "windows" {
-		h.kvsMsgFormat = " %-8s"
-	} else {
-		h.kvsMsgFormat = "%-18s"
 	}
 
 	// TimeEncoder serializes a time.Time to a primitive type.
@@ -113,20 +105,28 @@ func NewConsoleHandler(cfg *ConsoleHandlerConfig) (slog.Handler, error) {
 func (h *consoleHandler) Handle(ctx context.Context, r slog.Record) error {
 	buf := buffer.Get()
 	h.timeHandle(r.Time, buf)
-	_, _ = fmt.Fprintf(buf, h.kvsMsgFormat, consoleLevelMsg[h.lv], r.Message)
-
+	buf.AppendString("  ")
+	buf.AppendString(consoleLevelMsg[r.Level])
 	h.sourceHandle(&r, buf)
+	buf.AppendString("  ")
+	buf.AppendString(r.Message)
 
-	objEnc := h.objEnc.Get()
-	objEnc.SetBuffer(buf)
+	if r.NumAttrs() > 0 {
+		buf.AppendString("  ")
+		buf.AppendByte('{')
+		objEnc := h.objEnc.Get()
+		objEnc.SetBuffer(buf)
 
-	h.traceHandle(ctx, objEnc)
-	h.openGroups(objEnc)
-	r.Attrs(func(attr slog.Attr) bool {
-		h.encodeSlogAttr(attr, objEnc)
-		return true
-	})
-	objEnc.CloseNamespace(h.nOpenGroups)
+		h.traceHandle(ctx, objEnc)
+		h.openGroups(objEnc)
+		r.Attrs(func(attr slog.Attr) bool {
+			h.encodeSlogAttr(attr, objEnc)
+			return true
+		})
+		objEnc.CloseNamespace(h.nOpenGroups)
+		buf.AppendByte('}')
+	}
+
 	buf.AppendByte('\n')
 	_, err := h.writer.Write(buf.Bytes())
 	if err != nil {
@@ -154,6 +154,7 @@ func (h *consoleHandler) addSourceHandle(r *slog.Record, buf *buffer.Buffer) {
 	if f.File == "" {
 		return
 	}
+	buf.AppendString("  ")
 	buf.AppendString(f.File)
 	if f.Line != 0 {
 		buf.AppendString(":")

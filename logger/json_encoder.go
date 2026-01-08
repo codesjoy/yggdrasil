@@ -53,9 +53,9 @@ type jsonEncoder struct {
 
 // JSONEncoderConfig is the configuration of jsonEncoder.
 type JSONEncoderConfig struct {
-	TimeEncoder     TimeEncoder     `yaml:"timeEncoder"     json:"timeEncoder"`
-	DurationEncoder DurationEncoder `yaml:"durationEncoder" json:"durationEncoder"`
-	Spaced          bool            `yaml:"spaced"          json:"spaced"`
+	TimeEncoder     TimeEncoder     `mapstructure:"time_encoder"     default:"RFC3339"`
+	DurationEncoder DurationEncoder `mapstructure:"duration_encoder" default:"seconde"`
+	Spaced          bool            `mapstructure:"spaced"`
 }
 
 // NewJSONEncoder returns a new jsonEncoder.

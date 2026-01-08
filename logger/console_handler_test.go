@@ -17,7 +17,6 @@ package logger
 import (
 	"context"
 	"log/slog"
-	"runtime"
 	"testing"
 	"time"
 
@@ -335,33 +334,6 @@ func TestConsoleHandlerLevels(t *testing.T) {
 				t.Errorf("Expected level %v, got %v", level, h.(*consoleHandler).lv)
 			}
 		})
-	}
-}
-
-func TestConsoleHandlerKvsMsgFormat(t *testing.T) {
-	cfg := &ConsoleHandlerConfig{
-		CommonHandlerConfig: CommonHandlerConfig{
-			Level:         slog.LevelInfo,
-			AddTrace:      false,
-			AddErrVerbose: false,
-		},
-		TimeHandler: "RFC3339",
-		AddSource:   false,
-	}
-
-	h, err := NewConsoleHandler(cfg)
-	if err != nil {
-		t.Fatalf("NewConsoleHandler() error = %v", err)
-	}
-
-	ch := h.(*consoleHandler)
-	expectedFormat := "%-18s"
-	if runtime.GOOS == "windows" {
-		expectedFormat = " %-8s"
-	}
-
-	if ch.kvsMsgFormat != expectedFormat {
-		t.Errorf("kvsMsgFormat = %s, want %s", ch.kvsMsgFormat, expectedFormat)
 	}
 }
 
