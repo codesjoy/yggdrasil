@@ -17,7 +17,10 @@
 // instance management backends.
 package registry
 
-import "context"
+import (
+	"context"
+	"sync"
+)
 
 const (
 	// MDServerKind is the key for server kind metadata
@@ -67,15 +70,22 @@ type Instance interface {
 	Endpoints() []Endpoint
 }
 
-var builders = make(map[string]Builder)
+var (
+	builders = make(map[string]Builder)
+	mu       sync.RWMutex
+)
 
 // RegisterBuilder registers a registry builder
 func RegisterBuilder(name string, constructor Builder) {
+	mu.Lock()
+	defer mu.Unlock()
 	builders[name] = constructor
 }
 
 // GetBuilder returns a registry builder
 func GetBuilder(name string) Builder {
+	mu.RLock()
+	defer mu.RUnlock()
 	constructor := builders[name]
 	return constructor
 }
