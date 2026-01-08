@@ -26,8 +26,8 @@ import (
 // JSONHandlerConfig is the configuration for JSON handler.
 type JSONHandlerConfig struct {
 	CommonHandlerConfig
-	Encoder   JSONEncoderConfig `yaml:"encoder"   json:"encoder"`
-	AddSource bool              `yaml:"addSource" json:"addSource"`
+	Encoder   JSONEncoderConfig `mapstructure:"encoder"    yaml:"encoder"    json:"encoder"`
+	AddSource bool              `mapstructure:"add_source" yaml:"add_source" json:"add_source"`
 
 	Writer io.Writer
 }

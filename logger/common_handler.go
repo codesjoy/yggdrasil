@@ -28,9 +28,9 @@ import (
 
 // CommonHandlerConfig defines the configuration for the commonHandler.
 type CommonHandlerConfig struct {
-	Level         slog.Level `yaml:"level"         json:"level"`
-	AddTrace      bool       `yaml:"addTrace"      json:"addTrace"`
-	AddErrVerbose bool       `yaml:"addErrVerbose" json:"addErrVerbose"`
+	Level         slog.Level `mapstructure:"level"`
+	AddTrace      bool       `mapstructure:"add_trace"`
+	AddErrVerbose bool       `mapstructure:"add_err_verbose"`
 
 	writer io.Writer
 	objEnc ObjectEncoder

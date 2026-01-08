@@ -43,21 +43,21 @@ import (
 
 // Config is the configuration for the server.
 type Config struct {
-	Host              string        `mapstruct:"host"`
-	Port              int           `mapstruct:"port"`
-	ReadHeaderTimeout time.Duration `mapstruct:"read_header_timeout" default:"5s"`
-	ReadTimeout       time.Duration `mapstruct:"read_timeout"        default:"15s"`
-	WriteTimeout      time.Duration `mapstruct:"write_timeout"       default:"30s"`
-	IdleTimeout       time.Duration `mapstruct:"idle_timeout"        default:"1m"`
-	ShutdownTimeout   time.Duration `mapstruct:"shutdown_timeout"    default:"5s"`
-	AcceptHeader      []string      `mapstruct:"accept_header"`
-	OutHeader         []string      `mapstruct:"out_header"`
-	OutTrailer        []string      `mapstruct:"out_trailer"`
+	Host              string        `mapstructure:"host"`
+	Port              int           `mapstructure:"port"`
+	ReadHeaderTimeout time.Duration `mapstructure:"read_header_timeout" default:"5s"`
+	ReadTimeout       time.Duration `mapstructure:"read_timeout"        default:"15s"`
+	WriteTimeout      time.Duration `mapstructure:"write_timeout"       default:"30s"`
+	IdleTimeout       time.Duration `mapstructure:"idle_timeout"        default:"1m"`
+	ShutdownTimeout   time.Duration `mapstructure:"shutdown_timeout"    default:"5s"`
+	AcceptHeader      []string      `mapstructure:"accept_header"`
+	OutHeader         []string      `mapstructure:"out_header"`
+	OutTrailer        []string      `mapstructure:"out_trailer"`
 	Middleware        struct {
-		RPC []string `mapstruct:"rpc"`
-		Web []string `mapstruct:"web"`
-		All []string `mapstruct:"all"`
-	} `mapstruct:"middleware"`
+		RPC []string `mapstructure:"rpc"`
+		Web []string `mapstructure:"web"`
+		All []string `mapstructure:"all"`
+	} `mapstructure:"middleware"`
 }
 
 type serverInfo struct {
