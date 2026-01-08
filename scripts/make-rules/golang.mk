@@ -34,7 +34,11 @@ GO_MODULES ?= $(shell cd $(ROOT_DIR) && find . -not \
 GO_MODULE_TARGETS ?= $(subst /,+,$(patsubst ./%,%,$(GO_MODULES)))
 
 # exclude tests
-EXCLUDE_TESTS=
+EXCLUDE_TESTS ?=
+
+EXCLUDE_COVERAGE_TARGETS ?= "example"
+
+COVERAGE_TARGETS = $(filter-out $(EXCLUDE_COVERAGE_TARGETS), $(GO_MODULE_TARGETS))
 
 .PHONY: go.build.%
 go.build.%:
@@ -88,33 +92,49 @@ go.test.%: tools.verify.go-junit-report
 	$(eval MODULE_PATH := $(subst +,/,$*))
 	@$(LOG_INFO) "Run unit test on module: $(MODULE_PATH)"
 	@mkdir -p $(OUTPUT_DIR)/reports/$(MODULE_PATH)
-	@set -o pipefail; cd $(ROOT_DIR)/$(MODULE_PATH) && $(GO) test -race -cover \
-    		-coverprofile=$(OUTPUT_DIR)/reports/$(MODULE_PATH)/coverage.out \
-    		-timeout=10m -shuffle=on -short -v \
-    		`go list ./... | egrep -v $(subst $(SPACE),'|',$(sort $(EXCLUDE_TESTS)))` 2>&1 | \
-    		tee >(go-junit-report --set-exit-code > $(OUTPUT_DIR)/reports/$(MODULE_PATH)/report.xml)
-	@sed -i '/mock_.*.go/d' $(OUTPUT_DIR)/reports/$(MODULE_PATH)/coverage.out # remove mock_.*.go files from test coverage
+	@set -o pipefail; cd $(ROOT_DIR)/$(MODULE_PATH) && \
+		PATTERNS=$(subst $(SPACE),'|',$(sort $(EXCLUDE_TESTS))) && \
+		if [ -n "$$PATTERNS" ]; then \
+			$(LOG_DEBUG) "Excluding tests packages"; \
+			PACKAGES=$$(go list ./... | grep -v -E $$PATTERNS); \
+		else \
+			PACKAGES=$$(go list ./...); \
+		fi; \
+        if [ -n "$$PACKAGES" ]; then \
+        	$(GO) test -race -cover \
+                -coverprofile=$(OUTPUT_DIR)/reports/$(MODULE_PATH)/coverage.out \
+                -timeout=10m -shuffle=on -short \
+                $$PACKAGES 2>&1 | \
+                tee >(go-junit-report --set-exit-code > $(OUTPUT_DIR)/reports/$(MODULE_PATH)/report.xml); \
+        else \
+            $(LOG_DEBUG) "No packages to test after filtering. Skipping tests."; \
+            mkdir -p $(OUTPUT_DIR)/reports/$(MODULE_PATH) && \
+            echo '<?xml version="1.0" encoding="UTF-8"?><testsuites></testsuites>' > $(OUTPUT_DIR)/reports/$(MODULE_PATH)/report.xml && \
+            :> $(OUTPUT_DIR)/reports/$(MODULE_PATH)/coverage.out; \
+        fi
+	@sed -i '' '/mock_.*.go/d' $(OUTPUT_DIR)/reports/$(MODULE_PATH)/coverage.out # remove mock_.*.go files from test coverage
 	@$(GO) tool cover -html=$(OUTPUT_DIR)/reports/$(MODULE_PATH)/coverage.out -o $(OUTPUT_DIR)/reports/$(MODULE_PATH)/coverage.html
 
 .PHONY: go.test
-go.test: $(addprefix go.test., example)
+go.test: $(addprefix go.test., $(GO_MODULE_TARGETS))
 
 .PHONY: go.test.coverage.%
-go.test.coverage.%: go.test.%
+go.test.coverage.%:
+	@$(MAKE) go.test.$*
 	$(eval MODULE_PATH := $(subst +,/,$*))
 	@$(LOG_INFO) "Checking coverage of module: $(MODULE_PATH)"
-	@cd $(ROOT_DIR)/$(MODULE_PATH) && $(GO)tool cover -func=./coverage.out | \
+	@cd $(OUTPUT_DIR)/reports/$(MODULE_PATH) && $(GO) tool cover -func=./coverage.out | \
 		awk -v target=$(COVERAGE) -f $(ROOT_DIR)/scripts/coverage.awk
 
 .PHONY: go.test.coverage
-go.test.coverage: $(addprefix go.test.coverage., $(GO_MODULE_TARGETS))
+go.test.coverage: $(addprefix go.test.coverage., .)
 
 .PHONY: go.work.verify
 go.work.verify:
 	@$(LOG_INFO) "Verifying go.work"
 	@scripts/gowork.sh
 
-.PHONY: go.sync
+.PHONY: go.work.sync
 go.work.sync: go.work.verify
 	@$(LOG_INFO) "Run go work sync"
 	@cd $(ROOT_DIR) && go work sync

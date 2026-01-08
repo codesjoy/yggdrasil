@@ -82,7 +82,7 @@ fix:
 ## test: Run the tests.
 .PHONY: test
 test:
-	@$(MAKE) go.test
+	@$(MAKE) go.test -j$(nproc)
 
 ## coverage: Generate the coverage report.
 .PHONY: coverage
@@ -92,7 +92,7 @@ coverage:
 ## sync: Sync the code.
 .PHONY: sync
 sync:
-	@$(MAKE) go.sync
+	@$(MAKE) go.work.sync
 
 ## tidy: Tidy the code.
 .PHONY: tidy
