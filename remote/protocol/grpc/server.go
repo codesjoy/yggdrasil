@@ -90,7 +90,21 @@ func (opts *serverOptions) SetDefault() error {
 			return err
 		}
 		opts.Address = fmt.Sprintf("%s:0", opts.Address)
+	} else {
+		host, port, err := net.SplitHostPort(opts.Address)
+		if err != nil {
+			return err
+		}
+		host, err = xnet.Extract(host)
+		if err != nil {
+			return err
+		}
+		opts.Address = fmt.Sprintf("%s:%s", host, port)
 	}
+	if opts.Attr == nil {
+		opts.Attr = make(map[string]string)
+	}
+
 	if opts.CodeProto == "" {
 		opts.CodeProto = proto.Name
 	}
