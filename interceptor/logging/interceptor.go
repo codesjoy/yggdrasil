@@ -31,7 +31,10 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/stream"
 )
 
-var name = "logger"
+const (
+	typeLogging = "logging"
+	typeLogger  = "logger"
+)
 
 var (
 	global *logging
@@ -47,38 +50,61 @@ type Config struct {
 func initGlobalLogging() {
 	once.Do(func() {
 		cfg := Config{}
-		key := config.Join(config.KeyBase, "interceptor", "config", name)
-		if err := config.Get(key).Scan(&cfg); err != nil {
-			slog.Error("fault to load logger config", slog.Any("name", name))
-			os.Exit(1)
+		primaryKey := config.Join(config.KeyBase, "interceptor", "config", typeLogging)
+		fallbackKey := config.Join(config.KeyBase, "interceptor", "config", typeLogger)
+
+		primaryVal := config.Get(primaryKey)
+		fallbackVal := config.Get(fallbackKey)
+
+		useFallback := false
+		if m := primaryVal.Map(nil); len(m) == 0 {
+			if fm := fallbackVal.Map(nil); len(fm) != 0 {
+				useFallback = true
+			}
+		}
+		if useFallback {
+			if err := fallbackVal.Scan(&cfg); err != nil {
+				slog.Error("fault to load logging config", slog.String("type", typeLogger), slog.Any("error", err))
+				os.Exit(1)
+			}
+		} else {
+			if err := primaryVal.Scan(&cfg); err != nil {
+				slog.Error("fault to load logging config", slog.String("type", typeLogging), slog.Any("error", err))
+				os.Exit(1)
+			}
 		}
 		global = &logging{cfg: &cfg}
 	})
 }
 
 func init() {
-	interceptor.RegisterUnaryClientIntBuilder(
-		name,
-		func(_ string) interceptor.UnaryClientInterceptor {
+	register := func(typeName string) {
+		interceptor.RegisterUnaryClientIntBuilder(
+			typeName,
+			func(_ string) interceptor.UnaryClientInterceptor {
+				initGlobalLogging()
+				return global.UnaryClientInterceptor
+			},
+		)
+		interceptor.RegisterStreamClientIntBuilder(
+			typeName,
+			func(string) interceptor.StreamClientInterceptor {
+				initGlobalLogging()
+				return global.StreamClientInterceptor
+			},
+		)
+		interceptor.RegisterUnaryServerIntBuilder(typeName, func() interceptor.UnaryServerInterceptor {
 			initGlobalLogging()
-			return global.UnaryClientInterceptor
-		},
-	)
-	interceptor.RegisterStreamClientIntBuilder(
-		name,
-		func(string) interceptor.StreamClientInterceptor {
+			return global.UnaryServerInterceptor
+		})
+		interceptor.RegisterStreamServerIntBuilder(typeName, func() interceptor.StreamServerInterceptor {
 			initGlobalLogging()
-			return global.StreamClientInterceptor
-		},
-	)
-	interceptor.RegisterUnaryServerIntBuilder(name, func() interceptor.UnaryServerInterceptor {
-		initGlobalLogging()
-		return global.UnaryServerInterceptor
-	})
-	interceptor.RegisterStreamServerIntBuilder(name, func() interceptor.StreamServerInterceptor {
-		initGlobalLogging()
-		return global.StreamServerInterceptor
-	})
+			return global.StreamServerInterceptor
+		})
+	}
+
+	register(typeLogging)
+	register(typeLogger)
 }
 
 type logging struct {

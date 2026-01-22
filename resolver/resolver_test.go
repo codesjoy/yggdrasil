@@ -62,7 +62,7 @@ func (m *mockResolver) DelWatch(app string, client Client) error {
 	return nil
 }
 
-func (m *mockResolver) Name() string {
+func (m *mockResolver) Type() string {
 	return m.name
 }
 
@@ -205,8 +205,8 @@ func TestBaseState_GetAttributes_Nil(t *testing.T) {
 }
 
 func TestRegisterBuilder(t *testing.T) {
-	testBuilder := func(schema string) (Resolver, error) {
-		return newMockResolver(schema), nil
+	testBuilder := func(name string) (Resolver, error) {
+		return newMockResolver(name), nil
 	}
 
 	RegisterBuilder("test_resolver", testBuilder)
@@ -223,12 +223,12 @@ func TestRegisterBuilder(t *testing.T) {
 
 func TestRegisterBuilder_Override(t *testing.T) {
 	called := false
-	testBuilder1 := func(schema string) (Resolver, error) {
+	testBuilder1 := func(name string) (Resolver, error) {
 		return nil, errors.New("builder1")
 	}
-	testBuilder2 := func(schema string) (Resolver, error) {
+	testBuilder2 := func(name string) (Resolver, error) {
 		called = true
-		return newMockResolver(schema), nil
+		return newMockResolver(name), nil
 	}
 
 	RegisterBuilder("override_resolver", testBuilder1)
@@ -244,7 +244,7 @@ func TestRegisterBuilder_Override(t *testing.T) {
 	}
 }
 
-func TestGet_NotFoundSchema(t *testing.T) {
+func TestGet_NotFoundType(t *testing.T) {
 	_, err := Get("non_existent_resolver")
 	if err == nil {
 		t.Fatal("expected error for non-existent resolver")
@@ -310,10 +310,10 @@ func TestMockResolver_DelWatch_Error(t *testing.T) {
 	}
 }
 
-func TestMockResolver_Name(t *testing.T) {
+func TestMockResolver_Type(t *testing.T) {
 	r := newMockResolver("test_name")
-	if r.Name() != "test_name" {
-		t.Fatalf("expected name 'test_name', got %q", r.Name())
+	if r.Type() != "test_name" {
+		t.Fatalf("expected type 'test_name', got %q", r.Type())
 	}
 }
 

@@ -35,7 +35,7 @@ go run ./
 
 ### 2) Resolver（从 Polaris 拉取实例）
 
-- `yggdrasil.resolver.default.schema: polaris`
+- `yggdrasil.resolver.default.type: polaris`
 - `yggdrasil.resolver.default.config.namespace`：目标服务所在 namespace（示例为 `default`）。
 - `yggdrasil.resolver.default.config.protocols: ["grpc"]`：只下发 gRPC 实例，避免混入非 RPC 协议实例。
 - `refreshInterval`：定时拉取实例列表的周期。
@@ -76,4 +76,3 @@ yggdrasil:
   - 见 [main.go](file:///Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/contrib/polaris/example/sample/client/main.go#L38-L42)
 - header/trailer 从 ctx 读取：
   - 见 [main.go](file:///Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/contrib/polaris/example/sample/client/main.go#L46-L52)
-

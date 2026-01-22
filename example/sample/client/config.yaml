@@ -8,10 +8,10 @@ yggdrasil:
           - address: "127.0.0.1:55879"
             protocol: "grpc"
   interceptor:
-    unary_client: "logger"
-    stream_client: "logger"
+    unary_client: "logging"
+    stream_client: "logging"
     config:
-      logger:
+      logging:
         print_req_and_res: true
 
   remote:

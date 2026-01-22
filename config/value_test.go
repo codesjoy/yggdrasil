@@ -16,7 +16,6 @@ package config
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
 	"time"
 
@@ -743,18 +742,19 @@ func TestStructValues(t *testing.T) {
 	if err := LoadSource(s); err != nil {
 		t.Fatal(err.Error())
 	}
-	fmt.Println(string(Bytes()))
-	fmt.Println(string(Get(Join(KeyBase, "logger", "default")).Bytes()))
-	type LoggerBase struct {
-		Handler       string
-		Writer        string
-		HandlerConfig Value
+	type HandlerDefault struct {
+		Type   string
+		Writer string
+		Config Value
 	}
-	loggers := make([]*LoggerBase, 0)
-	if err := Get(Join(KeyBase, "logger", "default")).Scan(&loggers); err != nil {
+	var hd HandlerDefault
+	if err := Get(Join(KeyBase, "logger", "handler", "default")).Scan(&hd); err != nil {
 		t.Fatal(err.Error())
 	}
-	for _, item := range loggers {
-		fmt.Println(item.Handler, item.Writer, string(item.HandlerConfig.Bytes()))
+	if hd.Type != "json" {
+		t.Fatalf("Type = %q, want %q", hd.Type, "json")
+	}
+	if hd.Writer != "file" {
+		t.Fatalf("Writer = %q, want %q", hd.Writer, "file")
 	}
 }

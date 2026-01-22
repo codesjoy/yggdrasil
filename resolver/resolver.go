@@ -96,12 +96,12 @@ type Resolver interface {
 	AddWatch(string, Client) error
 	// DelWatch deletes a watch for the given application.
 	DelWatch(string, Client) error
-	// Name returns the name of the resolver.
-	Name() string
+	// Type returns the type of the resolver.
+	Type() string
 }
 
 // Builder is a function that creates a resolver.
-type Builder func(schema string) (Resolver, error)
+type Builder func(name string) (Resolver, error)
 
 var (
 	resolver = map[string]Resolver{}
@@ -110,10 +110,10 @@ var (
 )
 
 // RegisterBuilder registers a resolver builder.
-func RegisterBuilder(name string, f func(string) (Resolver, error)) {
+func RegisterBuilder(typeName string, f func(string) (Resolver, error)) {
 	mu.Lock()
 	defer mu.Unlock()
-	builder[name] = f
+	builder[typeName] = f
 }
 
 // Get returns the resolver by name.
@@ -129,13 +129,13 @@ func Get(name string) (Resolver, error) {
 	if r, ok := resolver[name]; ok {
 		return r, nil
 	}
-	schema := config.Get(config.Join(config.KeyBase, "resolver", name, "schema")).String("")
-	if schema == "" {
-		return nil, fmt.Errorf("not found resolver schema, name: %s", name)
+	typeName := config.Get(config.Join(config.KeyBase, "resolver", name, "type")).String("")
+	if typeName == "" {
+		return nil, fmt.Errorf("not found resolver type, name: %s", name)
 	}
-	f, ok := builder[schema]
+	f, ok := builder[typeName]
 	if !ok {
-		return nil, fmt.Errorf("not found resolver builder, name: %s", name)
+		return nil, fmt.Errorf("not found resolver builder, type: %s", typeName)
 	}
 	r, err := f(name)
 	if err != nil {

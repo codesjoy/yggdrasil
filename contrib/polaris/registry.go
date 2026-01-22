@@ -65,8 +65,8 @@ func NewRegistryWithError(cfg RegistryConfig, initErr error) *Registry {
 	}
 }
 
-// Name returns the name of the registry.
-func (r *Registry) Name() string { return "polaris" }
+// Type returns the type of the registry.
+func (r *Registry) Type() string { return "polaris" }
 
 // Register registers the instance with the Polaris registry.
 func (r *Registry) Register(ctx context.Context, inst yregistry.Instance) error {

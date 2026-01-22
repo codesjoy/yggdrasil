@@ -54,8 +54,8 @@ type Balancer interface {
 	UpdateState(resolver.State)
 	// Close closes the balancer
 	Close() error
-	// Name returns the name of the balancer
-	Name() string
+	// Type returns the type of the balancer.
+	Type() string
 }
 
 // State is the state of the balancer
@@ -80,28 +80,28 @@ type Client interface {
 	NewRemoteClient(endpoint resolver.Endpoint, ops NewRemoteClientOptions) (remote.Client, error)
 }
 
-// Builder is the function that creates a balancer
-type Builder func(string, Client) (Balancer, error)
+// Builder is the function that creates a balancer.
+type Builder func(serviceName, balancerName string, cli Client) (Balancer, error)
 
 var (
 	builder = map[string]Builder{}
 	mu      sync.RWMutex
 )
 
-// GetBuilder returns the balancer builder
-func GetBuilder(name string) (Builder, error) {
+// GetBuilder returns the balancer builder.
+func GetBuilder(typeName string) (Builder, error) {
 	mu.RLock()
 	defer mu.RUnlock()
-	f, ok := builder[name]
+	f, ok := builder[typeName]
 	if !ok {
-		return nil, fmt.Errorf("not found balancer builder, name: %s", name)
+		return nil, fmt.Errorf("not found balancer builder, type: %s", typeName)
 	}
 	return f, nil
 }
 
-// RegisterBuilder registers a balancer builder
-func RegisterBuilder(name string, f Builder) {
+// RegisterBuilder registers a balancer builder.
+func RegisterBuilder(typeName string, f Builder) {
 	mu.Lock()
 	defer mu.Unlock()
-	builder[name] = f
+	builder[typeName] = f
 }

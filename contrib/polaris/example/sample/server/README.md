@@ -53,7 +53,7 @@ go run ./
 
 ### 2) Registry（把实例注册到 Polaris）
 
-- `yggdrasil.registry.schema: polaris`
+- `yggdrasil.registry.type: polaris`
 - `yggdrasil.registry.config.sdk: default`：使用哪套 SDK 配置（对应 `yggdrasil.polaris.<name>`）。
 - `yggdrasil.registry.config.namespace`：注册到哪个 namespace（未填会回退到应用 namespace，再回退 `default`）。
 - `yggdrasil.registry.config.serviceToken`：服务级 token（可选，取决于 Polaris 是否开启鉴权）。

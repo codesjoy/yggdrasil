@@ -3,7 +3,7 @@
 该子模块为 Yggdrasil 框架提供 Polaris 的能力接入：
 
 - Server 侧：实现 `registry.Registry`，应用启动后注册实例，停止时反注册。
-- Client 侧：实现 `resolver.Resolver`（schema=`polaris`），客户端从 Polaris 拉取实例列表并驱动负载均衡。
+- Client 侧：实现 `resolver.Resolver`（type=`polaris`），客户端从 Polaris 拉取实例列表并驱动负载均衡。
 - 配置中心：实现 `config/source.Source`，从 Polaris 拉取配置文件并支持订阅变更（热更新）。
 - 服务治理：提供 client unary interceptor（限流/熔断），可通过 Yggdrasil 配置启用。
 
@@ -45,7 +45,7 @@ yggdrasil:
         - "127.0.0.1:8091"
 
   registry:
-    schema: polaris
+    type: polaris
     config:
       sdk: default
       namespace: "default"
@@ -72,7 +72,7 @@ yggdrasil:
 
   resolver:
     default:
-      schema: polaris
+      type: polaris
       config:
         sdk: default
         namespace: "default"
@@ -160,7 +160,7 @@ yggdrasil:
 
   resolver:
     default:
-      schema: polaris
+      type: polaris
       config:
         sdk: default
         namespace: "default"

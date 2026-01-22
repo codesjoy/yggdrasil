@@ -138,13 +138,13 @@ func Stop() error {
 }
 
 func initRegistry(opts *options) {
-	schema := config.GetString(config.Join(config.KeyBase, "registry", "schema"))
-	if schema == "" {
+	typeName := config.GetString(config.Join(config.KeyBase, "registry", "type"))
+	if typeName == "" {
 		return
 	}
 	r, err := registry.Get()
 	if err != nil {
-		slog.Warn("fault to initialize registry", slog.String("schema", schema), slog.Any("error", err))
+		slog.Warn("fault to initialize registry", slog.String("type", typeName), slog.Any("error", err))
 		return
 	}
 	opts.registry = r

@@ -21,7 +21,7 @@ import (
 )
 
 func TestRegisterBuilder(t *testing.T) {
-	testBuilder := func(name string, cli Client) (Balancer, error) {
+	testBuilder := func(serviceName, balancerName string, cli Client) (Balancer, error) {
 		return nil, nil
 	}
 
@@ -43,7 +43,7 @@ func TestGetBuilder_NotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for non-existent balancer")
 	}
-	expectedErr := "not found balancer builder, name: non_existent_balancer"
+	expectedErr := "not found balancer builder, type: non_existent_balancer"
 	if err.Error() != expectedErr {
 		t.Fatalf("expected error %q, got %q", expectedErr, err.Error())
 	}
@@ -62,10 +62,10 @@ func TestGetBuilder_RoundRobin(t *testing.T) {
 
 func TestRegisterBuilder_Override(t *testing.T) {
 	called := false
-	testBuilder1 := func(name string, cli Client) (Balancer, error) {
+	testBuilder1 := func(serviceName, balancerName string, cli Client) (Balancer, error) {
 		return nil, errors.New("builder1")
 	}
-	testBuilder2 := func(name string, cli Client) (Balancer, error) {
+	testBuilder2 := func(serviceName, balancerName string, cli Client) (Balancer, error) {
 		called = true
 		return nil, errors.New("builder2")
 	}
@@ -78,7 +78,7 @@ func TestRegisterBuilder_Override(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	_, err = builder("test", nil)
+	_, err = builder("test_service", "test_balancer", nil)
 	if !called {
 		t.Fatal("expected second builder to be called")
 	}
