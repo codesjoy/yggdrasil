@@ -26,12 +26,12 @@ var global = &instance{}
 // InitInstanceInfo initializes the Instance information.
 func InitInstanceInfo(appName string) {
 	info := struct {
-		Namespace string            `mapstructure:"namespace"`
-		Version   string            `mapstructure:"version"`
-		Campus    string            `mapstructure:"campus"`
+		Namespace string            `mapstructure:"namespace" default:"default"`
+		Version   string            `mapstructure:"version" default:"0.0.1"`
+		Campus    string            `mapstructure:"campus" default:"default"`
 		Metadata  map[string]string `mapstructure:"metadata"`
-		Region    string            `mapstructure:"region"`
-		Zone      string            `mapstructure:"zone"`
+		Region    string            `mapstructure:"region" default:"default"`
+		Zone      string            `mapstructure:"zone" default:"default"`
 	}{}
 	_ = config.Get(config.Join(config.KeyBase, "application")).Scan(&info)
 	if info.Metadata == nil {
