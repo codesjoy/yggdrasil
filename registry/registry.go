@@ -19,7 +19,10 @@ package registry
 
 import (
 	"context"
+	"fmt"
 	"sync"
+
+	"github.com/codesjoy/yggdrasil/v2/config"
 )
 
 const (
@@ -27,8 +30,9 @@ const (
 	MDServerKind = "serverKind"
 )
 
-// Builder is the interface for registry builder
-type Builder func() Registry
+// Builder is the interface for registry builder.
+// cfg is read from yggdrasil.registry.config (or child config for multi_registry).
+type Builder func(cfg config.Value) (Registry, error)
 
 // Registry is the interface for registry
 type Registry interface {
@@ -71,8 +75,9 @@ type Instance interface {
 }
 
 var (
-	builders = make(map[string]Builder)
-	mu       sync.RWMutex
+	builders   = make(map[string]Builder)
+	mu         sync.RWMutex
+	defaultReg Registry
 )
 
 // RegisterBuilder registers a registry builder
@@ -88,4 +93,44 @@ func GetBuilder(name string) Builder {
 	defer mu.RUnlock()
 	constructor := builders[name]
 	return constructor
+}
+
+// New creates a registry instance by schema and config value.
+func New(schema string, cfg config.Value) (Registry, error) {
+	mu.RLock()
+	f, ok := builders[schema]
+	mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("not found registry builder, schema: %s", schema)
+	}
+	return f(cfg)
+}
+
+// Get returns the default registry defined by yggdrasil.registry.{schema,config}.
+func Get() (Registry, error) {
+	mu.RLock()
+	if defaultReg != nil {
+		r := defaultReg
+		mu.RUnlock()
+		return r, nil
+	}
+	mu.RUnlock()
+
+	schema := config.Get(config.Join(config.KeyBase, "registry", "schema")).String("")
+	if schema == "" {
+		return nil, fmt.Errorf("not found registry schema")
+	}
+	cfgVal := config.Get(config.Join(config.KeyBase, "registry", "config"))
+	r, err := New(schema, cfgVal)
+	if err != nil {
+		return nil, err
+	}
+
+	mu.Lock()
+	if defaultReg == nil {
+		defaultReg = r
+	}
+	out := defaultReg
+	mu.Unlock()
+	return out, nil
 }
