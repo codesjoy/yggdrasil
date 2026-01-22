@@ -138,16 +138,16 @@ func Stop() error {
 }
 
 func initRegistry(opts *options) {
-	name := config.GetString(config.Join(config.KeyBase, "registry"))
-	if len(name) == 0 {
+	schema := config.GetString(config.Join(config.KeyBase, "registry", "schema"))
+	if schema == "" {
 		return
 	}
-	f := registry.GetBuilder(name)
-	if f == nil {
-		slog.Warn("not found registry", slog.String("name", name))
+	r, err := registry.Get()
+	if err != nil {
+		slog.Warn("fault to initialize registry", slog.String("schema", schema), slog.Any("error", err))
 		return
 	}
-	opts.registry = f()
+	opts.registry = r
 }
 
 func initTracer() {
