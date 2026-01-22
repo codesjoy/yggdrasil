@@ -33,13 +33,13 @@ func init() {
 	// Register mock balancer builder
 	balancer.RegisterBuilder(
 		"mock_balancer",
-		func(name string, client balancer.Client) (balancer.Balancer, error) {
+		func(serviceName, balancerName string, client balancer.Client) (balancer.Balancer, error) {
 			return newMockBalancer(), nil
 		},
 	)
 
 	// Register mock resolver builder
-	resolver.RegisterBuilder("mock_schema", func(name string) (resolver.Resolver, error) {
+	resolver.RegisterBuilder("mock_type", func(name string) (resolver.Resolver, error) {
 		return newMockResolver(), nil
 	})
 
@@ -54,6 +54,9 @@ func init() {
 
 func setupConfig(appName string, conf map[string]interface{}) error {
 	key := config.Join(config.KeyBase, "client", fmt.Sprintf("{%s}", appName))
+	if v, ok := conf["balancer"].(string); ok && v != "" {
+		_ = config.Set(config.Join(config.KeyBase, "balancer", v, "type"), v)
+	}
 	return config.Set(key, conf)
 }
 
@@ -108,9 +111,9 @@ func TestNewClient_Resolver(t *testing.T) {
 	}
 
 	// Setup resolver config
-	resolverKey := config.Join(config.KeyBase, "resolver", "test_resolver", "schema")
-	if err := config.Set(resolverKey, "mock_schema"); err != nil {
-		t.Fatalf("config.Set resolver schema failed: %v", err)
+	resolverKey := config.Join(config.KeyBase, "resolver", "test_resolver", "type")
+	if err := config.Set(resolverKey, "mock_type"); err != nil {
+		t.Fatalf("config.Set resolver type failed: %v", err)
 	}
 
 	if err := setupConfig(appName, conf); err != nil {
@@ -240,8 +243,8 @@ func TestClose(t *testing.T) {
 		"balancer": "mock_balancer",
 		"resolver": "test_resolver_close",
 	}
-	resolverKey := config.Join(config.KeyBase, "resolver", "test_resolver_close", "schema")
-	config.Set(resolverKey, "mock_schema")
+	resolverKey := config.Join(config.KeyBase, "resolver", "test_resolver_close", "type")
+	config.Set(resolverKey, "mock_type")
 	setupConfig(appName, conf)
 
 	cli, err := NewClient(context.Background(), appName)

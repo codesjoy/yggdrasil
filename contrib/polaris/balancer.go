@@ -12,6 +12,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
 	"github.com/codesjoy/yggdrasil/v2/status"
+	"github.com/codesjoy/yggdrasil/v2/utils/xmap"
 	polaris "github.com/polarismesh/polaris-go"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	"google.golang.org/genproto/googleapis/rpc/code"
@@ -41,8 +42,17 @@ type polarisBalancer struct {
 	cbErr      error
 }
 
-func newPolarisBalancer(serviceName string, cli balancer.Client) (balancer.Balancer, error) {
-	cfg := loadGovernanceConfig(serviceName)
+func newPolarisBalancer(
+	serviceName, balancerName string,
+	cli balancer.Client,
+) (balancer.Balancer, error) {
+	cfgMap := loadGovernanceConfigMap(serviceName)
+	overrideMap := balancer.LoadConfig(serviceName, balancerName).Map(nil)
+	if len(overrideMap) > 0 {
+		xmap.MergeStringMap(cfgMap, overrideMap)
+		xmap.CoverInterfaceMapToStringMap(cfgMap)
+	}
+	cfg := decodeGovernanceConfig(cfgMap)
 	addresses := resolveSDKAddresses(serviceName, cfg.SDK, cfg.Addresses)
 	sdkName := resolveSDKName(serviceName, cfg.SDK)
 	holder := getSDKHolder(sdkName, addresses, nil)
@@ -345,7 +355,6 @@ func (p *polarisPicker) pickRemote(ctx context.Context, method string) (remote.C
 	}
 
 	return p.randAllReady()
-
 }
 
 func (p *polarisPicker) randAllReady() (remote.Client, error) {

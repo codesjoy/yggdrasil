@@ -283,7 +283,9 @@ func TestPolarisBalancer_RoutingFiltersNonReadyInstancesBeforeCallingRouter(t *t
 	}
 	pb.UpdateState(state)
 
-	pr, err := bc.lastPicker.Next(balancer.RPCInfo{Ctx: context.Background(), Method: "/svc/method"})
+	pr, err := bc.lastPicker.Next(
+		balancer.RPCInfo{Ctx: context.Background(), Method: "/svc/method"},
+	)
 	if err != nil {
 		t.Fatalf("picker Next err: %v", err)
 	}

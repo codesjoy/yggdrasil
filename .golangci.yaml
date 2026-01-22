@@ -40,6 +40,10 @@ linters:
         linters:
           - revive
         text: "unused-parameter:"
+      - path: example/
+        linters:
+          - revive
+        text: "package-comments:"
 
 formatters:
   enable:

@@ -46,7 +46,11 @@ func (s *LibraryImpl) MoveBook(
 	_ context.Context,
 	_ *libraryv1.MoveBookRequest,
 ) (*libraryv1.Book, error) {
-	return nil, status.FromReason(errors.New("book not found"), librarypb.Reason_BOOK_NOT_FOUND, nil)
+	return nil, status.FromReason(
+		errors.New("book not found"),
+		librarypb.Reason_BOOK_NOT_FOUND,
+		nil,
+	)
 }
 
 func (s *LibraryImpl) GetBook(

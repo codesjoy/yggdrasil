@@ -144,7 +144,11 @@ func initRegistry(opts *options) {
 	}
 	r, err := registry.Get()
 	if err != nil {
-		slog.Warn("fault to initialize registry", slog.String("type", typeName), slog.Any("error", err))
+		slog.Warn(
+			"fault to initialize registry",
+			slog.String("type", typeName),
+			slog.Any("error", err),
+		)
 		return
 	}
 	opts.registry = r

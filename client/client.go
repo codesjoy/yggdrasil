@@ -269,18 +269,16 @@ func (c *client) updateStaticState(cfg config.Values) error {
 }
 
 func (c *client) initResolverAndBalancer(cfg config.Values) error {
-	balancerName := cfg.Get("balancer").String("round_robin")
-	balancerBuilder, err := balancer.GetBuilder(balancerName)
-	if err != nil {
-		return err
-	}
-	c.balancer, err = balancerBuilder(
+	balancerName := cfg.Get("balancer").String("default")
+	b, err := balancer.New(
 		c.appName,
+		balancerName,
 		&balancerClient{cli: c, serializer: xsync.NewCallbackSerializer(c.ctx)},
 	)
 	if err != nil {
 		return err
 	}
+	c.balancer = b
 	resolverName := cfg.Get("resolver").String("")
 	if resolverName != "" {
 		r, err := resolver.Get(resolverName)

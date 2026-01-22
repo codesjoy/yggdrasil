@@ -64,7 +64,11 @@ func initGlobalLogging() {
 		}
 		if useFallback {
 			if err := fallbackVal.Scan(&cfg); err != nil {
-				slog.Error("fault to load logging config", slog.String("type", typeLogger), slog.Any("error", err))
+				slog.Error(
+					"fault to load logging config",
+					slog.String("type", typeLogger),
+					slog.Any("error", err),
+				)
 				os.Exit(1)
 			}
 		} else {
@@ -93,14 +97,20 @@ func init() {
 				return global.StreamClientInterceptor
 			},
 		)
-		interceptor.RegisterUnaryServerIntBuilder(typeName, func() interceptor.UnaryServerInterceptor {
-			initGlobalLogging()
-			return global.UnaryServerInterceptor
-		})
-		interceptor.RegisterStreamServerIntBuilder(typeName, func() interceptor.StreamServerInterceptor {
-			initGlobalLogging()
-			return global.StreamServerInterceptor
-		})
+		interceptor.RegisterUnaryServerIntBuilder(
+			typeName,
+			func() interceptor.UnaryServerInterceptor {
+				initGlobalLogging()
+				return global.UnaryServerInterceptor
+			},
+		)
+		interceptor.RegisterStreamServerIntBuilder(
+			typeName,
+			func() interceptor.StreamServerInterceptor {
+				initGlobalLogging()
+				return global.StreamServerInterceptor
+			},
+		)
 	}
 
 	register(typeLogging)

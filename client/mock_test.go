@@ -243,7 +243,7 @@ func (m *mockBalancer) Close() error {
 	return nil
 }
 
-func (m *mockBalancer) Name() string {
+func (m *mockBalancer) Type() string {
 	return "mock_balancer"
 }
 
@@ -289,6 +289,6 @@ func (m *mockResolver) DelWatch(appName string, watcher resolver.Client) error {
 	return nil
 }
 
-func (m *mockResolver) Name() string {
+func (m *mockResolver) Type() string {
 	return "mock_resolver"
 }
