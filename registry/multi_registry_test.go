@@ -9,10 +9,10 @@ import (
 )
 
 type countingRegistry struct {
-	id             string
-	registerCalls  int
+	id              string
+	registerCalls   int
 	deregisterCalls int
-	registerErr    error
+	registerErr     error
 }
 
 func (r *countingRegistry) Type() string { return r.id }
@@ -20,6 +20,7 @@ func (r *countingRegistry) Register(context.Context, Instance) error {
 	r.registerCalls++
 	return r.registerErr
 }
+
 func (r *countingRegistry) Deregister(context.Context, Instance) error {
 	r.deregisterCalls++
 	return nil

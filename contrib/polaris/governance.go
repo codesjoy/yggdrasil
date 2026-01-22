@@ -61,6 +61,11 @@ type routingConfig struct {
 }
 
 func loadGovernanceConfig(serviceName string) governanceConfig {
+	m := loadGovernanceConfigMap(serviceName)
+	return decodeGovernanceConfig(m)
+}
+
+func loadGovernanceConfigMap(serviceName string) map[string]any {
 	serviceKey := fmt.Sprintf("{%s}", serviceName)
 	base := config.Get(config.Join(config.KeyBase, "polaris", "governance", "config")).
 		Map(map[string]any{})
@@ -68,7 +73,10 @@ func loadGovernanceConfig(serviceName string) governanceConfig {
 		Map(map[string]any{})
 	xmap.MergeStringMap(base, svc)
 	xmap.CoverInterfaceMapToStringMap(base)
+	return base
+}
 
+func decodeGovernanceConfig(m map[string]any) governanceConfig {
 	var out governanceConfig
 	decoder, _ := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		DecodeHook: mapstructure.ComposeDecodeHookFunc(
@@ -78,7 +86,7 @@ func loadGovernanceConfig(serviceName string) governanceConfig {
 		Result: &out,
 	})
 	if decoder != nil {
-		_ = decoder.Decode(base)
+		_ = decoder.Decode(m)
 	}
 	return out
 }

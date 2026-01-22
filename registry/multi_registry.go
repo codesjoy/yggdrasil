@@ -15,7 +15,7 @@ func init() {
 
 type multiRegistryConfig struct {
 	Registries []multiRegistryItem `mapstructure:"registries"`
-	FailFast   bool               `mapstructure:"failFast"`
+	FailFast   bool                `mapstructure:"failFast"`
 }
 
 type multiRegistryItem struct {
@@ -24,7 +24,7 @@ type multiRegistryItem struct {
 }
 
 type multiRegistry struct {
-	failFast bool
+	failFast   bool
 	registries []Registry
 }
 

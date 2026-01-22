@@ -28,7 +28,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	cli, err := yggdrasil.NewClient("github.com.codesjoy.yggdrasil.contrib.polaris.example.governance.server")
+	cli, err := yggdrasil.NewClient(
+		"github.com.codesjoy.yggdrasil.contrib.polaris.example.governance.server",
+	)
 	if err != nil {
 		slog.Error("new client failed", slog.Any("error", err))
 		os.Exit(1)
@@ -54,7 +56,10 @@ func main() {
 		fmt.Println("header:", header)
 	}
 
-	_, err = client.MoveBook(context.Background(), &libraryv1.MoveBookRequest{Name: "shelves/1/books/1"})
+	_, err = client.MoveBook(
+		context.Background(),
+		&libraryv1.MoveBookRequest{Name: "shelves/1/books/1"},
+	)
 	if err != nil {
 		st := status.FromError(err)
 		fmt.Println("reason:", st.ErrorInfo().Reason)

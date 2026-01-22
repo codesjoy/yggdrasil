@@ -39,7 +39,7 @@ type rrBalancer struct {
 	remotesClient map[string]remote.Client
 }
 
-func newRoundRobin(_ string, cli Client) (Balancer, error) {
+func newRoundRobin(_ string, _ string, cli Client) (Balancer, error) {
 	return &rrBalancer{
 		cli:           cli,
 		remotesClient: make(map[string]remote.Client),

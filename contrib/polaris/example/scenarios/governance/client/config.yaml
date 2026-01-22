@@ -27,6 +27,10 @@ yggdrasil:
         circuitBreaker:
           enable: false
 
+  balancer:
+    polaris:
+      type: polaris
+
   resolver:
     default:
       type: polaris
