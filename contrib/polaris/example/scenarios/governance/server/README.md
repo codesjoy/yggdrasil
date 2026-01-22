@@ -46,7 +46,7 @@ yggdrasil:
 ```yaml
 yggdrasil:
   registry:
-    schema: polaris
+    type: polaris
     config:
       namespace: "default"
 ```

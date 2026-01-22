@@ -40,8 +40,8 @@ type Registry interface {
 	Register(context.Context, Instance) error
 	// Deregister deregister an instance
 	Deregister(context.Context, Instance) error
-	// Name returns the name of the registry
-	Name() string
+	// Type returns the type of the registry.
+	Type() string
 }
 
 // Endpoint is the interface for endpoint
@@ -80,33 +80,33 @@ var (
 	defaultReg Registry
 )
 
-// RegisterBuilder registers a registry builder
-func RegisterBuilder(name string, constructor Builder) {
+// RegisterBuilder registers a registry builder.
+func RegisterBuilder(typeName string, constructor Builder) {
 	mu.Lock()
 	defer mu.Unlock()
-	builders[name] = constructor
+	builders[typeName] = constructor
 }
 
-// GetBuilder returns a registry builder
-func GetBuilder(name string) Builder {
+// GetBuilder returns a registry builder.
+func GetBuilder(typeName string) Builder {
 	mu.RLock()
 	defer mu.RUnlock()
-	constructor := builders[name]
+	constructor := builders[typeName]
 	return constructor
 }
 
-// New creates a registry instance by schema and config value.
-func New(schema string, cfg config.Value) (Registry, error) {
+// New creates a registry instance by type and config value.
+func New(typeName string, cfg config.Value) (Registry, error) {
 	mu.RLock()
-	f, ok := builders[schema]
+	f, ok := builders[typeName]
 	mu.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("not found registry builder, schema: %s", schema)
+		return nil, fmt.Errorf("not found registry builder, type: %s", typeName)
 	}
 	return f(cfg)
 }
 
-// Get returns the default registry defined by yggdrasil.registry.{schema,config}.
+// Get returns the default registry defined by yggdrasil.registry.{type,config}.
 func Get() (Registry, error) {
 	mu.RLock()
 	if defaultReg != nil {
@@ -116,12 +116,12 @@ func Get() (Registry, error) {
 	}
 	mu.RUnlock()
 
-	schema := config.Get(config.Join(config.KeyBase, "registry", "schema")).String("")
-	if schema == "" {
-		return nil, fmt.Errorf("not found registry schema")
+	typeName := config.Get(config.Join(config.KeyBase, "registry", "type")).String("")
+	if typeName == "" {
+		return nil, fmt.Errorf("not found registry type")
 	}
 	cfgVal := config.Get(config.Join(config.KeyBase, "registry", "config"))
-	r, err := New(schema, cfgVal)
+	r, err := New(typeName, cfgVal)
 	if err != nil {
 		return nil, err
 	}

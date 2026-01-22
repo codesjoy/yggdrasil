@@ -18,14 +18,14 @@ yggdrasil:
       token: "token-green"
 
   registry:
-    schema: polaris
+    type: polaris
     config:
       sdk: blue
       namespace: "default"
 
   resolver:
     green:
-      schema: polaris
+      type: polaris
       config:
         sdk: green
         namespace: "default"

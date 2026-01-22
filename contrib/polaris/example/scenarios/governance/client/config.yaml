@@ -29,7 +29,7 @@ yggdrasil:
 
   resolver:
     default:
-      schema: polaris
+      type: polaris
       config:
         sdk: default
         namespace: "default"
@@ -46,6 +46,5 @@ yggdrasil:
       balancer: polaris
 
   interceptor:
-    unary_client: "logger"
-    stream_client: "logger"
-
+    unary_client: "logging"
+    stream_client: "logging"

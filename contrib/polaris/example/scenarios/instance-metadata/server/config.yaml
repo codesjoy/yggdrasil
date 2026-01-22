@@ -22,7 +22,7 @@ yggdrasil:
         - "127.0.0.1:8091"
 
   registry:
-    schema: polaris
+    type: polaris
     config:
       sdk: default
       namespace: "prod"

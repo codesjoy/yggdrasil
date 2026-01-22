@@ -25,7 +25,7 @@ yggdrasil:
       token: ""
 
   registry:
-    schema: polaris
+    type: polaris
     config:
       sdk: default
       namespace: "default"
@@ -36,5 +36,5 @@ yggdrasil:
       retryCount: 0
 
   interceptor:
-    unary_server: "logger"
-    stream_server: "logger"
+    unary_server: "logging"
+    stream_server: "logging"

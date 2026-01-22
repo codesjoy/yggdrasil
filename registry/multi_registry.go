@@ -7,10 +7,10 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/config"
 )
 
-const multiRegistrySchema = "multi_registry"
+const multiRegistryType = "multi_registry"
 
 func init() {
-	RegisterBuilder(multiRegistrySchema, newMultiRegistry)
+	RegisterBuilder(multiRegistryType, newMultiRegistry)
 }
 
 type multiRegistryConfig struct {
@@ -19,7 +19,7 @@ type multiRegistryConfig struct {
 }
 
 type multiRegistryItem struct {
-	Schema string         `mapstructure:"schema"`
+	Type   string         `mapstructure:"type"`
 	Config map[string]any `mapstructure:"config"`
 }
 
@@ -28,7 +28,7 @@ type multiRegistry struct {
 	registries []Registry
 }
 
-func (m *multiRegistry) Name() string { return multiRegistrySchema }
+func (m *multiRegistry) Type() string { return multiRegistryType }
 
 func (m *multiRegistry) Register(ctx context.Context, inst Instance) error {
 	var multiErr error
@@ -64,11 +64,11 @@ func newMultiRegistry(cfgVal config.Value) (Registry, error) {
 
 	registries := make([]Registry, 0, len(cfg.Registries))
 	for _, item := range cfg.Registries {
-		if item.Schema == "" {
-			return nil, errors.New("multi_registry: empty child schema")
+		if item.Type == "" {
+			return nil, errors.New("multi_registry: empty child type")
 		}
 		childCfgVal := valueFromMap(item.Config)
-		r, err := New(item.Schema, childCfgVal)
+		r, err := New(item.Type, childCfgVal)
 		if err != nil {
 			return nil, err
 		}
@@ -82,4 +82,3 @@ func valueFromMap(m map[string]any) config.Value {
 	_ = c.Set("x", m)
 	return c.Get("x")
 }
-

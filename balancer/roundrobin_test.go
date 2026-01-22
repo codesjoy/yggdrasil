@@ -190,21 +190,21 @@ func (m *mockState) GetAttributes() map[string]any {
 
 func TestNewRoundRobin(t *testing.T) {
 	cli := newMockBalancerClient()
-	balancer, err := newRoundRobin("test", cli)
+	balancer, err := newRoundRobin("test", "default", cli)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if balancer == nil {
 		t.Fatal("expected balancer to be non-nil")
 	}
-	if balancer.Name() != "round_robin" {
-		t.Fatalf("expected name 'round_robin', got %q", balancer.Name())
+	if balancer.Type() != "round_robin" {
+		t.Fatalf("expected type 'round_robin', got %q", balancer.Type())
 	}
 }
 
 func TestRRBalancer_UpdateState(t *testing.T) {
 	cli := newMockBalancerClient()
-	balancer, _ := newRoundRobin("test", cli)
+	balancer, _ := newRoundRobin("test", "default", cli)
 
 	endpoints := []resolver.Endpoint{
 		newMockEndpoint("endpoint1", "localhost:8080", "grpc"),
@@ -222,7 +222,7 @@ func TestRRBalancer_UpdateState(t *testing.T) {
 
 func TestRRBalancer_Close(t *testing.T) {
 	cli := newMockBalancerClient()
-	balancer, _ := newRoundRobin("test", cli)
+	balancer, _ := newRoundRobin("test", "default", cli)
 
 	endpoints := []resolver.Endpoint{
 		newMockEndpoint("endpoint1", "localhost:8080", "grpc"),
@@ -244,7 +244,7 @@ func TestRRBalancer_Close(t *testing.T) {
 
 func TestRRBalancer_UpdateState_AfterClose(t *testing.T) {
 	cli := newMockBalancerClient()
-	balancer, _ := newRoundRobin("test", cli)
+	balancer, _ := newRoundRobin("test", "default", cli)
 
 	// Close the balancer first
 	_ = balancer.Close()
@@ -399,7 +399,7 @@ func TestPickResult_RemoteClient(t *testing.T) {
 
 func TestRRBalancer_UpdateRemoteClientState(t *testing.T) {
 	cli := newMockBalancerClient()
-	balancer, _ := newRoundRobin("test", cli)
+	balancer, _ := newRoundRobin("test", "default", cli)
 
 	// First add some endpoints
 	endpoints := []resolver.Endpoint{
@@ -422,7 +422,7 @@ func TestRRBalancer_UpdateRemoteClientState(t *testing.T) {
 
 func TestRRBalancer_UpdateRemoteClientState_AfterClose(t *testing.T) {
 	cli := newMockBalancerClient()
-	balancer, _ := newRoundRobin("test", cli)
+	balancer, _ := newRoundRobin("test", "default", cli)
 
 	// Close the balancer
 	_ = balancer.Close()
@@ -441,7 +441,7 @@ func TestRRBalancer_UpdateRemoteClientState_AfterClose(t *testing.T) {
 
 func TestRRBalancer_BuildPicker_OnlyReadyClients(t *testing.T) {
 	cli := newMockBalancerClient()
-	balancer, _ := newRoundRobin("test", cli)
+	balancer, _ := newRoundRobin("test", "default", cli)
 	rrBal := balancer.(*rrBalancer)
 
 	// Manually add clients with different states
@@ -461,11 +461,11 @@ func TestRRBalancer_BuildPicker_OnlyReadyClients(t *testing.T) {
 	}
 }
 
-func TestRRBalancer_Name(t *testing.T) {
+func TestRRBalancer_Type(t *testing.T) {
 	cli := newMockBalancerClient()
-	balancer, _ := newRoundRobin("test", cli)
+	balancer, _ := newRoundRobin("test", "default", cli)
 
-	if balancer.Name() != "round_robin" {
-		t.Fatalf("expected name 'round_robin', got %q", balancer.Name())
+	if balancer.Type() != "round_robin" {
+		t.Fatalf("expected type 'round_robin', got %q", balancer.Type())
 	}
 }

@@ -5,17 +5,18 @@ yggdrasil:
         target: 127.0.0.1:30001
 
   logger:
-    default:
-      - handler: "json"
+    handler:
+      default:
+        type: "json"
         writer: "file"
-        handlerConfig:
+        config:
           level: "debug"
           addSource: true
-      - handler: "console"
-        writer: "console"
-        handlerConfig:
-          level: "debug"
-          addSource: true
+    writer:
+      file:
+        type: "file"
+        filename: "/tmp/yggdrasil.log"
+        maxSize: 10
 
 TestTag:
   data: "test"

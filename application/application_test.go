@@ -49,7 +49,7 @@ func (m *mockRegistry) Deregister(ctx context.Context, s registry.Instance) erro
 	return args.Error(0)
 }
 
-func (m *mockRegistry) Name() string {
+func (m *mockRegistry) Type() string {
 	args := m.Called()
 	return args.String(0)
 }
@@ -101,7 +101,7 @@ func TestNew_Application(t *testing.T) {
 
 func TestNew_ApplicationWithOptions(t *testing.T) {
 	mockReg := createMockRegistry()
-	mockReg.On("Name").Return("test-registry")
+	mockReg.On("Type").Return("test-registry")
 
 	app, err := newApplication(WithRegistry(mockReg))
 	require.NoError(t, err)
@@ -172,7 +172,7 @@ func TestApplication_RunHooks_NonExistentStage(t *testing.T) {
 func TestApplication_Register_Success(t *testing.T) {
 	mockReg := createMockRegistry()
 	mockReg.On("Register", mock.Anything, mock.Anything).Return(nil)
-	mockReg.On("Name").Return("test-registry")
+	mockReg.On("Type").Return("test-registry")
 
 	app, _ := newApplication(WithRegistry(mockReg))
 
@@ -193,7 +193,7 @@ func TestApplication_Register_NilRegistry(t *testing.T) {
 func TestApplication_Register_AlreadyRegistered(t *testing.T) {
 	mockReg := createMockRegistry()
 	mockReg.On("Register", mock.Anything, mock.Anything).Return(nil)
-	mockReg.On("Name").Return("test-registry")
+	mockReg.On("Type").Return("test-registry")
 
 	app, _ := newApplication(WithRegistry(mockReg))
 
@@ -215,7 +215,7 @@ func TestApplication_Deregister_Success(t *testing.T) {
 	mockReg := createMockRegistry()
 	mockReg.On("Register", mock.Anything, mock.Anything).Return(nil)
 	mockReg.On("Deregister", mock.Anything, mock.Anything).Return(nil)
-	mockReg.On("Name").Return("test-registry")
+	mockReg.On("Type").Return("test-registry")
 
 	app, _ := newApplication(WithRegistry(mockReg))
 
@@ -239,7 +239,7 @@ func TestApplication_Deregister_NilRegistry(t *testing.T) {
 
 func TestApplication_Deregister_NotRegistered(t *testing.T) {
 	mockReg := createMockRegistry()
-	mockReg.On("Name").Return("test-registry")
+	mockReg.On("Type").Return("test-registry")
 
 	app, _ := newApplication(WithRegistry(mockReg))
 
@@ -253,7 +253,7 @@ func TestApplication_Deregister_Error(t *testing.T) {
 	mockReg := createMockRegistry()
 	mockReg.On("Register", mock.Anything, mock.Anything).Return(nil)
 	mockReg.On("Deregister", mock.Anything, mock.Anything).Return(errors.New("deregister error"))
-	mockReg.On("Name").Return("test-registry")
+	mockReg.On("Type").Return("test-registry")
 
 	app, _ := newApplication(WithRegistry(mockReg))
 
@@ -574,7 +574,7 @@ func TestApplication_OptionWithRegistry(t *testing.T) {
 
 	// Test WithRegistry option
 	mockReg := createMockRegistry()
-	mockReg.On("Name").Return("test-registry")
+	mockReg.On("Type").Return("test-registry")
 
 	err := WithRegistry(mockReg)(app)
 	assert.NoError(t, err)

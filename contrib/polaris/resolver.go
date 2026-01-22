@@ -71,8 +71,8 @@ func NewResolverWithError(name string, cfg ResolverConfig, initErr error) *Resol
 	}
 }
 
-// Name returns the name of the resolver.
-func (r *Resolver) Name() string { return r.name }
+// Type returns the type of the resolver.
+func (r *Resolver) Type() string { return "polaris" }
 
 // AddWatch adds a watcher for the given app name.
 func (r *Resolver) AddWatch(appName string, watcher yresolver.Client) error {

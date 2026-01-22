@@ -15,7 +15,7 @@ type countingRegistry struct {
 	registerErr    error
 }
 
-func (r *countingRegistry) Name() string { return r.id }
+func (r *countingRegistry) Type() string { return r.id }
 func (r *countingRegistry) Register(context.Context, Instance) error {
 	r.registerCalls++
 	return r.registerErr
@@ -27,7 +27,7 @@ func (r *countingRegistry) Deregister(context.Context, Instance) error {
 
 func TestMultiRegistry_DispatchesRegisterToAllChildren(t *testing.T) {
 	resetRegistryState()
-	RegisterBuilder(multiRegistrySchema, newMultiRegistry)
+	RegisterBuilder(multiRegistryType, newMultiRegistry)
 
 	var children []*countingRegistry
 	RegisterBuilder("mockchild", func(cfg config.Value) (Registry, error) {
@@ -45,11 +45,11 @@ func TestMultiRegistry_DispatchesRegisterToAllChildren(t *testing.T) {
 	c := config.NewConfig(".")
 	_ = c.Set("cfg", map[string]any{
 		"registries": []any{
-			map[string]any{"schema": "mockchild", "config": map[string]any{"id": "a"}},
-			map[string]any{"schema": "mockchild", "config": map[string]any{"id": "b"}},
+			map[string]any{"type": "mockchild", "config": map[string]any{"id": "a"}},
+			map[string]any{"type": "mockchild", "config": map[string]any{"id": "b"}},
 		},
 	})
-	mr, err := New(multiRegistrySchema, c.Get("cfg"))
+	mr, err := New(multiRegistryType, c.Get("cfg"))
 	if err != nil {
 		t.Fatalf("New(multi_registry) error = %v", err)
 	}
@@ -69,7 +69,7 @@ func TestMultiRegistry_DispatchesRegisterToAllChildren(t *testing.T) {
 
 func TestMultiRegistry_FailFastStopsOnFirstError(t *testing.T) {
 	resetRegistryState()
-	RegisterBuilder(multiRegistrySchema, newMultiRegistry)
+	RegisterBuilder(multiRegistryType, newMultiRegistry)
 
 	var children []*countingRegistry
 	RegisterBuilder("mockchild", func(cfg config.Value) (Registry, error) {
@@ -91,11 +91,11 @@ func TestMultiRegistry_FailFastStopsOnFirstError(t *testing.T) {
 	_ = c.Set("cfg", map[string]any{
 		"failFast": true,
 		"registries": []any{
-			map[string]any{"schema": "mockchild", "config": map[string]any{"id": "a"}},
-			map[string]any{"schema": "mockchild", "config": map[string]any{"id": "b"}},
+			map[string]any{"type": "mockchild", "config": map[string]any{"id": "a"}},
+			map[string]any{"type": "mockchild", "config": map[string]any{"id": "b"}},
 		},
 	})
-	mr, err := New(multiRegistrySchema, c.Get("cfg"))
+	mr, err := New(multiRegistryType, c.Get("cfg"))
 	if err != nil {
 		t.Fatalf("New(multi_registry) error = %v", err)
 	}
@@ -113,4 +113,3 @@ func TestMultiRegistry_FailFastStopsOnFirstError(t *testing.T) {
 		t.Fatalf("child b registerCalls = %d, want 0", children[1].registerCalls)
 	}
 }
-

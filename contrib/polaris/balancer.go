@@ -64,7 +64,7 @@ func newPolarisBalancer(serviceName string, cli balancer.Client) (balancer.Balan
 	}, nil
 }
 
-func (b *polarisBalancer) Name() string { return polarisBalancerName }
+func (b *polarisBalancer) Type() string { return polarisBalancerName }
 
 func (b *polarisBalancer) Close() error {
 	b.mu.Lock()

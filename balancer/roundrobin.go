@@ -134,8 +134,8 @@ func (b *rrBalancer) Close() error {
 	return multiErr
 }
 
-// Name returns the name of the balancer.
-func (b *rrBalancer) Name() string {
+// Type returns the type of the balancer.
+func (b *rrBalancer) Type() string {
 	return name
 }
 

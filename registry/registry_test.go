@@ -13,7 +13,7 @@ type testRegistry struct {
 
 func (r *testRegistry) Register(context.Context, Instance) error   { return nil }
 func (r *testRegistry) Deregister(context.Context, Instance) error { return nil }
-func (r *testRegistry) Name() string                               { return r.instanceName }
+func (r *testRegistry) Type() string                               { return r.instanceName }
 
 func resetRegistryState() {
 	mu.Lock()
@@ -28,8 +28,8 @@ func TestGet_SingleConfig_CachesDefaultInstance(t *testing.T) {
 	config.KeyBase = "yggdrasil_test_registry_single"
 	t.Cleanup(func() { config.KeyBase = origKeyBase })
 
-	if err := config.Set(config.Join(config.KeyBase, "registry", "schema"), "mock"); err != nil {
-		t.Fatalf("Set(registry.schema) error = %v", err)
+	if err := config.Set(config.Join(config.KeyBase, "registry", "type"), "mock"); err != nil {
+		t.Fatalf("Set(registry.type) error = %v", err)
 	}
 
 	RegisterBuilder("mock", func(cfg config.Value) (Registry, error) {
@@ -57,15 +57,15 @@ func TestGet_SingleConfig_CachesDefaultInstance(t *testing.T) {
 	if r1 != r2 {
 		t.Fatalf("expected Get() to return cached instance")
 	}
-	if r1.Name() != "r" {
-		t.Fatalf("unexpected registry name: %q", r1.Name())
+	if r1.Type() != "r" {
+		t.Fatalf("unexpected registry type: %q", r1.Type())
 	}
 }
 
-func TestGet_MissingSchemaReturnsError(t *testing.T) {
+func TestGet_MissingTypeReturnsError(t *testing.T) {
 	resetRegistryState()
 	origKeyBase := config.KeyBase
-	config.KeyBase = "yggdrasil_test_registry_missing_schema"
+	config.KeyBase = "yggdrasil_test_registry_missing_type"
 	t.Cleanup(func() { config.KeyBase = origKeyBase })
 
 	if _, err := Get(); err == nil {
