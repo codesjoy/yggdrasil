@@ -27,6 +27,7 @@ import (
 )
 
 type env struct {
+	name             string
 	prefixes         []string
 	strippedPrefixes []string
 	parseArray       bool
@@ -112,6 +113,10 @@ func (e *env) Watch() (<-chan source.Data, error) {
 }
 
 func (e *env) Name() string {
+	return e.name
+}
+
+func (e *env) Type() string {
 	return "env"
 }
 
@@ -128,7 +133,7 @@ func NewSource(pre, sp []string, opts ...Option) source.Source {
 	for i, item := range sp {
 		sp[i] = strings.ToLower(item)
 	}
-	e := &env{prefixes: pre, strippedPrefixes: sp, delimiter: "_"}
+	e := &env{prefixes: pre, strippedPrefixes: sp, delimiter: "_", name: strings.Join(pre, "_")}
 	for _, opt := range opts {
 		opt(e)
 	}

@@ -377,6 +377,10 @@ func (m *mockSource) Name() string {
 	return "mock"
 }
 
+func (m *mockSource) Type() string {
+	return "mock"
+}
+
 func (m *mockSource) Read() (source.Data, error) {
 	if m.returnError {
 		return nil, errors.New("mock error")

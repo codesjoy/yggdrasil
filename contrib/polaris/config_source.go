@@ -38,6 +38,7 @@ func NewConfigSource(cfg ConfigSourceConfig) (source.Source, error) {
 	}
 	subscribe := cfg.Subscribe == nil || *cfg.Subscribe
 	return &configSource{
+		name:      cfg.FileName,
 		cfg:       cfg,
 		subscribe: subscribe,
 		closeCh:   make(chan struct{}),
@@ -53,7 +54,9 @@ type configSource struct {
 	closeCh   chan struct{}
 }
 
-func (s *configSource) Name() string { return "polaris" }
+func (s *configSource) Name() string { return s.name }
+
+func (s *configSource) Type() string { return "polaris" }
 
 func (s *configSource) Read() (source.Data, error) {
 	file, parser, err := s.fetchConfigFile()
