@@ -15,63 +15,39 @@
 package defers
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestRegister(t *testing.T) {
-	globalDefers := &Defer{fns: make([]func() error, 0)}
+func TestDefer_Order(t *testing.T) {
+	d := NewDefer()
 	var str string
-	type args struct {
-		fns []func() error
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		// TODO: Add test cases.
-		{
-			name: "register",
-			args: args{
-				fns: []func() error{
-					func() error { str += "1,"; return nil },
-					func() error { str += "2,"; return nil },
-					func() error { str += "3,"; return nil },
-					func() error { str += "4,"; return nil },
-					nil,
-				},
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			globalDefers.Register(tt.args.fns...)
-		})
-	}
+	d.Register(
+		func(context.Context) error { str += "1,"; return nil },
+		func(context.Context) error { str += "2,"; return nil },
+		func(context.Context) error { str += "3,"; return nil },
+		func(context.Context) error { str += "4,"; return nil },
+	)
+	err := d.Done(context.Background())
+	assert.NoError(t, err)
+	assert.Equal(t, "4,3,2,1,", str)
 }
 
-func TestClean(t *testing.T) {
-	var str string
-	globalDefers := &Defer{fns: make([]func() error, 0)}
-	globalDefers.Register(
-		func() error { str += "1,"; return nil },
-		func() error { str += "2,"; return nil },
-		func() error { str += "3,"; return nil },
-		func() error { str += "4,"; return nil },
+func TestDefer_ErrorJoin(t *testing.T) {
+	d := NewDefer()
+	err1 := errors.New("err1")
+	err2 := errors.New("err2")
+	d.Register(
+		func(context.Context) error { return err1 },
+		func(context.Context) error { return nil },
+		func(context.Context) error { return err2 },
 	)
 
-	tests := []struct {
-		name string
-	}{
-		{
-			"testing",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			globalDefers.Done()
-			assert.Equal(t, str, "4,3,2,1,")
-		})
-	}
+	err := d.Done(context.Background())
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, err1))
+	assert.True(t, errors.Is(err, err2))
 }

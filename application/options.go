@@ -15,6 +15,7 @@
 package application
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -27,7 +28,7 @@ import (
 type Option func(*application) error
 
 // WithHook register a hook
-func WithHook(stage Stage, fns ...func() error) Option {
+func WithHook(stage Stage, fns ...func(context.Context) error) Option {
 	return func(app *application) error {
 		hooks, ok := app.hooks[stage]
 		if ok {
@@ -39,17 +40,17 @@ func WithHook(stage Stage, fns ...func() error) Option {
 }
 
 // WithBeforeStopHook register the before stop hook
-func WithBeforeStopHook(fns ...func() error) Option {
+func WithBeforeStopHook(fns ...func(context.Context) error) Option {
 	return WithHook(stageBeforeStop, fns...)
 }
 
 // WithBeforeStartHook register the before start hook
-func WithBeforeStartHook(fns ...func() error) Option {
+func WithBeforeStartHook(fns ...func(context.Context) error) Option {
 	return WithHook(stageBeforeStart, fns...)
 }
 
 // WithAfterStopHook register the after stop hook
-func WithAfterStopHook(fns ...func() error) Option {
+func WithAfterStopHook(fns ...func(context.Context) error) Option {
 	return WithHook(stageAfterStop, fns...)
 }
 
@@ -91,4 +92,18 @@ func WithInternalServer(svr ...InternalServer) Option {
 		application.internalSvr = append(application.internalSvr, svr...)
 		return nil
 	}
+}
+
+// WithCleanup register a cleanup
+func WithCleanup(name string, fn func(context.Context) error) Option {
+	return WithHook(stageCleanup, func(ctx context.Context) error {
+		err := fn(ctx)
+		if err == nil {
+			return nil
+		}
+		if name == "" {
+			return err
+		}
+		return fmt.Errorf("cleanup %s: %w", name, err)
+	})
 }

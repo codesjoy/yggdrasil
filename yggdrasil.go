@@ -18,6 +18,7 @@ package yggdrasil
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"sync/atomic"
 
@@ -70,13 +71,17 @@ func Init(appName string, ops ...Option) error {
 		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
 		return err
 	}
+	if err := validateStartup(opts); err != nil {
+		slog.Error("startup validation failed", slog.Any("error", err))
+		return err
+	}
 	if err := initGovernor(opts); err != nil {
 		slog.Error("fault to initialize governor", slog.Any("error", err))
 		return err
 	}
 	initRegistry(opts)
-	initTracer()
-	initMeter()
+	initTracer(opts)
+	initMeter(opts)
 	return nil
 }
 
@@ -90,6 +95,10 @@ func Serve(ops ...Option) error {
 	}
 	if err := applyOpt(opts, ops...); err != nil {
 		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
+		return err
+	}
+	if err := validateStartup(opts); err != nil {
+		slog.Error("startup validation failed", slog.Any("error", err))
 		return err
 	}
 	if err := initServer(opts); err != nil {
@@ -152,27 +161,55 @@ func initRegistry(opts *options) {
 		return
 	}
 	opts.registry = r
+	if c, ok := r.(io.Closer); ok {
+		opts.appOpts = append(
+			opts.appOpts,
+			application.WithCleanup("registry", func(context.Context) error {
+				return c.Close()
+			}),
+		)
+	}
 }
 
-func initTracer() {
+func initTracer(opts *options) {
 	if tracerName := config.GetString(config.Join(config.KeyBase, "tracer")); len(tracerName) > 0 {
 		constructor, ok := xotel.GetTracerProviderBuilder(tracerName)
 		if !ok {
 			slog.Warn("not found tracer provider", slog.String("name", tracerName))
 			return
 		}
-		otel.SetTracerProvider(constructor(InstanceName()))
+		tp := constructor(InstanceName())
+		otel.SetTracerProvider(tp)
+		if opts != nil {
+			if s, ok := tp.(interface{ Shutdown(context.Context) error }); ok {
+				opts.appOpts = append(opts.appOpts, application.WithCleanup("tracer", s.Shutdown))
+			} else if c, ok := tp.(io.Closer); ok {
+				opts.appOpts = append(opts.appOpts, application.WithCleanup("tracer", func(context.Context) error {
+					return c.Close()
+				}))
+			}
+		}
 	}
 }
 
-func initMeter() {
+func initMeter(opts *options) {
 	if meterName := config.GetString(config.Join(config.KeyBase, "meter")); len(meterName) > 0 {
 		constructor, ok := xotel.GetMeterProviderBuilder(meterName)
 		if !ok {
 			slog.Warn("not found meter provider", slog.String("name", meterName))
 			return
 		}
-		otel.SetMeterProvider(constructor(InstanceName()))
+		mp := constructor(InstanceName())
+		otel.SetMeterProvider(mp)
+		if opts != nil {
+			if s, ok := mp.(interface{ Shutdown(context.Context) error }); ok {
+				opts.appOpts = append(opts.appOpts, application.WithCleanup("meter", s.Shutdown))
+			} else if c, ok := mp.(io.Closer); ok {
+				opts.appOpts = append(opts.appOpts, application.WithCleanup("meter", func(context.Context) error {
+					return c.Close()
+				}))
+			}
+		}
 	}
 }
 

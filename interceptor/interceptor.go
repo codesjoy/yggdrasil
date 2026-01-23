@@ -179,6 +179,26 @@ func getStreamServerIntBuilder(name string) StreamServerIntBuilder {
 	return f
 }
 
+// HasUnaryClientIntBuilder returns true if the unary client interceptor builder exists.
+func HasUnaryClientIntBuilder(name string) bool {
+	return getUnaryClientIntBuilder(name) != nil
+}
+
+// HasUnaryServerIntBuilder returns true if the unary server interceptor builder exists.
+func HasUnaryServerIntBuilder(name string) bool {
+	return getUnaryServerIntBuilder(name) != nil
+}
+
+// HasStreamClientIntBuilder returns true if the stream client interceptor builder exists.
+func HasStreamClientIntBuilder(name string) bool {
+	return getStreamClientIntBuilder(name) != nil
+}
+
+// HasStreamServerIntBuilder returns true if the stream server interceptor builder exists.
+func HasStreamServerIntBuilder(name string) bool {
+	return getStreamServerIntBuilder(name) != nil
+}
+
 // ChainUnaryClientInterceptors chains all unary client interceptors into one.
 func ChainUnaryClientInterceptors(serviceName string, names []string) UnaryClientInterceptor {
 	interceptors := make([]UnaryClientInterceptor, 0, len(names))
