@@ -55,6 +55,7 @@ type Data interface {
 
 // Source is the source from which conf is loaded
 type Source interface {
+	Type() string
 	Name() string
 	Read() (Data, error)
 	Changeable() bool

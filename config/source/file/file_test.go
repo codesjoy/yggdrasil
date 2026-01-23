@@ -81,7 +81,8 @@ func TestFile_NewSource(t *testing.T) {
 // TestFile_Name tests the Name method
 func TestFile_Name(t *testing.T) {
 	src := NewSource("test.yaml", false)
-	assert.Equal(t, "file", src.Name())
+	assert.Equal(t, "test.yaml", src.Name())
+	assert.Equal(t, "file", src.Type())
 }
 
 // TestFile_Changeable tests the Changeable method

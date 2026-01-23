@@ -37,3 +37,10 @@ func SetKeyDelimiter(delimiter string) Option {
 		e.delimiter = delimiter
 	}
 }
+
+// WithName set name
+func WithName(name string) Option {
+	return func(e *env) {
+		e.name = name
+	}
+}

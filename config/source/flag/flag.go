@@ -81,7 +81,14 @@ func (fs *flag) Watch() (<-chan source.Data, error) {
 }
 
 func (fs *flag) Name() string {
-	return "env"
+	if fs.fs == nil {
+		return ""
+	}
+	return fs.fs.Name()
+}
+
+func (fs *flag) Type() string {
+	return "flag"
 }
 
 func (fs *flag) Close() error {

@@ -62,6 +62,10 @@ func (f *file) Read() (source.Data, error) {
 }
 
 func (f *file) Name() string {
+	return filepath.Base(f.path)
+}
+
+func (f *file) Type() string {
 	return "file"
 }
 
