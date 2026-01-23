@@ -30,6 +30,12 @@ func RegisterBuilder(name string, f Builder) {
 	builder[name] = f
 }
 
+// HasBuilder checks if a middleware builder exists
+func HasBuilder(name string) bool {
+	_, ok := builder[name]
+	return ok
+}
+
 // GetMiddlewares returns a list of middlewares
 func GetMiddlewares(names ...string) chi.Middlewares {
 	handlers := make(chi.Middlewares, 0, len(names))

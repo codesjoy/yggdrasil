@@ -16,34 +16,40 @@
 package defers
 
 import (
+	"context"
+	"errors"
 	"sync"
 )
 
 // Defer is a defer mechanism.
 type Defer struct {
 	sync.Mutex
-	fns []func() error
+	fns []func(context.Context) error
 }
 
 // NewDefer creates a new defer mechanism.
 func NewDefer() *Defer {
 	return &Defer{
-		fns: make([]func() error, 0),
+		fns: make([]func(context.Context) error, 0),
 	}
 }
 
 // Register registers the functions to be executed.
-func (d *Defer) Register(fns ...func() error) {
+func (d *Defer) Register(fns ...func(context.Context) error) {
 	d.Lock()
 	defer d.Unlock()
 	d.fns = append(d.fns, fns...)
 }
 
 // Done executes the registered functions.
-func (d *Defer) Done() {
+func (d *Defer) Done(ctx context.Context) error {
 	d.Lock()
 	defer d.Unlock()
+	var multiErr error
 	for i := len(d.fns) - 1; i >= 0; i-- {
-		_ = d.fns[i]()
+		if err := d.fns[i](ctx); err != nil {
+			multiErr = errors.Join(multiErr, err)
+		}
 	}
+	return multiErr
 }

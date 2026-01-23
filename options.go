@@ -16,6 +16,7 @@
 package yggdrasil
 
 import (
+	"context"
 	"time"
 
 	"github.com/codesjoy/yggdrasil/v2/governor"
@@ -39,13 +40,14 @@ type options struct {
 	internalSvr       []application.InternalServer
 	registry          registry.Registry
 	shutdownTimeout   time.Duration
-	startBeforeHook   []func() error
-	stopBeforeHook    []func() error
-	stopAfterHook     []func() error
+	startBeforeHook   []func(context.Context) error
+	stopBeforeHook    []func(context.Context) error
+	stopAfterHook     []func(context.Context) error
+	appOpts           []application.Option
 }
 
 func (opts *options) getAppOpts() []application.Option {
-	return []application.Option{
+	out := []application.Option{
 		application.WithServer(opts.server),
 		application.WithGovernor(opts.governor),
 		application.WithRegistry(opts.registry),
@@ -55,13 +57,15 @@ func (opts *options) getAppOpts() []application.Option {
 		application.WithAfterStopHook(opts.stopAfterHook...),
 		application.WithInternalServer(opts.internalSvr...),
 	}
+	out = append(out, opts.appOpts...)
+	return out
 }
 
 // Option define the framework options
 type Option func(*options) error
 
 // WithBeforeStartHook register the before start hook
-func WithBeforeStartHook(fns ...func() error) Option {
+func WithBeforeStartHook(fns ...func(context.Context) error) Option {
 	return func(opts *options) error {
 		opts.startBeforeHook = append(opts.startBeforeHook, fns...)
 		return nil
@@ -69,7 +73,7 @@ func WithBeforeStartHook(fns ...func() error) Option {
 }
 
 // WithBeforeStopHook register the before stop hook
-func WithBeforeStopHook(fns ...func() error) Option {
+func WithBeforeStopHook(fns ...func(context.Context) error) Option {
 	return func(opts *options) error {
 		opts.stopBeforeHook = append(opts.stopBeforeHook, fns...)
 		return nil
@@ -77,7 +81,7 @@ func WithBeforeStopHook(fns ...func() error) Option {
 }
 
 // WithAfterStopHook register the after stop hook
-func WithAfterStopHook(fns ...func() error) Option {
+func WithAfterStopHook(fns ...func(context.Context) error) Option {
 	return func(opts *options) error {
 		opts.stopAfterHook = append(opts.stopAfterHook, fns...)
 		return nil
@@ -125,6 +129,14 @@ func WithRestRawHandleDesc(desc ...*server.RestRawHandlerDesc) Option {
 func WithInternalServer(svr ...application.InternalServer) Option {
 	return func(opts *options) error {
 		opts.internalSvr = append(opts.internalSvr, svr...)
+		return nil
+	}
+}
+
+// WithCleanup register a cleanup function
+func WithCleanup(name string, fn func(context.Context) error) Option {
+	return func(opts *options) error {
+		opts.appOpts = append(opts.appOpts, application.WithCleanup(name, fn))
 		return nil
 	}
 }

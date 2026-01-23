@@ -89,7 +89,7 @@ func TestNew_Application(t *testing.T) {
 	require.NotNil(t, app.hooks)
 	assert.Equal(
 		t,
-		3,
+		4,
 		len(app.hooks),
 	) // StageMin, stageBeforeStart, stageBeforeStop, stageAfterStop
 	assert.False(t, app.running)
@@ -149,7 +149,7 @@ func TestApplication_RunHooks(t *testing.T) {
 	// Register hooks
 	for stage := Stage(1); stage < stageMax; stage++ {
 		stage := stage
-		app.hooks[stage].Register(func() error {
+		app.hooks[stage].Register(func(context.Context) error {
 			calls[stage]++
 			return nil
 		})
@@ -157,7 +157,7 @@ func TestApplication_RunHooks(t *testing.T) {
 
 	// Test running hooks for each stage
 	for stage := Stage(1); stage < stageMax; stage++ {
-		app.runHooks(stage)
+		_ = app.runHooks(context.Background(), stage)
 		assert.Equal(t, 1, calls[stage], "Hook for stage %v should be called once", stage)
 	}
 }
@@ -166,7 +166,7 @@ func TestApplication_RunHooks_NonExistentStage(t *testing.T) {
 	app, _ := newApplication()
 
 	// Test running hook for non-existent stage (should not panic)
-	app.runHooks(Stage(999)) // Non-existent stage
+	_ = app.runHooks(context.Background(), Stage(999)) // Non-existent stage
 }
 
 func TestApplication_Register_Success(t *testing.T) {
@@ -339,7 +339,7 @@ func TestApplication_WithHook(t *testing.T) {
 	app, _ := newApplication()
 
 	called := false
-	hook := func() error {
+	hook := func(context.Context) error {
 		called = true
 		return nil
 	}
@@ -349,14 +349,14 @@ func TestApplication_WithHook(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Run the hook
-	app.runHooks(stageBeforeStart)
+	_ = app.runHooks(context.Background(), stageBeforeStart)
 	assert.True(t, called)
 }
 
 func TestApplication_WithHook_InvalidStage(t *testing.T) {
 	app, _ := newApplication()
 
-	hook := func() error {
+	hook := func(context.Context) error {
 		return nil
 	}
 
@@ -370,7 +370,7 @@ func TestApplication_WithBeforeStartHook(t *testing.T) {
 	app, _ := newApplication()
 
 	called := false
-	hook := func() error {
+	hook := func(context.Context) error {
 		called = true
 		return nil
 	}
@@ -379,7 +379,7 @@ func TestApplication_WithBeforeStartHook(t *testing.T) {
 	app.Init(WithBeforeStartHook(hook))
 
 	// Run the hook
-	app.runHooks(stageBeforeStart)
+	_ = app.runHooks(context.Background(), stageBeforeStart)
 	assert.True(t, called)
 }
 
@@ -387,7 +387,7 @@ func TestApplication_WithBeforeStopHook(t *testing.T) {
 	app, _ := newApplication()
 
 	called := false
-	hook := func() error {
+	hook := func(context.Context) error {
 		called = true
 		return nil
 	}
@@ -396,7 +396,7 @@ func TestApplication_WithBeforeStopHook(t *testing.T) {
 	app.Init(WithBeforeStopHook(hook))
 
 	// Run the hook
-	app.runHooks(stageBeforeStop)
+	_ = app.runHooks(context.Background(), stageBeforeStop)
 	assert.True(t, called)
 }
 
@@ -404,7 +404,7 @@ func TestApplication_WithAfterStopHook(t *testing.T) {
 	app, _ := newApplication()
 
 	called := false
-	hook := func() error {
+	hook := func(context.Context) error {
 		called = true
 		return nil
 	}
@@ -413,7 +413,7 @@ func TestApplication_WithAfterStopHook(t *testing.T) {
 	app.Init(WithAfterStopHook(hook))
 
 	// Run the hook
-	app.runHooks(stageAfterStop)
+	_ = app.runHooks(context.Background(), stageAfterStop)
 	assert.True(t, called)
 }
 
@@ -477,20 +477,20 @@ func TestApplication_StopServers_Hooks(t *testing.T) {
 	afterStopCalled := false
 
 	// Add hooks
-	app.hooks[stageBeforeStop].Register(func() error {
+	app.hooks[stageBeforeStop].Register(func(context.Context) error {
 		beforeStopCalled = true
 		return nil
 	})
-	app.hooks[stageAfterStop].Register(func() error {
+	app.hooks[stageAfterStop].Register(func(context.Context) error {
 		afterStopCalled = true
 		return nil
 	})
 
 	// Test hooks directly instead of stopServers to avoid governor nil issue
-	app.runHooks(stageBeforeStop)
+	_ = app.runHooks(context.Background(), stageBeforeStop)
 	assert.True(t, beforeStopCalled)
 
-	app.runHooks(stageAfterStop)
+	_ = app.runHooks(context.Background(), stageAfterStop)
 	assert.True(t, afterStopCalled)
 }
 
@@ -500,13 +500,13 @@ func TestApplication_StartServers_Hooks(t *testing.T) {
 	beforeStartCalled := false
 
 	// Add hook
-	app.hooks[stageBeforeStart].Register(func() error {
+	app.hooks[stageBeforeStart].Register(func(context.Context) error {
 		beforeStartCalled = true
 		return nil
 	})
 
 	// Test runHooks directly instead of startServers to avoid governor nil issue
-	app.runHooks(stageBeforeStart)
+	_ = app.runHooks(context.Background(), stageBeforeStart)
 	assert.True(t, beforeStartCalled)
 }
 
@@ -514,8 +514,9 @@ func TestConstants(t *testing.T) {
 	// Test constants
 	assert.Equal(t, Stage(uint32(1)), stageBeforeStart)
 	assert.Equal(t, Stage(uint32(2)), stageBeforeStop)
-	assert.Equal(t, Stage(uint32(3)), stageAfterStop)
-	assert.Equal(t, Stage(uint32(4)), stageMax)
+	assert.Equal(t, Stage(uint32(3)), stageCleanup)
+	assert.Equal(t, Stage(uint32(4)), stageAfterStop)
+	assert.Equal(t, Stage(uint32(5)), stageMax)
 
 	assert.Equal(t, time.Second*30, defaultShutdownTimeout)
 
@@ -596,17 +597,17 @@ func TestApplication_HookExecutionOrder(t *testing.T) {
 	executionOrder := []int{}
 
 	// Register multiple hooks for the same stage
-	app.hooks[stageBeforeStart].Register(func() error {
+	app.hooks[stageBeforeStart].Register(func(context.Context) error {
 		executionOrder = append(executionOrder, 1)
 		return nil
 	})
-	app.hooks[stageBeforeStart].Register(func() error {
+	app.hooks[stageBeforeStart].Register(func(context.Context) error {
 		executionOrder = append(executionOrder, 2)
 		return nil
 	})
 
 	// Run hooks
-	app.runHooks(stageBeforeStart)
+	_ = app.runHooks(context.Background(), stageBeforeStart)
 
 	// Both hooks should have been executed
 	assert.Equal(t, 2, len(executionOrder))
@@ -653,8 +654,8 @@ func TestApplication_Init_MoreScenarios(t *testing.T) {
 	// Test multiple options
 	app.Init(
 		WithShutdownTimeout(time.Second*15),
-		WithBeforeStartHook(func() error { return nil }),
-		WithAfterStopHook(func() error { return nil }),
+		WithBeforeStartHook(func(context.Context) error { return nil }),
+		WithAfterStopHook(func(context.Context) error { return nil }),
 	)
 
 	assert.Equal(t, time.Second*15, app.shutdownTimeout)
@@ -665,13 +666,12 @@ func TestApplication_Hook_ErrorHandling(t *testing.T) {
 
 	// Test hook with error
 	hookErr := errors.New("hook error")
-	app.hooks[stageBeforeStart].Register(func() error {
+	app.hooks[stageBeforeStart].Register(func(context.Context) error {
 		return hookErr
 	})
 
-	// runHooks doesn't return errors, it just logs them
-	// So we test that it doesn't panic
-	app.runHooks(stageBeforeStart)
+	err := app.runHooks(context.Background(), stageBeforeStart)
+	assert.ErrorIs(t, err, hookErr)
 }
 
 func TestApplication_RunStop_Integration(t *testing.T) {

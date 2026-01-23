@@ -17,6 +17,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -52,6 +53,8 @@ const (
 	stageBeforeStart
 	// stageBeforeStop before app stop
 	stageBeforeStop
+	// stageCleanup cleanup resources
+	stageCleanup
 	// stageAfterStop after app stop
 	stageAfterStop
 	// stageMax stage max
@@ -130,12 +133,18 @@ func (app *application) Init(opts ...Option) error {
 func (app *application) Stop() error {
 	var err error
 	app.stopOnce.Do(func() {
-		app.runHooks(stageBeforeStop)
-		defer func() {
-			app.runHooks(stageAfterStop)
-		}()
+		timeout := app.shutdownTimeout
+		if timeout <= 0 {
+			timeout = defaultShutdownTimeout
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		err = errors.Join(err, app.runHooks(ctx, stageBeforeStop))
 		app.deregister()
-		err = app.stopServers()
+		err = errors.Join(err, app.stopServers())
+		err = errors.Join(err, app.runHooks(ctx, stageCleanup))
+		err = errors.Join(err, app.runHooks(ctx, stageAfterStop))
 	})
 	if err != nil {
 		return err
@@ -160,11 +169,12 @@ func (app *application) Run() error {
 	return err
 }
 
-func (app *application) runHooks(k Stage) {
+func (app *application) runHooks(ctx context.Context, k Stage) error {
 	hooks, ok := app.hooks[k]
 	if ok {
-		hooks.Done()
+		return hooks.Done(ctx)
 	}
+	return nil
 }
 
 func (app *application) register() {
@@ -211,7 +221,9 @@ func (app *application) deregister() {
 }
 
 func (app *application) startServers() error {
-	app.runHooks(stageBeforeStart)
+	if err := app.runHooks(context.Background(), stageBeforeStart); err != nil {
+		return err
+	}
 	eg := errgroup.Group{}
 	svrStarCh := make(chan struct{}, 1)
 	if app.server != nil {

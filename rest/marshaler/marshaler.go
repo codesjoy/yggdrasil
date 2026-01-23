@@ -27,6 +27,12 @@ func RegisterMarshallerBuilder(scheme string, builder MarshallerBuilder) {
 	marshalerBuilder[scheme] = builder
 }
 
+// HasMarshallerBuilder returns true if the marshaler builder exists
+func HasMarshallerBuilder(scheme string) bool {
+	_, ok := marshalerBuilder[scheme]
+	return ok
+}
+
 func buildMarshaller(scheme string) (Marshaler, error) {
 	f, ok := marshalerBuilder[scheme]
 	if !ok {
