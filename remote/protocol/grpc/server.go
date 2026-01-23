@@ -394,7 +394,13 @@ func (s *server) serveStreams(
 	st transport2.ServerTransport,
 	rawConn net.Conn,
 ) {
-	ctx = transport2.SetConnection(ctx, rawConn)
+	conn := rawConn
+	if v, ok := st.(interface{ Conn() net.Conn }); ok {
+		if c := v.Conn(); c != nil {
+			conn = c
+		}
+	}
+	ctx = transport2.SetConnection(ctx, conn)
 	ctx = peer.WithContext(ctx, st.Peer())
 	ctx = s.statsHandler.TagChannel(ctx, &stats.ChanTagInfoBase{
 		RemoteEndpoint: st.Peer().Addr.String(),

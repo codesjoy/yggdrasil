@@ -1361,7 +1361,16 @@ func (t *http2Server) Peer() *peer.Peer {
 	return &peer.Peer{
 		Addr:      t.peer.Addr,
 		LocalAddr: t.peer.LocalAddr,
+		AuthInfo:  t.authInfo,
 	}
+}
+
+func (t *http2Server) Conn() net.Conn {
+	return t.conn
+}
+
+func (t *http2Server) AuthInfo() credentials.AuthInfo {
+	return t.authInfo
 }
 
 func getJitter(v time.Duration) time.Duration {

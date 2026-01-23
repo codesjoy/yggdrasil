@@ -17,12 +17,8 @@ package credentials
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
 	"net/url"
-	"os"
 	"testing"
-
-	"github.com/codesjoy/yggdrasil/v2/remote/credentials/testdata"
 )
 
 const wantURI = "spiffe://foo.bar.com/client/workload/1"
@@ -172,42 +168,43 @@ func TestSPIFFEIDFromState(t *testing.T) {
 }
 
 func TestSPIFFEIDFromCert(t *testing.T) {
+	uSPIFFE, err := url.Parse(wantURI)
+	if err != nil {
+		t.Fatalf("url.Parse(%q) failed: %v", wantURI, err)
+	}
+	uHTTPS, err := url.Parse("https://foo.bar.com/workload/wl1")
+	if err != nil {
+		t.Fatalf("url.Parse(https) failed: %v", err)
+	}
+	uSSH, err := url.Parse("ssh://foo.bar.com/workload/wl1")
+	if err != nil {
+		t.Fatalf("url.Parse(ssh) failed: %v", err)
+	}
 	tests := []struct {
-		name     string
-		dataPath string
+		name string
+		uris []*url.URL
 		// If we expect a SPIFFE ID to be returned.
 		wantID bool
 	}{
 		{
-			name:     "good certificate with SPIFFE ID",
-			dataPath: "x509/spiffe_cert.pem",
-			wantID:   true,
+			name:   "good certificate with SPIFFE ID",
+			uris:   []*url.URL{uSPIFFE},
+			wantID: true,
 		},
 		{
-			name:     "bad certificate with SPIFFE ID and another URI",
-			dataPath: "x509/multiple_uri_cert.pem",
-			wantID:   false,
+			name:   "bad certificate with SPIFFE ID and another URI",
+			uris:   []*url.URL{uSPIFFE, uHTTPS},
+			wantID: false,
 		},
 		{
-			name:     "certificate without SPIFFE ID",
-			dataPath: "x509/client1_cert.pem",
-			wantID:   false,
+			name:   "certificate without SPIFFE ID",
+			uris:   []*url.URL{uHTTPS, uSSH},
+			wantID: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			data, err := os.ReadFile(testdata.Path(tt.dataPath))
-			if err != nil {
-				t.Fatalf("os.ReadFile(%s) failed: %v", testdata.Path(tt.dataPath), err)
-			}
-			block, _ := pem.Decode(data)
-			if block == nil {
-				t.Fatalf("Failed to parse the certificate: byte block is nil")
-			}
-			cert, err := x509.ParseCertificate(block.Bytes)
-			if err != nil {
-				t.Fatalf("x509.ParseCertificate(%b) failed: %v", block.Bytes, err)
-			}
+			cert := &x509.Certificate{URIs: tt.uris}
 			uri := SPIFFEIDFromCert(cert)
 			if (uri != nil) != tt.wantID {
 				t.Fatalf("wantID got and want mismatch, got %t, want %t", uri != nil, tt.wantID)

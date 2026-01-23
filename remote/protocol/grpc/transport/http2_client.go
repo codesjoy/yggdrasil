@@ -455,9 +455,18 @@ func (t *http2Client) newStream(ctx context.Context, callHdr *CallHdr) *Stream {
 	return s
 }
 
+func (t *http2Client) Conn() net.Conn {
+	return t.conn
+}
+
+func (t *http2Client) AuthInfo() credentials.AuthInfo {
+	return t.authInfo
+}
+
 func (t *http2Client) getPeer() *peer.Peer {
 	return &peer.Peer{
-		Addr: t.remoteAddr,
+		Addr:     t.remoteAddr,
+		AuthInfo: t.authInfo,
 	}
 }
 
