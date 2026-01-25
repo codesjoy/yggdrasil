@@ -28,7 +28,7 @@ type listenerSnapshot struct {
 
 type routeSnapshot struct {
 	version string
-	routes  map[string]weightedRoute
+	vhosts  []*VirtualHost
 }
 
 type clusterSnapshot struct {
@@ -42,17 +42,24 @@ type edsSnapshot struct {
 }
 
 type xdsCore struct {
-	cfg       ResolverConfig
-	ctx       context.Context
-	cancel    context.CancelFunc
-	mu        sync.RWMutex
-	apps      map[string]*appInfo
-	listeners map[string]*listenerSnapshot
-	routes    map[string]*routeSnapshot
-	clusters  map[string]*clusterSnapshot
-	endpoints map[string]*edsSnapshot
-	onUpdate  func(string, resolver.State)
-	ads       *adsClient
+	cfg          ResolverConfig
+	ctx          context.Context
+	cancel       context.CancelFunc
+	mu           sync.RWMutex
+	apps         map[string]*appInfo
+	listeners    map[string]*listenerSnapshot
+	routes       map[string]*routeSnapshot
+	clusters     map[string]*clusterSnapshot
+	endpoints    map[string]*edsSnapshot
+	onUpdate     func(string, resolver.State)
+	ads          *adsClient
+	dependencies map[string]*resourceDependencies
+}
+
+type resourceDependencies struct {
+	listeners map[string]bool
+	routes    map[string]bool
+	clusters  map[string]bool
 }
 
 type xdsResolverClient struct {
@@ -67,16 +74,17 @@ func NewResolver(name string, cfg ResolverConfig) (resolver.Resolver, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	core := &xdsCore{
-		cfg:       cfg,
-		ctx:       ctx,
-		cancel:    cancel,
-		apps:      make(map[string]*appInfo),
-		listeners: make(map[string]*listenerSnapshot),
-		routes:    make(map[string]*routeSnapshot),
-		clusters:  make(map[string]*clusterSnapshot),
-		endpoints: make(map[string]*edsSnapshot),
-		onUpdate:  nil,
-		ads:       nil,
+		cfg:          cfg,
+		ctx:          ctx,
+		cancel:       cancel,
+		apps:         make(map[string]*appInfo),
+		listeners:    make(map[string]*listenerSnapshot),
+		routes:       make(map[string]*routeSnapshot),
+		clusters:     make(map[string]*clusterSnapshot),
+		endpoints:    make(map[string]*edsSnapshot),
+		onUpdate:     nil,
+		ads:          nil,
+		dependencies: make(map[string]*resourceDependencies),
 	}
 
 	return &xdsResolver{
@@ -155,10 +163,12 @@ func (c *xdsCore) handleDiscoveryEvent(e discoveryEvent) {
 	case listenerAdded:
 		ls := e.data.(*listenerSnapshot)
 		c.listeners[e.name] = ls
+		c.trackDependencies(e.name, ls)
 
 	case routeAdded:
 		rs := e.data.(*routeSnapshot)
 		c.routes[e.name] = rs
+		c.updateRouteDependencies(e.name, rs)
 
 	case clusterAdded:
 		cs := e.data.(*clusterSnapshot)
@@ -173,6 +183,46 @@ func (c *xdsCore) handleDiscoveryEvent(e discoveryEvent) {
 	c.notifyApps()
 }
 
+func (c *xdsCore) trackDependencies(listenerName string, ls *listenerSnapshot) {
+	if ls == nil {
+		return
+	}
+	if _, ok := c.dependencies[listenerName]; !ok {
+		c.dependencies[listenerName] = &resourceDependencies{
+			listeners: make(map[string]bool),
+			routes:    make(map[string]bool),
+			clusters:  make(map[string]bool),
+		}
+	}
+	if ls.route != "" {
+		c.dependencies[listenerName].routes[ls.route] = true
+	}
+}
+
+func (c *xdsCore) updateRouteDependencies(routeName string, rs *routeSnapshot) {
+	if rs == nil {
+		return
+	}
+	for _, vh := range rs.vhosts {
+		for _, route := range vh.Routes {
+			if route.Action != nil {
+				if route.Action.Cluster != "" {
+					for _, dep := range c.dependencies {
+						dep.clusters[route.Action.Cluster] = true
+					}
+				}
+				if route.Action.WeightedClusters != nil {
+					for _, wc := range route.Action.WeightedClusters.Clusters {
+						for _, dep := range c.dependencies {
+							dep.clusters[wc.Name] = true
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 func (c *xdsCore) reconcileSubscriptions() {
 	var ldsNames, rdsNames, cdsNames, edsNames []string
 
@@ -183,9 +233,28 @@ func (c *xdsCore) reconcileSubscriptions() {
 				if ls.route != "" {
 					rdsNames = append(rdsNames, ls.route)
 					if rs, ok := c.routes[ls.route]; ok {
-						for cluster := range rs.routes {
-							cdsNames = append(cdsNames, cluster)
+						for _, vh := range rs.vhosts {
+							for _, route := range vh.Routes {
+								if route.Action != nil {
+									if route.Action.Cluster != "" {
+										cdsNames = append(cdsNames, route.Action.Cluster)
+									}
+									if route.Action.WeightedClusters != nil {
+										for _, wc := range route.Action.WeightedClusters.Clusters {
+											cdsNames = append(cdsNames, wc.Name)
+										}
+									}
+								}
+							}
 						}
+					}
+				}
+			}
+
+			if dep, ok := c.dependencies[listener]; ok {
+				for cluster := range dep.clusters {
+					if !contains(cdsNames, cluster) {
+						cdsNames = append(cdsNames, cluster)
 					}
 				}
 			}
@@ -204,18 +273,43 @@ func (c *xdsCore) reconcileSubscriptions() {
 	}
 }
 
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *xdsCore) notifyApps() {
 	for appName, app := range c.apps {
 		var allEndpoints []*weightedEndpoint
 		for listener := range app.listeners {
 			if ls, ok := c.listeners[listener]; ok {
 				if rs, ok := c.routes[ls.route]; ok {
-					for cluster, route := range rs.routes {
+					clusters := make(map[string]bool)
+					for _, vh := range rs.vhosts {
+						for _, route := range vh.Routes {
+							if route.Action != nil {
+								if route.Action.Cluster != "" {
+									clusters[route.Action.Cluster] = true
+								}
+								if route.Action.WeightedClusters != nil {
+									for _, wc := range route.Action.WeightedClusters.Clusters {
+										clusters[wc.Name] = true
+									}
+								}
+							}
+						}
+					}
+
+					for cluster := range clusters {
 						if es, ok := c.endpoints[cluster]; ok {
 							for _, ep := range es.endpoints {
 								we := &weightedEndpoint{
 									endpoint: ep.endpoint,
-									weight:   ep.weight * route.weight,
+									weight:   ep.weight,
 									priority: ep.priority,
 									metadata: ep.metadata,
 								}
@@ -242,7 +336,7 @@ func (c *xdsCore) notifyApps() {
 		}
 
 		attrs := map[string]any{
-			"xds_routes":   buildRouteMap(app),
+			"xds_routes":   buildRouteConfig(app, c.routes, c.listeners),
 			"xds_clusters": buildClusterMap(app),
 		}
 
@@ -257,12 +351,16 @@ func (c *xdsCore) notifyApps() {
 	}
 }
 
-func buildRouteMap(app *appInfo) map[string][]weightedRoute {
-	routes := make(map[string][]weightedRoute)
-	for listener := range app.listeners {
-		routes[listener] = []weightedRoute{}
+func buildRouteConfig(app *appInfo, routes map[string]*routeSnapshot, listeners map[string]*listenerSnapshot) []*VirtualHost {
+	var vhosts []*VirtualHost
+	for listenerName := range app.listeners {
+		if ls, ok := listeners[listenerName]; ok {
+			if rs, ok := routes[ls.route]; ok {
+				vhosts = append(vhosts, rs.vhosts...)
+			}
+		}
 	}
-	return routes
+	return vhosts
 }
 
 func buildClusterMap(app *appInfo) map[string]clusterPolicy {

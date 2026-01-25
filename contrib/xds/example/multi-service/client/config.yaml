@@ -1,0 +1,27 @@
+yggdrasil:
+  resolver:
+    xds:
+      type: "xds"
+      config:
+        name: "default"
+
+  client:
+    github.com.codesjoy.yggdrasil.example.library:
+      resolver: "xds"
+      balancer: "xds"
+    github.com.codesjoy.yggdrasil.example.greeter:
+      resolver: "xds"
+      balancer: "xds"
+
+  xds:
+    default:
+      server:
+        address: "127.0.0.1:18000"
+      node:
+        id: "multi-service-client"
+        cluster: "test-cluster"
+      protocol: "grpc"
+
+  logger:
+    level: "info"
+    format: "console"

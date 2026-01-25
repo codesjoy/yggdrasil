@@ -31,29 +31,31 @@ type xdsBalancer struct {
 	name string
 	cli  balancer.Client
 
-	mu              sync.RWMutex
-	remotesClient   map[string]remote.Client
-	route           *routeTable
-	clusterPolicies map[string]clusterPolicy
-	endpoints       map[string][]*weightedEndpoint
-	inFlight        map[string]*int32
-	rng             *rand.Rand
-}
-
-type routeTable struct {
-	routes []weightedRoute
+	mu               sync.RWMutex
+	remotesClient    map[string]remote.Client
+	vhosts           []*VirtualHost
+	clusterPolicies  map[string]clusterPolicy
+	endpoints        map[string][]*weightedEndpoint
+	circuitBreakers  map[string]*CircuitBreaker
+	outlierDetectors map[string]*OutlierDetector
+	rateLimiters     map[string]*RateLimiter
+	inFlight         map[string]*int32
+	rng              *rand.Rand
 }
 
 func newXdsBalancer(name string, _ string, cli balancer.Client) (balancer.Balancer, error) {
 	return &xdsBalancer{
-		name:            name,
-		cli:             cli,
-		remotesClient:   make(map[string]remote.Client),
-		route:           &routeTable{},
-		clusterPolicies: make(map[string]clusterPolicy),
-		endpoints:       make(map[string][]*weightedEndpoint),
-		inFlight:        make(map[string]*int32),
-		rng:             rand.New(rand.NewSource(time.Now().UnixNano())),
+		name:             name,
+		cli:              cli,
+		remotesClient:    make(map[string]remote.Client),
+		vhosts:           make([]*VirtualHost, 0),
+		clusterPolicies:  make(map[string]clusterPolicy),
+		endpoints:        make(map[string][]*weightedEndpoint),
+		circuitBreakers:  make(map[string]*CircuitBreaker),
+		outlierDetectors: make(map[string]*OutlierDetector),
+		rateLimiters:     make(map[string]*RateLimiter),
+		inFlight:         make(map[string]*int32),
+		rng:              rand.New(rand.NewSource(time.Now().UnixNano())),
 	}, nil
 }
 
@@ -96,15 +98,32 @@ func (b *xdsBalancer) UpdateState(state resolver.State) {
 	b.remotesClient = remoteCli
 
 	attributes := state.GetAttributes()
-	if routes, ok := attributes["xds_routes"].(map[string][]weightedRoute); ok {
-		for _, rs := range routes {
-			b.route.routes = append(b.route.routes, rs...)
-		}
+	if vhosts, ok := attributes["xds_routes"].([]*VirtualHost); ok {
+		b.vhosts = vhosts
 	}
 
 	if clusters, ok := attributes["xds_clusters"].(map[string]clusterPolicy); ok {
 		for name, policy := range clusters {
 			b.clusterPolicies[name] = policy
+			if policy.circuitBreaker != nil {
+				b.circuitBreakers[name] = NewCircuitBreaker(policy.circuitBreaker)
+			}
+			if policy.outlierDetection != nil {
+				// Clean up old detector if exists
+				if old, ok := b.outlierDetectors[name]; ok {
+					old.Stop()
+				}
+				od := NewOutlierDetector(policy.outlierDetection)
+				b.outlierDetectors[name] = od
+				od.Start()
+			}
+			if policy.rateLimiter != nil {
+				if old, ok := b.rateLimiters[name]; ok {
+					old.Stop()
+				}
+				rl := NewRateLimiter(policy.rateLimiter)
+				b.rateLimiters[name] = rl
+			}
 		}
 	}
 
@@ -192,6 +211,14 @@ func (b *xdsBalancer) Close() error {
 	for _, cli := range b.remotesClient {
 		clients = append(clients, cli)
 	}
+	// Stop all outlier detectors
+	for _, od := range b.outlierDetectors {
+		od.Stop()
+	}
+	for _, rl := range b.rateLimiters {
+		rl.Stop()
+	}
+
 	b.remotesClient = nil
 	picker := b.buildPicker()
 	b.mu.Unlock()
@@ -207,6 +234,38 @@ func (b *xdsBalancer) Close() error {
 
 func (b *xdsBalancer) Type() string {
 	return name
+}
+
+type BalancerStats struct {
+	CircuitBreakers  map[string]CircuitBreakerStats
+	OutlierDetectors map[string]map[string]interface{}
+	RateLimiters     map[string]RateLimiterStats
+}
+
+func (b *xdsBalancer) GetStats() BalancerStats {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	cbStats := make(map[string]CircuitBreakerStats)
+	for name, cb := range b.circuitBreakers {
+		cbStats[name] = cb.GetStats()
+	}
+
+	odStats := make(map[string]map[string]interface{})
+	for name, od := range b.outlierDetectors {
+		odStats[name] = od.GetStats()
+	}
+
+	rlStats := make(map[string]RateLimiterStats)
+	for name, rl := range b.rateLimiters {
+		rlStats[name] = rl.GetStats()
+	}
+
+	return BalancerStats{
+		CircuitBreakers:  cbStats,
+		OutlierDetectors: odStats,
+		RateLimiters:     rlStats,
+	}
 }
 
 func (b *xdsBalancer) buildPicker() *xdsPicker {
@@ -238,72 +297,122 @@ func (p *xdsPicker) Next(ri balancer.RPCInfo) (balancer.PickResult, error) {
 		path = ""
 	}
 
-	cluster := p.balancer.selectCluster(path, headers)
+	cluster, circuitBreaker, rateLimiter := p.selectCluster(path, headers)
 	if cluster == "" {
 		return nil, balancer.ErrNoAvailableInstance
 	}
 
-	ep := p.balancer.selectEndpoint(cluster)
+	if rateLimiter != nil && !rateLimiter.Allow() {
+		return nil, ErrRateLimitExceeded()
+	}
+
+	if circuitBreaker != nil {
+		if !circuitBreaker.TryAcquire(ResourceRequest) {
+			return nil, errors.New("circuit breaker open: max requests reached")
+		}
+	}
+
+	ep := p.balancer.selectEndpoint(cluster, p.balancer.outlierDetectors[cluster])
 	if ep == nil {
+		if circuitBreaker != nil {
+			circuitBreaker.Release(ResourceRequest)
+		}
 		return nil, balancer.ErrNoAvailableInstance
 	}
 
 	key := fmt.Sprintf("%s:%d", ep.endpoint.Address, ep.endpoint.Port)
 	cli, ok := p.balancer.remotesClient[key]
 	if !ok {
+		if circuitBreaker != nil {
+			circuitBreaker.Release(ResourceRequest)
+		}
 		return nil, balancer.ErrNoAvailableInstance
 	}
 
 	if cli.State() != remote.Ready {
+		if circuitBreaker != nil {
+			circuitBreaker.Release(ResourceRequest)
+		}
 		return nil, balancer.ErrNoAvailableInstance
 	}
 
 	return &pickResult{
-		endpoint:    cli,
-		ctx:         ri.Ctx,
-		balancer:    p.balancer,
-		inflightKey: key,
+		endpoint:        cli,
+		ctx:             ri.Ctx,
+		balancer:        p.balancer,
+		inflightKey:     key,
+		circuitBreaker:  circuitBreaker,
+		rateLimiter:     rateLimiter,
+		outlierDetector: p.balancer.outlierDetectors[cluster],
 	}, nil
 }
 
-func (p *xdsBalancer) selectCluster(path string, headers map[string]string) string {
-	if p.route == nil || len(p.route.routes) == 0 {
-		return ""
+func (p *xdsPicker) selectCluster(path string, headers map[string]string) (string, *CircuitBreaker, *RateLimiter) {
+	action := MatchRoute(p.balancer.vhosts, path, headers)
+	if action == nil {
+		return "", nil, nil
 	}
 
-	totalWeight := uint32(0)
-	for _, route := range p.route.routes {
-		totalWeight += route.weight
+	var cluster string
+	if action.WeightedClusters != nil && len(action.WeightedClusters.Clusters) > 0 {
+		cluster = p.balancer.selectWeightedCluster(action.WeightedClusters)
+	} else {
+		cluster = action.Cluster
 	}
 
-	if totalWeight == 0 {
-		if len(p.route.routes) > 0 {
-			return p.route.routes[0].cluster
-		}
-		return ""
+	var cb *CircuitBreaker
+	var rl *RateLimiter
+	if cluster != "" {
+		cb = p.balancer.circuitBreakers[cluster]
+		rl = p.balancer.rateLimiters[cluster]
 	}
 
-	r := p.rng.Uint32() % totalWeight
-	accumWeight := uint32(0)
-
-	for _, route := range p.route.routes {
-		accumWeight += route.weight
-		if r < accumWeight {
-			return route.cluster
-		}
-	}
-
-	return p.route.routes[0].cluster
+	return cluster, cb, rl
 }
 
-func (p *xdsBalancer) selectEndpoint(cluster string) *weightedEndpoint {
+func (p *xdsBalancer) selectWeightedCluster(wc *WeightedClusters) string {
+	if wc.TotalWeight == 0 {
+		if len(wc.Clusters) > 0 {
+			return wc.Clusters[0].Name
+		}
+		return ""
+	}
+
+	r := p.rng.Uint32() % wc.TotalWeight
+	accumWeight := uint32(0)
+
+	for _, c := range wc.Clusters {
+		accumWeight += c.Weight
+		if r < accumWeight {
+			return c.Name
+		}
+	}
+
+	return wc.Clusters[0].Name
+}
+
+func (p *xdsBalancer) selectEndpoint(cluster string, od *OutlierDetector) *weightedEndpoint {
 	endpoints, ok := p.endpoints[cluster]
 	if !ok || len(endpoints) == 0 {
 		return nil
 	}
 
-	priorityGroups := make(map[uint32][]*weightedEndpoint)
+	// Filter healthy endpoints (not ejected)
+	var healthyEndpoints []*weightedEndpoint
 	for _, ep := range endpoints {
+		key := fmt.Sprintf("%s:%d", ep.endpoint.Address, ep.endpoint.Port)
+		if od != nil && od.IsEjected(key) {
+			continue
+		}
+		healthyEndpoints = append(healthyEndpoints, ep)
+	}
+
+	if len(healthyEndpoints) == 0 {
+		return nil // All endpoints ejected
+	}
+
+	priorityGroups := make(map[uint32][]*weightedEndpoint)
+	for _, ep := range healthyEndpoints {
 		priorityGroups[ep.priority] = append(priorityGroups[ep.priority], ep)
 	}
 
@@ -398,10 +507,13 @@ func (p *xdsBalancer) selectLeastRequest(endpoints []*weightedEndpoint) *weighte
 }
 
 type pickResult struct {
-	ctx         context.Context
-	endpoint    remote.Client
-	balancer    *xdsBalancer
-	inflightKey string
+	ctx             context.Context
+	endpoint        remote.Client
+	balancer        *xdsBalancer
+	inflightKey     string
+	circuitBreaker  *CircuitBreaker
+	rateLimiter     *RateLimiter
+	outlierDetector *OutlierDetector
 }
 
 func (p *pickResult) RemoteClient() remote.Client {
@@ -416,13 +528,33 @@ func (p *pickResult) Report(err error) {
 		)
 	}
 
-	if p.balancer != nil && p.inflightKey != "" {
-		p.balancer.mu.Lock()
-		defer p.balancer.mu.Unlock()
+	p.balancer.mu.Lock()
+	defer p.balancer.mu.Unlock()
+
+	// Release in-flight count
+	if p.inflightKey != "" {
 		if val := p.balancer.inFlight[p.inflightKey]; val != nil {
 			if atomic.LoadInt32(val) > 0 {
 				atomic.AddInt32(val, -1)
 			}
 		}
+	}
+
+	// Release circuit breaker
+	if p.circuitBreaker != nil {
+		p.circuitBreaker.Release(ResourceRequest)
+	}
+
+	// Report to outlier detector
+	if p.outlierDetector != nil {
+		// Default to 500 for errors, 200 for success
+		statusCode := 200
+		if err != nil {
+			statusCode = 500
+		}
+		// Try to extract key from remote client address or similar if possible.
+		// Here we need the address corresponding to the key.
+		// Since we have inflightKey which is "address:port", we can use that.
+		p.outlierDetector.ReportResult(p.inflightKey, err, statusCode)
 	}
 }
