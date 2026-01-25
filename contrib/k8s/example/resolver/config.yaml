@@ -1,0 +1,25 @@
+yggdrasil:
+  config:
+    sources:
+      - type: file
+        path: ./config.yaml
+  resolver:
+    my-k8s:
+      type: kubernetes
+      config:
+        namespace: default
+        mode: endpointslice
+        portName: http
+        protocol: http
+        kubeconfig: ""
+        resyncPeriod: 30s
+        timeout: 10s
+        backoff:
+          baseDelay: 1s
+          multiplier: 1.6
+          jitter: 0.2
+          maxDelay: 30s
+  client:
+    downstream-service:
+      resolver: my-k8s
+      balancer: default
