@@ -1,0 +1,27 @@
+yggdrasil:
+  registry:
+    type: etcd
+    config:
+      client:
+        endpoints:
+          - "127.0.0.1:2379"
+        dialTimeout: 5s
+      prefix: /yggdrasil/registry
+      ttl: 10s
+      keepAlive: true
+      retryInterval: 3s
+
+  resolver:
+    default:
+      type: etcd
+      config:
+        client:
+          endpoints:
+            - "127.0.0.1:2379"
+          dialTimeout: 5s
+        prefix: /yggdrasil/registry
+        namespace: default
+        protocols:
+          - grpc
+          - http
+        debounce: 200ms
