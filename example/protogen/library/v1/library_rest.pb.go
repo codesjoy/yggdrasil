@@ -4,15 +4,16 @@ package libraryv1
 
 import (
 	context "context"
+	io "io"
+	http "net/http"
+
 	interceptor "github.com/codesjoy/yggdrasil/v2/interceptor"
-	rest "github.com/codesjoy/yggdrasil/v2/rest"
-	marshaler "github.com/codesjoy/yggdrasil/v2/rest/marshaler"
+	marshaler "github.com/codesjoy/yggdrasil/v2/remote/marshaler"
+	rest "github.com/codesjoy/yggdrasil/v2/remote/rest"
 	server "github.com/codesjoy/yggdrasil/v2/server"
 	status "github.com/codesjoy/yggdrasil/v2/status"
 	v5 "github.com/go-chi/chi/v5"
 	code "google.golang.org/genproto/googleapis/rpc/code"
-	io "io"
-	http "net/http"
 )
 
 // This is a compile-time assertion to ensure that this generated file

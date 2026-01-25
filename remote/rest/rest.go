@@ -30,9 +30,9 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
+	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
 	"github.com/codesjoy/yggdrasil/v2/remote/peer"
-	"github.com/codesjoy/yggdrasil/v2/rest/marshaler"
-	"github.com/codesjoy/yggdrasil/v2/rest/middleware"
+	"github.com/codesjoy/yggdrasil/v2/remote/rest/middleware"
 	"github.com/codesjoy/yggdrasil/v2/status"
 	"github.com/codesjoy/yggdrasil/v2/utils/xarray"
 	"github.com/codesjoy/yggdrasil/v2/utils/xnet"
@@ -92,10 +92,22 @@ type ServeMux struct {
 	acceptHeaders []string
 	outHeaders    []string
 	outTrailers   []string
+
+	marshalerRegistry marshaler.Registry
+}
+
+// Option is the option for the server.
+type Option func(*ServeMux)
+
+// WithMarshalerRegistry sets the marshaler registry.
+func WithMarshalerRegistry(registry marshaler.Registry) Option {
+	return func(s *ServeMux) {
+		s.marshalerRegistry = registry
+	}
 }
 
 // NewServer creates a new ServeMux.
-func NewServer() (Server, error) {
+func NewServer(opts ...Option) (Server, error) {
 	cfg := &Config{}
 	if err := config.Get(config.Join(config.KeyBase, "rest")).Scan(cfg); err != nil {
 		return nil, err
@@ -104,21 +116,8 @@ func NewServer() (Server, error) {
 	ip, _ := xnet.Extract(cfg.Host)
 	address := fmt.Sprintf("%s:%d", ip, cfg.Port)
 
-	r := chi.NewMux()
-	r.Use(middleware.GetMiddlewares(xarray.DelDupStable(cfg.Middleware.All)...)...)
-	rpcMiddlewares := xarray.DelDupStable(append([]string{"marshaler"}, cfg.Middleware.RPC...))
-	webMiddlewares := xarray.DelDupStable(cfg.Middleware.Web)
-	rpcRouter := r.Group(func(r chi.Router) {
-		r.Use(middleware.GetMiddlewares(rpcMiddlewares...)...)
-	})
-	webRouter := r.Group(func(r chi.Router) {
-		r.Use(middleware.GetMiddlewares(webMiddlewares...)...)
-	})
 	s := &ServeMux{
-		cfg:       cfg,
-		Router:    r,
-		rpcRouter: rpcRouter,
-		webRouter: webRouter,
+		cfg: cfg,
 		info: &serverInfo{
 			address:    address,
 			attributes: map[string]string{},
@@ -127,6 +126,36 @@ func NewServer() (Server, error) {
 		outHeaders:    cfg.OutHeader,
 		outTrailers:   cfg.OutTrailer,
 	}
+
+	for _, opt := range opts {
+		opt(s)
+	}
+
+	r := chi.NewMux()
+	r.Use(middleware.GetMiddlewares(xarray.DelDupStable(cfg.Middleware.All)...)...)
+
+	rpcRouter := r.Group(func(r chi.Router) {
+		var rpcMiddlewares []string
+		if s.marshalerRegistry != nil {
+			r.Use(middleware.NewMarshalerMiddleware(s.marshalerRegistry))
+			// Only use configured middlewares, excluding marshaler if it's there (though unlikely in config)
+			rpcMiddlewares = xarray.DelDupStable(cfg.Middleware.RPC)
+		} else {
+			// Default behavior: add marshaler string middleware
+			rpcMiddlewares = xarray.DelDupStable(append([]string{"marshaler"}, cfg.Middleware.RPC...))
+		}
+		r.Use(middleware.GetMiddlewares(rpcMiddlewares...)...)
+	})
+
+	webMiddlewares := xarray.DelDupStable(cfg.Middleware.Web)
+	webRouter := r.Group(func(r chi.Router) {
+		r.Use(middleware.GetMiddlewares(webMiddlewares...)...)
+	})
+
+	s.Router = r
+	s.rpcRouter = rpcRouter
+	s.webRouter = webRouter
+
 	return s, nil
 }
 

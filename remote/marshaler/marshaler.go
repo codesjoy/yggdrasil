@@ -33,7 +33,8 @@ func HasMarshallerBuilder(scheme string) bool {
 	return ok
 }
 
-func buildMarshaller(scheme string) (Marshaler, error) {
+// BuildMarshaller builds a marshaler for the given scheme
+func BuildMarshaller(scheme string) (Marshaler, error) {
 	f, ok := marshalerBuilder[scheme]
 	if !ok {
 		return nil, errors.New("rest marshaler builder not found")

@@ -19,7 +19,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/codesjoy/yggdrasil/v2/rest/marshaler"
+	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
 	"github.com/stretchr/testify/assert"
 )
 

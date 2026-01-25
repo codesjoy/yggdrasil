@@ -10,9 +10,9 @@ import (
 	xotel "github.com/codesjoy/yggdrasil/v2/otel"
 	"github.com/codesjoy/yggdrasil/v2/registry"
 	"github.com/codesjoy/yggdrasil/v2/remote"
-	"github.com/codesjoy/yggdrasil/v2/rest"
-	"github.com/codesjoy/yggdrasil/v2/rest/marshaler"
-	"github.com/codesjoy/yggdrasil/v2/rest/middleware"
+	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
+	"github.com/codesjoy/yggdrasil/v2/remote/rest"
+	"github.com/codesjoy/yggdrasil/v2/remote/rest/middleware"
 )
 
 func validateStartup(opts *options) error {

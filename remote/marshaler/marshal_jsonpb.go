@@ -22,8 +22,7 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/rest/convert"
+	"github.com/codesjoy/yggdrasil/v2/remote/rest/convert"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -34,25 +33,12 @@ func init() {
 
 // NewJSONPbMarshaler returns a new JSONPb marshaler.
 func NewJSONPbMarshaler() (Marshaler, error) {
-	cfg := &JSONPbConfig{}
-	key := config.Join(config.KeyBase, "rest", "marshaler", "config", "jsonpb")
-	err := config.Get(key).Scan(cfg)
-	if err != nil {
-		return nil, err
-	}
 	s := &JSONPb{
 		MarshalOptions: protojson.MarshalOptions{
-			Multiline:       cfg.MarshalOptions.Multiline,
-			Indent:          cfg.MarshalOptions.Indent,
-			AllowPartial:    cfg.MarshalOptions.AllowPartial,
-			UseProtoNames:   cfg.MarshalOptions.UseProtoNames,
-			UseEnumNumbers:  cfg.MarshalOptions.UseEnumNumbers,
-			EmitUnpopulated: cfg.MarshalOptions.EmitUnpopulated,
+			EmitUnpopulated: true,
 		},
 		UnmarshalOptions: protojson.UnmarshalOptions{
-			AllowPartial:   cfg.UnmarshalOptions.AllowPartial,
-			DiscardUnknown: cfg.UnmarshalOptions.DiscardUnknown,
-			RecursionLimit: cfg.UnmarshalOptions.RecursionLimit,
+			DiscardUnknown: true,
 		},
 	}
 	return s, nil
