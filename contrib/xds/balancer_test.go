@@ -97,9 +97,17 @@ func TestXdsBalancer_UpdateState(t *testing.T) {
 	state := resolver.BaseState{
 		Endpoints: endpoints,
 		Attributes: map[string]any{
-			"xds_routes": map[string][]weightedRoute{
-				"test-route": {
-					{cluster: "test-cluster", weight: 100},
+			"xds_routes": []*VirtualHost{
+				{
+					Name: "test-route",
+					Routes: []*Route{
+						{
+							Match: &RouteMatch{Prefix: ""},
+							Action: &RouteAction{
+								Cluster: "test-cluster",
+							},
+						},
+					},
 				},
 			},
 			"xds_clusters": map[string]clusterPolicy{
@@ -129,9 +137,17 @@ func TestXdsBalancer_Pick(t *testing.T) {
 	state := resolver.BaseState{
 		Endpoints: endpoints,
 		Attributes: map[string]any{
-			"xds_routes": map[string][]weightedRoute{
-				"test-route": {
-					{cluster: "test-cluster", weight: 100},
+			"xds_routes": []*VirtualHost{
+				{
+					Name: "test-route",
+					Routes: []*Route{
+						{
+							Match: &RouteMatch{Prefix: ""},
+							Action: &RouteAction{
+								Cluster: "test-cluster",
+							},
+						},
+					},
 				},
 			},
 			"xds_clusters": map[string]clusterPolicy{
@@ -221,6 +237,19 @@ func TestLeastRequest_Report_Bug(t *testing.T) {
 	state := resolver.BaseState{
 		Endpoints: endpoints,
 		Attributes: map[string]any{
+			"xds_routes": []*VirtualHost{
+				{
+					Name: "default-route",
+					Routes: []*Route{
+						{
+							Match: &RouteMatch{Prefix: ""}, // Match everything
+							Action: &RouteAction{
+								Cluster: "default",
+							},
+						},
+					},
+				},
+			},
 			"xds_clusters": map[string]clusterPolicy{
 				"default": {lbPolicy: "least_request"},
 			},

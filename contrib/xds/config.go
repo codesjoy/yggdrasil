@@ -13,6 +13,7 @@ type ResolverConfig struct {
 	Node       NodeConfig
 	ServiceMap map[string]string
 	Protocol   string
+	MaxRetries int
 	Health     HealthConfig
 	Retry      RetryConfig
 }
@@ -34,6 +35,13 @@ type NodeConfig struct {
 	ID       string
 	Cluster  string
 	Metadata map[string]string
+	Locality *Locality
+}
+
+type Locality struct {
+	Region  string
+	Zone    string
+	SubZone string
 }
 
 type HealthConfig struct {
@@ -46,7 +54,7 @@ type RetryConfig struct {
 	Backoff    time.Duration
 }
 
-func LoadResolverConfig(name string) ResolverConfig {
+func LoadResolverConfig(resolverName string) ResolverConfig {
 	cfg := ResolverConfig{
 		Server: ServerConfig{
 			Address: "127.0.0.1:18000",
@@ -72,7 +80,10 @@ func LoadResolverConfig(name string) ResolverConfig {
 		},
 	}
 
-	base := config.Join(config.KeyBase, "xds", name, "config")
+	sdkNameKey := config.Join(config.KeyBase, "resolver", resolverName, "config", "name")
+	sdkName := config.Get(sdkNameKey).String("default")
+
+	base := config.Join(config.KeyBase, "xds", sdkName, "config")
 
 	serverAddress := config.GetString(config.Join(base, "server", "address"))
 	if serverAddress != "" {
@@ -121,6 +132,17 @@ func LoadResolverConfig(name string) ResolverConfig {
 		cfg.Node.Metadata = nodeMetadata
 	}
 
+	nodeRegion := config.GetString(config.Join(base, "node", "locality", "region"))
+	nodeZone := config.GetString(config.Join(base, "node", "locality", "zone"))
+	nodeSubZone := config.GetString(config.Join(base, "node", "locality", "sub_zone"))
+	if nodeRegion != "" || nodeZone != "" || nodeSubZone != "" {
+		cfg.Node.Locality = &Locality{
+			Region:  nodeRegion,
+			Zone:    nodeZone,
+			SubZone: nodeSubZone,
+		}
+	}
+
 	protocol := config.GetString(config.Join(base, "protocol"))
 	if protocol != "" {
 		cfg.Protocol = protocol
@@ -151,6 +173,11 @@ func LoadResolverConfig(name string) ResolverConfig {
 		if d, err := time.ParseDuration(backoff); err == nil {
 			cfg.Retry.Backoff = d
 		}
+	}
+
+	adsMaxRetries := config.GetInt(config.Join(base, "max_retries"))
+	if adsMaxRetries > 0 {
+		cfg.MaxRetries = adsMaxRetries
 	}
 
 	return cfg

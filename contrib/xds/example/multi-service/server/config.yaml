@@ -1,0 +1,11 @@
+yggdrasil:
+  server:
+    protocol:
+      - "grpc"
+  remote:
+    protocol:
+      grpc:
+        address: ":55890"
+  logger:
+    level: "info"
+    format: "console"

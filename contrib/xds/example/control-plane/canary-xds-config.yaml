@@ -1,0 +1,53 @@
+clusters:
+  - name: "library-cluster"
+    connectTimeout: "5s"
+    type: "EDS"
+    lbPolicy: "ROUND_ROBIN"
+    circuitBreakers:
+      maxConnections: 10000
+      maxPendingRequests: 1000
+      maxRequests: 5000
+      maxRetries: 3
+    outlierDetection:
+      consecutive5xx: 5
+      consecutiveGatewayFailure: 3
+      consecutiveLocalOriginFailure: 2
+      interval: "10s"
+      baseEjectionTime: "30s"
+      maxEjectionTime: "300s"
+      maxEjectionPercent: 10
+    rateLimiting:
+      maxTokens: 1000
+      tokensPerFill: 100
+      fillInterval: "1s"
+
+endpoints:
+  - clusterName: "library-cluster"
+    endpoints:
+      - address: "127.0.0.1"
+        port: 55555
+        weight: 95
+      - address: "127.0.0.1"
+        port: 55556
+        weight: 5
+
+listeners:
+  - name: "library-service"
+    address: "0.0.0.0"
+    port: 10000
+    filterChains:
+      - filters:
+          - name: "envoy.filters.network.http_connection_manager"
+            routeConfigName: "library-route"
+
+routes:
+  - name: "library-route"
+    virtualHosts:
+      - name: "library"
+        domains: ["*"]
+        routes:
+          - match:
+              path:
+                prefix: "/"
+            route:
+              cluster: "library-cluster"

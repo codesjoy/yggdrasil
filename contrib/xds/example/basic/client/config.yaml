@@ -1,0 +1,42 @@
+yggdrasil:
+  application:
+    namespace: "dev"
+
+  resolver:
+    xds:
+      type: "xds"
+      config:
+        name: "default"
+
+  client:
+    github.com.codesjoy.yggdrasil.example.sample:
+      resolver: "xds"
+      balancer: "xds"
+
+  interceptor:
+    unary_client: "logging"
+    stream_client: "logging"
+    config:
+      logging:
+        print_req_and_res: true
+
+  xds:
+   default:
+      server:
+        address: "127.0.0.1:18000"
+      node:
+        id: "basic-client"
+        cluster: "test-cluster"
+      protocol: "grpc"
+
+  remote:
+    logger_level: debug
+
+  logger:
+    handler:
+      default:
+        type: "console"
+        level: "info"
+    writer:
+      default:
+        type: "console"

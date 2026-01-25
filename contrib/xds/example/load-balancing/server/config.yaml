@@ -1,0 +1,26 @@
+yggdrasil:
+  server:
+    protocol:
+      - "grpc"
+
+  remote:
+    protocol:
+      grpc:
+        address: "127.0.0.1:55555"
+    logger_level: debug
+
+  interceptor:
+    unary_server: "logging"
+    stream_server: "logging"
+    config:
+      logging:
+        print_req_and_res: true
+
+  logger:
+    handler:
+      default:
+        type: "console"
+        level: "debug"
+    writer:
+      default:
+        type: "console"

@@ -1,0 +1,95 @@
+clusters:
+  - name: "library-cluster"
+    connectTimeout: "5s"
+    type: "EDS"
+    lbPolicy: "ROUND_ROBIN"
+    circuitBreakers:
+      maxConnections: 10000
+      maxPendingRequests: 1000
+      maxRequests: 5000
+      maxRetries: 3
+    outlierDetection:
+      consecutive5xx: 5
+      consecutiveGatewayFailure: 3
+      consecutiveLocalOriginFailure: 2
+      interval: "10s"
+      baseEjectionTime: "30s"
+      maxEjectionTime: "300s"
+      maxEjectionPercent: 10
+    rateLimiting:
+      maxTokens: 1000
+      tokensPerFill: 100
+      fillInterval: "1s"
+
+  - name: "greeter-cluster"
+    connectTimeout: "5s"
+    type: "EDS"
+    lbPolicy: "ROUND_ROBIN"
+    circuitBreakers:
+      maxConnections: 10000
+      maxPendingRequests: 1000
+      maxRequests: 5000
+      maxRetries: 3
+    outlierDetection:
+      consecutive5xx: 5
+      consecutiveGatewayFailure: 3
+      consecutiveLocalOriginFailure: 2
+      interval: "10s"
+      baseEjectionTime: "30s"
+      maxEjectionTime: "300s"
+      maxEjectionPercent: 10
+    rateLimiting:
+      maxTokens: 1000
+      tokensPerFill: 100
+      fillInterval: "1s"
+
+endpoints:
+  - clusterName: "library-cluster"
+    endpoints:
+      - address: "127.0.0.1"
+        port: 55890
+
+  - clusterName: "greeter-cluster"
+    endpoints:
+      - address: "127.0.0.1"
+        port: 55890
+
+listeners:
+  - name: "library-service"
+    address: "0.0.0.0"
+    port: 10000
+    filterChains:
+      - filters:
+          - name: "envoy.filters.network.http_connection_manager"
+            routeConfigName: "library-route"
+
+  - name: "greeter-service"
+    address: "0.0.0.0"
+    port: 10001
+    filterChains:
+      - filters:
+          - name: "envoy.filters.network.http_connection_manager"
+            routeConfigName: "greeter-route"
+
+routes:
+  - name: "library-route"
+    virtualHosts:
+      - name: "library"
+        domains: ["*"]
+        routes:
+          - match:
+              path:
+                prefix: "/"
+            route:
+              cluster: "library-cluster"
+
+  - name: "greeter-route"
+    virtualHosts:
+      - name: "greeter"
+        domains: ["*"]
+        routes:
+          - match:
+              path:
+                prefix: "/"
+            route:
+              cluster: "greeter-cluster"

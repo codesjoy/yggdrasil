@@ -2,6 +2,7 @@ package xds
 
 import (
 	"fmt"
+	"regexp"
 
 	clusterType "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	endpointType "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
@@ -31,8 +32,11 @@ type weightedRoute struct {
 }
 
 type clusterPolicy struct {
-	lbPolicy    string
-	maxRequests uint32
+	lbPolicy         string
+	maxRequests      uint32
+	circuitBreaker   *CircuitBreakerConfig
+	outlierDetection *OutlierDetectionConfig
+	rateLimiter      *RateLimiterConfig
 }
 
 type weightedEndpoint struct {
@@ -138,20 +142,26 @@ func parseRoute(r *routeType.RouteConfiguration) []discoveryEvent {
 
 	snapshot := &routeSnapshot{
 		version: "",
-		routes:  make(map[string]weightedRoute),
+		vhosts:  make([]*VirtualHost, 0),
 	}
 
 	if r.VirtualHosts != nil {
+		snapshot.vhosts = make([]*VirtualHost, 0, len(r.VirtualHosts))
 		for _, vh := range r.VirtualHosts {
-			if vh.Routes == nil {
-				continue
+			v := &VirtualHost{
+				Name:    vh.Name,
+				Domains: vh.Domains,
+				Routes:  make([]*Route, 0, len(vh.Routes)),
 			}
-			if len(vh.Routes) > 0 {
-				snapshot.routes["default"] = weightedRoute{
-					cluster: "default",
-					weight:  100,
-				}
+			for _, route := range vh.Routes {
+				match := parseRouteMatch(route.Match)
+				action := parseRouteAction(route.GetRoute())
+				v.Routes = append(v.Routes, &Route{
+					Match:  match,
+					Action: action,
+				})
 			}
+			snapshot.vhosts = append(snapshot.vhosts, v)
 		}
 	}
 
@@ -192,6 +202,17 @@ func parseCluster(c *clusterType.Cluster) []discoveryEvent {
 
 	if c.MaxRequestsPerConnection != nil {
 		snapshot.policy.maxRequests = c.MaxRequestsPerConnection.Value
+	}
+
+	// Parse Circuit Breaker thresholds
+	if c.CircuitBreakers != nil && len(c.CircuitBreakers.Thresholds) > 0 {
+		threshold := c.CircuitBreakers.Thresholds[0]
+		snapshot.policy.circuitBreaker = &CircuitBreakerConfig{
+			MaxConnections:     threshold.MaxConnections.GetValue(),
+			MaxPendingRequests: threshold.MaxPendingRequests.GetValue(),
+			MaxRequests:        threshold.MaxRequests.GetValue(),
+			MaxRetries:         threshold.MaxRetries.GetValue(),
+		}
 	}
 
 	evs = append(evs, discoveryEvent{
@@ -245,6 +266,21 @@ func parseEndpoint(e *endpointType.ClusterLoadAssignment) []discoveryEvent {
 						}
 					}
 
+					healthStatus := "UNKNOWN"
+					switch ep.HealthStatus {
+					case 0:
+						healthStatus = "HEALTHY"
+					case 1:
+						healthStatus = "UNHEALTHY"
+					case 2:
+						healthStatus = "DRAINING"
+					case 3:
+						healthStatus = "TIMEOUT"
+					case 4:
+						healthStatus = "DEGRADED"
+					}
+					metadata["health"] = healthStatus
+
 					if ep.HostIdentifier != nil {
 						if addr := ep.GetEndpoint().GetAddress(); addr != nil {
 							endpoint.Address = addr.GetSocketAddress().GetAddress()
@@ -272,4 +308,91 @@ func parseEndpoint(e *endpointType.ClusterLoadAssignment) []discoveryEvent {
 	})
 
 	return evs
+}
+
+func parseRouteMatch(m *routeType.RouteMatch) *RouteMatch {
+	if m == nil {
+		return nil
+	}
+
+	rm := &RouteMatch{}
+
+	if m.PathSpecifier != nil {
+		switch p := m.PathSpecifier.(type) {
+		case *routeType.RouteMatch_Prefix:
+			rm.Prefix = p.Prefix
+		case *routeType.RouteMatch_Path:
+			rm.Path = p.Path
+		case *routeType.RouteMatch_SafeRegex:
+			if p.SafeRegex != nil && p.SafeRegex.Regex != "" {
+				if r, err := regexp.Compile(p.SafeRegex.Regex); err == nil {
+					rm.Regex = r
+				}
+			}
+		}
+	}
+
+	if len(m.Headers) > 0 {
+		for _, h := range m.Headers {
+			hm := &HeaderMatcher{
+				Name: h.Name,
+			}
+
+			switch spec := h.HeaderMatchSpecifier.(type) {
+			case *routeType.HeaderMatcher_ExactMatch:
+				hm.ExactMatch = spec.ExactMatch
+			case *routeType.HeaderMatcher_SafeRegexMatch:
+				if spec.SafeRegexMatch != nil && spec.SafeRegexMatch.Regex != "" {
+					if r, err := regexp.Compile(spec.SafeRegexMatch.Regex); err == nil {
+						hm.RegexMatch = r
+					}
+				}
+			case *routeType.HeaderMatcher_PresentMatch:
+				hm.Present = spec.PresentMatch
+			case *routeType.HeaderMatcher_PrefixMatch:
+				hm.PrefixMatch = spec.PrefixMatch
+			case *routeType.HeaderMatcher_SuffixMatch:
+				hm.SuffixMatch = spec.SuffixMatch
+			}
+
+			rm.Headers = append(rm.Headers, hm)
+		}
+	}
+
+	return rm
+}
+
+func parseRouteAction(r *routeType.RouteAction) *RouteAction {
+	if r == nil {
+		return nil
+	}
+
+	ra := &RouteAction{}
+
+	switch c := r.ClusterSpecifier.(type) {
+	case *routeType.RouteAction_Cluster:
+		ra.Cluster = c.Cluster
+	case *routeType.RouteAction_WeightedClusters:
+		if c.WeightedClusters != nil {
+			wc := &WeightedClusters{
+				TotalWeight: 0,
+			}
+			if c.WeightedClusters.TotalWeight != nil {
+				wc.TotalWeight = c.WeightedClusters.TotalWeight.Value
+			}
+			for _, cl := range c.WeightedClusters.Clusters {
+				w := uint32(0)
+				if cl.Weight != nil {
+					w = cl.Weight.Value
+				}
+				wc.Clusters = append(wc.Clusters, &WeightedCluster{
+					Name:   cl.Name,
+					Weight: w,
+				})
+			}
+			ra.WeightedClusters = wc
+		}
+	}
+
+	return ra
 }
