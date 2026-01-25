@@ -27,9 +27,9 @@ import (
 // BuildMarshalerRegistry builds a marshaler registry from a list of MIME types.
 func BuildMarshalerRegistry(scheme ...string) Registry {
 	scheme = xarray.DelDupStable(scheme)
-	mr := &marshalerRegistry{mimeMap: make(map[string]Marshaler)}
+	mr := NewRegistry()
 	for _, item := range scheme {
-		marshaler, err := buildMarshaller(item)
+		marshaler, err := BuildMarshaller(item)
 		if err != nil {
 			slog.Warn(
 				"failed to build marshaler",
@@ -37,7 +37,7 @@ func BuildMarshalerRegistry(scheme ...string) Registry {
 				slog.Any("error", err),
 			)
 		}
-		_ = mr.add(item, marshaler)
+		_ = mr.Register(item, marshaler)
 	}
 	return mr
 }
@@ -56,12 +56,18 @@ var (
 	contentTypeHeader = http.CanonicalHeaderKey("Content-Type")
 )
 
-type marshalerRegistry struct {
+// MarshalerRegistry is a registry for marshaler.
+type MarshalerRegistry struct {
 	mimeMap map[string]Marshaler
 }
 
+// NewRegistry returns a new marshaler registry.
+func NewRegistry() *MarshalerRegistry {
+	return &MarshalerRegistry{mimeMap: make(map[string]Marshaler)}
+}
+
 // GetMarshaler returns the marshaler for the request.
-func (mr *marshalerRegistry) GetMarshaler(r *http.Request) (inbound Marshaler, outbound Marshaler) {
+func (mr *MarshalerRegistry) GetMarshaler(r *http.Request) (inbound Marshaler, outbound Marshaler) {
 	for _, acceptVal := range r.Header[acceptHeader] {
 		if m, ok := mr.mimeMap[acceptVal]; ok {
 			outbound = m
@@ -88,9 +94,9 @@ func (mr *marshalerRegistry) GetMarshaler(r *http.Request) (inbound Marshaler, o
 	return inbound, outbound
 }
 
-// add adds a marshaler for a case-sensitive MIME type string ("*" to match any
+// Register adds a marshaler for a case-sensitive MIME type string ("*" to match any
 // MIME type).
-func (mr *marshalerRegistry) add(mime string, marshaler Marshaler) error {
+func (mr *MarshalerRegistry) Register(mime string, marshaler Marshaler) error {
 	if len(mime) == 0 {
 		return errors.New("empty MIME type")
 	}
