@@ -1,18 +1,16 @@
-module github.com/codesjoy/yggdrasil/contrib/xds/example
+module github.com/codesjoy/yggdrasil/contrib/xds/v2/example
 
 go 1.24.6
 
 replace (
-	github.com/codesjoy/yggdrasil/contrib/xds/example/control-plane/server => ./control-plane
-	github.com/codesjoy/yggdrasil/contrib/xds/example/control-plane/snapshot => ./control-plane
-	github.com/codesjoy/yggdrasil/contrib/xds/example/control-plane/watcher => ./control-plane
 	github.com/codesjoy/yggdrasil/contrib/xds/v2 => ../
 	github.com/codesjoy/yggdrasil/v2 => ../../../
 	github.com/codesjoy/yggdrasil/v2/example/protogen => ../../../example/protogen
 )
 
 require (
-	github.com/codesjoy/yggdrasil/v2 v2.0.0-00010101000000-000000000000
+	github.com/codesjoy/yggdrasil/contrib/xds/v2 v2.0.0-00010101000000-000000000000
+	github.com/codesjoy/yggdrasil/v2 v2.0.0
 	github.com/codesjoy/yggdrasil/v2/example/protogen v0.0.0-00010101000000-000000000000
 	github.com/envoyproxy/go-control-plane v0.14.0
 	github.com/envoyproxy/go-control-plane/envoy v1.36.0

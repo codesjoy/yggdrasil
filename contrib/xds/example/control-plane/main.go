@@ -15,9 +15,9 @@ import (
 	"github.com/envoyproxy/go-control-plane/pkg/cache/v3"
 	"gopkg.in/yaml.v3"
 
-	"github.com/codesjoy/yggdrasil/contrib/xds/example/control-plane/server"
-	"github.com/codesjoy/yggdrasil/contrib/xds/example/control-plane/snapshot"
-	"github.com/codesjoy/yggdrasil/contrib/xds/example/control-plane/watcher"
+	"github.com/codesjoy/yggdrasil/contrib/xds/v2/example/control-plane/server"
+	"github.com/codesjoy/yggdrasil/contrib/xds/v2/example/control-plane/snapshot"
+	"github.com/codesjoy/yggdrasil/contrib/xds/v2/example/control-plane/watcher"
 )
 
 type Config struct {
