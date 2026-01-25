@@ -5,10 +5,9 @@ import (
 	"log/slog"
 	"os"
 
-	libraryv1 "github.com/codesjoy/yggdrasil/contrib/polaris/v2/example/protogen/library/v1"
-	"github.com/codesjoy/yggdrasil/v2"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/config/source/file"
+	libraryv1 "github.com/codesjoy/yggdrasil/v2/example/protogen/library/v1"
 	_ "github.com/codesjoy/yggdrasil/v2/interceptor/logging"
 	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
 
