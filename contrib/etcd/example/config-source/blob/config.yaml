@@ -1,0 +1,16 @@
+etcd:
+  client:
+    endpoints:
+      - "127.0.0.1:2379"
+    dialTimeout: 5s
+    username: ""
+    password: ""
+  configSource:
+    client:
+      endpoints:
+        - "127.0.0.1:2379"
+      dialTimeout: 5s
+    mode: blob
+    key: /example/config/blob
+    watch: true
+    format: yaml

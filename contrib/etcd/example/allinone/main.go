@@ -12,18 +12,28 @@ import (
 	"github.com/codesjoy/yggdrasil/contrib/etcd/v2"
 	"github.com/codesjoy/yggdrasil/v2"
 	"github.com/codesjoy/yggdrasil/v2/config"
+	"github.com/codesjoy/yggdrasil/v2/config/source/file"
 	"github.com/codesjoy/yggdrasil/v2/registry"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 func main() {
+	if err := config.LoadSource(file.NewSource("./config.yaml", false)); err != nil {
+		log.Fatalf("load config file: %v", err)
+	}
+
 	stopCh := make(chan os.Signal, 1)
 	signal.Notify(stopCh, syscall.SIGINT, syscall.SIGTERM)
 
+	var etcdCfg etcd.ClientConfig
+	_ = config.Get("etcd.client").Scan(&etcdCfg)
+
 	cli, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{"127.0.0.1:2379"},
-		DialTimeout: 5 * time.Second,
+		Endpoints:   etcdCfg.Endpoints,
+		DialTimeout: etcdCfg.DialTimeout,
+		Username:    etcdCfg.Username,
+		Password:    etcdCfg.Password,
 	})
 	if err != nil {
 		log.Fatalf("etcd client: %v", err)
@@ -41,16 +51,9 @@ func main() {
 		log.Fatalf("etcd put config: %v", err)
 	}
 
-	cfgSrc, err := etcd.NewConfigSource(etcd.ConfigSourceConfig{
-		Client: etcd.ClientConfig{
-			Endpoints:   []string{"127.0.0.1:2379"},
-			DialTimeout: 5 * time.Second,
-		},
-		Mode:   etcd.ConfigSourceModeBlob,
-		Key:    configKey,
-		Watch:  boolPtr(true),
-		Format: nil,
-	})
+	var cfgSrcCfg etcd.ConfigSourceConfig
+	_ = config.Get("etcd.configSource").Scan(&cfgSrcCfg)
+	cfgSrc, err := etcd.NewConfigSource(cfgSrcCfg)
 	if err != nil {
 		log.Fatalf("etcd config source: %v", err)
 	}
@@ -159,7 +162,3 @@ type demoEndpoint struct {
 func (d demoEndpoint) Scheme() string              { return d.scheme }
 func (d demoEndpoint) Address() string             { return d.address }
 func (d demoEndpoint) Metadata() map[string]string { return nil }
-
-func boolPtr(b bool) *bool {
-	return &b
-}
