@@ -27,6 +27,12 @@ var restTemplate = `
 func local_handler_{{$.ServiceType}}_{{ .Name }}_{{.Num}}(w {{$.HTTPPkg}}ResponseWriter, r *{{$.HTTPPkg}}Request, server interface{}, unaryInt {{$.InterceptorPkg}}UnaryServerInterceptor) (interface{}, error) {
 		protoReq := &{{$method.Request}}{}
 		{{if $method.HasBody }}
+			{{if $method.Body }}
+				// Initialize nested body field if it's a pointer
+				if protoReq{{$method.Body}} == nil {
+					protoReq{{$method.Body}} = &{{$method.BodyType}}{}
+				}
+			{{end}}
 			inbound := {{$.MarshalerPkg}}InboundFromContext(r.Context())
 			if err := inbound.NewDecoder(r.Body).Decode(protoReq{{$method.Body}}); err != nil && err != {{$.IoPkg}}EOF {
 				return nil, {{$.StatusPkg}}WithCode({{$.CodePkg}}Code_INVALID_ARGUMENT, err)
@@ -101,6 +107,7 @@ type methodDesc struct {
 	Path     string
 
 	Body    string
+	BodyType string
 	HasBody bool
 }
 
