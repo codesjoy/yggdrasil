@@ -4,9 +4,6 @@ package libraryv1
 
 import (
 	context "context"
-	io "io"
-	http "net/http"
-
 	interceptor "github.com/codesjoy/yggdrasil/v2/interceptor"
 	marshaler "github.com/codesjoy/yggdrasil/v2/remote/marshaler"
 	rest "github.com/codesjoy/yggdrasil/v2/remote/rest"
@@ -14,6 +11,8 @@ import (
 	status "github.com/codesjoy/yggdrasil/v2/status"
 	v5 "github.com/go-chi/chi/v5"
 	code "google.golang.org/genproto/googleapis/rpc/code"
+	io "io"
+	http "net/http"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -23,6 +22,11 @@ var _ = io.EOF
 
 func local_handler_LibraryService_CreateShelf_0(w http.ResponseWriter, r *http.Request, server interface{}, unaryInt interceptor.UnaryServerInterceptor) (interface{}, error) {
 	protoReq := &CreateShelfRequest{}
+
+	// Initialize nested body field if it's a pointer
+	if protoReq.Shelf == nil {
+		protoReq.Shelf = &Shelf{}
+	}
 
 	inbound := marshaler.InboundFromContext(r.Context())
 	if err := inbound.NewDecoder(r.Body).Decode(protoReq.Shelf); err != nil && err != io.EOF {
@@ -49,7 +53,7 @@ func local_handler_LibraryService_GetShelf_0(w http.ResponseWriter, r *http.Requ
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
 	}
 
-	if val := "shelves/" + v5.URLParam(r, "params0"); len(val) == 0 {
+	if val := "shelves/" + v5.URLParam(r, "params1"); len(val) == 0 {
 		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found name")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "name", val); err != nil {
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
@@ -95,7 +99,7 @@ func local_handler_LibraryService_DeleteShelf_0(w http.ResponseWriter, r *http.R
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
 	}
 
-	if val := "shelves/" + v5.URLParam(r, "params0"); len(val) == 0 {
+	if val := "shelves/" + v5.URLParam(r, "params1"); len(val) == 0 {
 		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found name")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "name", val); err != nil {
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
@@ -123,7 +127,7 @@ func local_handler_LibraryService_MergeShelves_0(w http.ResponseWriter, r *http.
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
 	}
 
-	if val := "shelves/" + v5.URLParam(r, "params0"); len(val) == 0 {
+	if val := "shelves/" + v5.URLParam(r, "params1"); len(val) == 0 {
 		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found name")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "name", val); err != nil {
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
@@ -146,12 +150,17 @@ func local_handler_LibraryService_MergeShelves_0(w http.ResponseWriter, r *http.
 func local_handler_LibraryService_CreateBook_0(w http.ResponseWriter, r *http.Request, server interface{}, unaryInt interceptor.UnaryServerInterceptor) (interface{}, error) {
 	protoReq := &CreateBookRequest{}
 
+	// Initialize nested body field if it's a pointer
+	if protoReq.Book == nil {
+		protoReq.Book = &Book{}
+	}
+
 	inbound := marshaler.InboundFromContext(r.Context())
 	if err := inbound.NewDecoder(r.Body).Decode(protoReq.Book); err != nil && err != io.EOF {
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
 	}
 
-	if val := "shelves/" + v5.URLParam(r, "params0"); len(val) == 0 {
+	if val := "shelves/" + v5.URLParam(r, "params1"); len(val) == 0 {
 		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found parent")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "parent", val); err != nil {
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
@@ -177,7 +186,7 @@ func local_handler_LibraryService_GetBook_0(w http.ResponseWriter, r *http.Reque
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
 	}
 
-	if val := "shelves/" + v5.URLParam(r, "params0") + "/books/" + v5.URLParam(r, "params1"); len(val) == 0 {
+	if val := "shelves/" + v5.URLParam(r, "params1") + "/books/" + v5.URLParam(r, "params2"); len(val) == 0 {
 		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found name")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "name", val); err != nil {
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
@@ -203,7 +212,7 @@ func local_handler_LibraryService_ListBooks_0(w http.ResponseWriter, r *http.Req
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
 	}
 
-	if val := "shelves/" + v5.URLParam(r, "params0"); len(val) == 0 {
+	if val := "shelves/" + v5.URLParam(r, "params1"); len(val) == 0 {
 		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found parent")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "parent", val); err != nil {
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
@@ -229,7 +238,7 @@ func local_handler_LibraryService_DeleteBook_0(w http.ResponseWriter, r *http.Re
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
 	}
 
-	if val := "shelves/" + v5.URLParam(r, "params0") + "/books/" + v5.URLParam(r, "params1"); len(val) == 0 {
+	if val := "shelves/" + v5.URLParam(r, "params1") + "/books/" + v5.URLParam(r, "params2"); len(val) == 0 {
 		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found name")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "name", val); err != nil {
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
@@ -252,12 +261,17 @@ func local_handler_LibraryService_DeleteBook_0(w http.ResponseWriter, r *http.Re
 func local_handler_LibraryService_UpdateBook_0(w http.ResponseWriter, r *http.Request, server interface{}, unaryInt interceptor.UnaryServerInterceptor) (interface{}, error) {
 	protoReq := &UpdateBookRequest{}
 
+	// Initialize nested body field if it's a pointer
+	if protoReq.Book == nil {
+		protoReq.Book = &Book{}
+	}
+
 	inbound := marshaler.InboundFromContext(r.Context())
 	if err := inbound.NewDecoder(r.Body).Decode(protoReq.Book); err != nil && err != io.EOF {
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
 	}
 
-	if val := "shelves/" + v5.URLParam(r, "params0") + "/books/" + v5.URLParam(r, "params1"); len(val) == 0 {
+	if val := "shelves/" + v5.URLParam(r, "params1") + "/books/" + v5.URLParam(r, "params2"); len(val) == 0 {
 		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found book.name")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "book.name", val); err != nil {
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
@@ -285,7 +299,7 @@ func local_handler_LibraryService_MoveBook_0(w http.ResponseWriter, r *http.Requ
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
 	}
 
-	if val := "shelves/" + v5.URLParam(r, "params0") + "/books/" + v5.URLParam(r, "params1"); len(val) == 0 {
+	if val := "shelves/" + v5.URLParam(r, "params1") + "/books/" + v5.URLParam(r, "params2"); len(val) == 0 {
 		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found name")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "name", val); err != nil {
 		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
@@ -315,7 +329,7 @@ var LibraryServiceRestServiceDesc = server.RestServiceDesc{
 		},
 		{
 			Method:  "GET",
-			Path:    "/v1/shelves/{params0}",
+			Path:    "/v1/shelves/{params1}",
 			Handler: local_handler_LibraryService_GetShelf_0,
 		},
 		{
@@ -325,42 +339,42 @@ var LibraryServiceRestServiceDesc = server.RestServiceDesc{
 		},
 		{
 			Method:  "DELETE",
-			Path:    "/v1/shelves/{params0}",
+			Path:    "/v1/shelves/{params1}",
 			Handler: local_handler_LibraryService_DeleteShelf_0,
 		},
 		{
 			Method:  "POST",
-			Path:    "/v1/shelves/{params0}:merge",
+			Path:    "/v1/shelves/{params1}:merge",
 			Handler: local_handler_LibraryService_MergeShelves_0,
 		},
 		{
 			Method:  "POST",
-			Path:    "/v1/shelves/{params0}/books",
+			Path:    "/v1/shelves/{params1}/books",
 			Handler: local_handler_LibraryService_CreateBook_0,
 		},
 		{
 			Method:  "GET",
-			Path:    "/v1/shelves/{params0}/books/{params1}",
+			Path:    "/v1/shelves/{params1}/books/{params2}",
 			Handler: local_handler_LibraryService_GetBook_0,
 		},
 		{
 			Method:  "GET",
-			Path:    "/v1/shelves/{params0}/books",
+			Path:    "/v1/shelves/{params1}/books",
 			Handler: local_handler_LibraryService_ListBooks_0,
 		},
 		{
 			Method:  "DELETE",
-			Path:    "/v1/shelves/{params0}/books/{params1}",
+			Path:    "/v1/shelves/{params1}/books/{params2}",
 			Handler: local_handler_LibraryService_DeleteBook_0,
 		},
 		{
 			Method:  "PATCH",
-			Path:    "/v1/shelves/{params0}/books/{params1}",
+			Path:    "/v1/shelves/{params1}/books/{params2}",
 			Handler: local_handler_LibraryService_UpdateBook_0,
 		},
 		{
 			Method:  "POST",
-			Path:    "/v1/shelves/{params0}/books/{params1}:move",
+			Path:    "/v1/shelves/{params1}/books/{params2}:move",
 			Handler: local_handler_LibraryService_MoveBook_0,
 		},
 	},
