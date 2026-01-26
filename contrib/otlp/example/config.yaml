@@ -1,0 +1,98 @@
+# Yggdrasil Configuration for OTLP Example
+
+yggdrasil:
+  # Select the OTLP trace exporter (otlp-grpc or otlp-http)
+  tracer: otlp-grpc
+
+  # Select the OTLP metrics exporter (otlp-grpc or otlp-http)
+  meter: otlp-grpc
+
+  # OTLP exporter configuration
+  otlp:
+    # Trace exporter configuration
+    trace:
+      # Protocol: grpc or http
+      protocol: grpc
+
+      # OTLP endpoint (for gRPC: localhost:4317, for HTTP: localhost:4318)
+      endpoint: localhost:4317
+
+      # TLS configuration
+      tls:
+        insecure: true  # Set to false for production with TLS
+        enabled: false
+
+      # Request timeout
+      timeout: 30s
+
+      # Compression: gzip, none, or empty for default
+      compression: gzip
+
+      # Retry configuration
+      retry:
+        enabled: true
+        maxAttempts: 5
+        initialDelay: 100ms
+        maxDelay: 5s
+
+      # Batch processing configuration
+      batch:
+        batchTimeout: 5s
+        maxQueueSize: 2048
+        maxExportBatchSize: 512
+
+      # Resource attributes (additional metadata)
+      resource:
+        deployment.environment: "development"
+        service.version: "1.0.0"
+        telemetry.sdk.language: "go"
+
+    # Metrics exporter configuration
+    metric:
+      # Protocol: grpc or http
+      protocol: grpc
+
+      # OTLP endpoint
+      endpoint: localhost:4317
+
+      # TLS configuration
+      tls:
+        insecure: true
+        enabled: false
+
+      # Request timeout
+      timeout: 30s
+
+      # Compression: gzip, none, or empty for default
+      compression: gzip
+
+      # Retry configuration
+      retry:
+        enabled: true
+        maxAttempts: 5
+        initialDelay: 100ms
+        maxDelay: 5s
+
+      # Export interval (how often to export metrics)
+      exportInterval: 60s
+
+      # Export timeout
+      exportTimeout: 30s
+
+      # Temporality: cumulative or delta
+      # Note: Delta temporality requires additional configuration with views
+      temporality: cumulative
+
+      # Resource attributes
+      resource:
+        deployment.environment: "development"
+        service.version: "1.0.0"
+
+  # Logger configuration
+  logger:
+    handler:
+      default:
+        type: console
+        config:
+          level: info
+          format: text
