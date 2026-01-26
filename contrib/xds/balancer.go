@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package xds
 
 import (
@@ -5,7 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand"
+	mrand "math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,10 +54,11 @@ type xdsBalancer struct {
 	outlierDetectors map[string]*OutlierDetector
 	rateLimiters     map[string]*RateLimiter
 	inFlight         map[string]*int32
-	rng              *rand.Rand
+	rng              *mrand.Rand
 }
 
 func newXdsBalancer(name string, _ string, cli balancer.Client) (balancer.Balancer, error) {
+	//nolint:gosec // G404: Weak random is acceptable for load balancing selection (non-cryptographic use)
 	return &xdsBalancer{
 		name:             name,
 		cli:              cli,
@@ -55,7 +70,7 @@ func newXdsBalancer(name string, _ string, cli balancer.Client) (balancer.Balanc
 		outlierDetectors: make(map[string]*OutlierDetector),
 		rateLimiters:     make(map[string]*RateLimiter),
 		inFlight:         make(map[string]*int32),
-		rng:              rand.New(rand.NewSource(time.Now().UnixNano())),
+		rng:              mrand.New(mrand.NewSource(time.Now().UnixNano())),
 	}, nil
 }
 
@@ -142,7 +157,7 @@ func (b *xdsBalancer) UpdateState(state resolver.State) {
 			for i := len(addr) - 1; i >= 0; i-- {
 				if addr[i] == ':' {
 					host = addr[:i]
-					fmt.Sscanf(addr[i+1:], "%d", &port)
+					_, _ = fmt.Sscanf(addr[i+1:], "%d", &port)
 					break
 				}
 			}
@@ -175,7 +190,7 @@ func (b *xdsBalancer) UpdateState(state resolver.State) {
 		}
 		b.endpoints[clusterKey] = append(b.endpoints[clusterKey], we)
 
-		key := fmt.Sprintf("%s", addr)
+		key := addr
 		if _, ok := b.inFlight[key]; !ok {
 			val := int32(0)
 			b.inFlight[key] = &val
@@ -236,9 +251,10 @@ func (b *xdsBalancer) Type() string {
 	return name
 }
 
+// BalancerStats contains statistics for the xDS balancer
 type BalancerStats struct {
 	CircuitBreakers  map[string]CircuitBreakerStats
-	OutlierDetectors map[string]map[string]interface{}
+	OutlierDetectors map[string]map[string]any
 	RateLimiters     map[string]RateLimiterStats
 }
 
@@ -287,7 +303,7 @@ func (p *xdsPicker) Next(ri balancer.RPCInfo) (balancer.PickResult, error) {
 	if ok {
 		for k, v := range md {
 			if len(v) > 0 {
-				headers[string(k)] = v[0]
+				headers[k] = v[0]
 			}
 		}
 	}
@@ -347,7 +363,10 @@ func (p *xdsPicker) Next(ri balancer.RPCInfo) (balancer.PickResult, error) {
 	}, nil
 }
 
-func (p *xdsPicker) selectCluster(path string, headers map[string]string) (string, *CircuitBreaker, *RateLimiter) {
+func (p *xdsPicker) selectCluster(
+	path string,
+	headers map[string]string,
+) (string, *CircuitBreaker, *RateLimiter) {
 	action := MatchRoute(p.balancer.vhosts, path, headers)
 	if action == nil {
 		return "", nil, nil
@@ -370,7 +389,7 @@ func (p *xdsPicker) selectCluster(path string, headers map[string]string) (strin
 	return cluster, cb, rl
 }
 
-func (p *xdsBalancer) selectWeightedCluster(wc *WeightedClusters) string {
+func (b *xdsBalancer) selectWeightedCluster(wc *WeightedClusters) string {
 	if wc.TotalWeight == 0 {
 		if len(wc.Clusters) > 0 {
 			return wc.Clusters[0].Name
@@ -378,7 +397,7 @@ func (p *xdsBalancer) selectWeightedCluster(wc *WeightedClusters) string {
 		return ""
 	}
 
-	r := p.rng.Uint32() % wc.TotalWeight
+	r := b.rng.Uint32() % wc.TotalWeight
 	accumWeight := uint32(0)
 
 	for _, c := range wc.Clusters {
@@ -391,8 +410,8 @@ func (p *xdsBalancer) selectWeightedCluster(wc *WeightedClusters) string {
 	return wc.Clusters[0].Name
 }
 
-func (p *xdsBalancer) selectEndpoint(cluster string, od *OutlierDetector) *weightedEndpoint {
-	endpoints, ok := p.endpoints[cluster]
+func (b *xdsBalancer) selectEndpoint(cluster string, od *OutlierDetector) *weightedEndpoint {
+	endpoints, ok := b.endpoints[cluster]
 	if !ok || len(endpoints) == 0 {
 		return nil
 	}
@@ -422,25 +441,25 @@ func (p *xdsBalancer) selectEndpoint(cluster string, od *OutlierDetector) *weigh
 			continue
 		}
 
-		policy, ok := p.clusterPolicies[cluster]
+		policy, ok := b.clusterPolicies[cluster]
 		if !ok {
 			policy = clusterPolicy{lbPolicy: "round_robin"}
 		}
 
 		switch policy.lbPolicy {
 		case "random":
-			return p.selectRandom(group)
+			return b.selectRandom(group)
 		case "least_request":
-			return p.selectLeastRequest(group)
+			return b.selectLeastRequest(group)
 		default:
-			return p.selectRoundRobin(group)
+			return b.selectRoundRobin(group)
 		}
 	}
 
 	return nil
 }
 
-func (p *xdsBalancer) selectRoundRobin(endpoints []*weightedEndpoint) *weightedEndpoint {
+func (b *xdsBalancer) selectRoundRobin(endpoints []*weightedEndpoint) *weightedEndpoint {
 	if len(endpoints) == 0 {
 		return nil
 	}
@@ -454,7 +473,7 @@ func (p *xdsBalancer) selectRoundRobin(endpoints []*weightedEndpoint) *weightedE
 		return endpoints[0]
 	}
 
-	r := p.rng.Uint32() % totalWeight
+	r := b.rng.Uint32() % totalWeight
 	accumWeight := uint32(0)
 
 	for _, ep := range endpoints {
@@ -467,15 +486,15 @@ func (p *xdsBalancer) selectRoundRobin(endpoints []*weightedEndpoint) *weightedE
 	return endpoints[0]
 }
 
-func (p *xdsBalancer) selectRandom(endpoints []*weightedEndpoint) *weightedEndpoint {
+func (b *xdsBalancer) selectRandom(endpoints []*weightedEndpoint) *weightedEndpoint {
 	if len(endpoints) == 0 {
 		return nil
 	}
 
-	return endpoints[p.rng.Intn(len(endpoints))]
+	return endpoints[b.rng.Intn(len(endpoints))]
 }
 
-func (p *xdsBalancer) selectLeastRequest(endpoints []*weightedEndpoint) *weightedEndpoint {
+func (b *xdsBalancer) selectLeastRequest(endpoints []*weightedEndpoint) *weightedEndpoint {
 	if len(endpoints) == 0 {
 		return nil
 	}
@@ -486,7 +505,7 @@ func (p *xdsBalancer) selectLeastRequest(endpoints []*weightedEndpoint) *weighte
 	for _, ep := range endpoints {
 		key := fmt.Sprintf("%s:%d", ep.endpoint.Address, ep.endpoint.Port)
 		var inFlight int32
-		if val, ok := p.inFlight[key]; ok && val != nil {
+		if val, ok := b.inFlight[key]; ok && val != nil {
 			inFlight = atomic.LoadInt32(val)
 		}
 
@@ -498,7 +517,7 @@ func (p *xdsBalancer) selectLeastRequest(endpoints []*weightedEndpoint) *weighte
 
 	if selected != nil {
 		key := fmt.Sprintf("%s:%d", selected.endpoint.Address, selected.endpoint.Port)
-		if val, ok := p.inFlight[key]; ok && val != nil {
+		if val, ok := b.inFlight[key]; ok && val != nil {
 			atomic.AddInt32(val, 1)
 		}
 	}

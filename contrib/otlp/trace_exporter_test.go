@@ -65,7 +65,11 @@ func TestBuildResourceAttributes(t *testing.T) {
 
 			// Check service name
 			if got["service.name"] != tt.wantAttrs["service.name"] {
-				t.Errorf("service.name = %v, want %v", got["service.name"], tt.wantAttrs["service.name"])
+				t.Errorf(
+					"service.name = %v, want %v",
+					got["service.name"],
+					tt.wantAttrs["service.name"],
+				)
 			}
 
 			// Check all attributes

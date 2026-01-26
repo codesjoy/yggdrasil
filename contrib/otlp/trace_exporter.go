@@ -92,7 +92,10 @@ func NewTracerProvider(serviceName string, cfg TraceExporterConfig) (trace.Trace
 }
 
 // createGRPCTraceExporter creates a gRPC OTLP trace exporter.
-func createGRPCTraceExporter(ctx context.Context, cfg TraceExporterConfig) (sdktrace.SpanExporter, error) {
+func createGRPCTraceExporter(
+	ctx context.Context,
+	cfg TraceExporterConfig,
+) (sdktrace.SpanExporter, error) {
 	opts, err := createGRPCTraceClientOptions(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create gRPC client options: %w", err)
@@ -107,7 +110,10 @@ func createGRPCTraceExporter(ctx context.Context, cfg TraceExporterConfig) (sdkt
 }
 
 // createHTTPTraceExporter creates an HTTP OTLP trace exporter.
-func createHTTPTraceExporter(ctx context.Context, cfg TraceExporterConfig) (sdktrace.SpanExporter, error) {
+func createHTTPTraceExporter(
+	ctx context.Context,
+	cfg TraceExporterConfig,
+) (sdktrace.SpanExporter, error) {
 	opts := createHTTPTraceClientOptions(cfg)
 
 	exporter, err := otlptracehttp.New(ctx, opts...)
@@ -191,7 +197,10 @@ func loadTraceConfig() TraceExporterConfig {
 }
 
 // buildResourceAttributes builds OpenTelemetry resource attributes.
-func buildResourceAttributes(serviceName string, customAttrs map[string]interface{}) map[string]any {
+func buildResourceAttributes(
+	serviceName string,
+	customAttrs map[string]interface{},
+) map[string]any {
 	attrs := make(map[string]any)
 
 	// Standard service attributes

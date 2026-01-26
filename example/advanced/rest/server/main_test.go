@@ -18,7 +18,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"os"
 	"os/exec"
 	"syscall"
 	"testing"

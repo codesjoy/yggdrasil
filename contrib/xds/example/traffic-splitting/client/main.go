@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -54,9 +68,10 @@ func main() {
 		}
 
 		mu.Lock()
-		if shelf.Theme == "Traffic Splitting v1" {
+		switch shelf.Theme {
+		case "Traffic Splitting v1":
 			v1Count++
-		} else if shelf.Theme == "Traffic Splitting v2" {
+		case "Traffic Splitting v2":
 			v2Count++
 		}
 		mu.Unlock()
@@ -64,5 +79,17 @@ func main() {
 		slog.Info("GetShelf response", "index", i, "name", shelf.Name, "theme", shelf.Theme)
 	}
 
-	slog.Info("Traffic splitting test completed", "total_requests", requestCount, "v1_count", v1Count, "v2_count", v2Count, "v1_percentage", float64(v1Count)/float64(requestCount)*100, "v2_percentage", float64(v2Count)/float64(requestCount)*100)
+	slog.Info(
+		"Traffic splitting test completed",
+		"total_requests",
+		requestCount,
+		"v1_count",
+		v1Count,
+		"v2_count",
+		v2Count,
+		"v1_percentage",
+		float64(v1Count)/float64(requestCount)*100,
+		"v2_percentage",
+		float64(v2Count)/float64(requestCount)*100,
+	)
 }

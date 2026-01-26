@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+
+	// #nosec G108
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
@@ -55,12 +57,15 @@ func init() {
 
 func main() {
 	// Initialize Yggdrasil (must be called once)
-	yggdrasil.Init("otlp-example")
+	_ = yggdrasil.Init("otlp-example")
 
 	// Start a simple HTTP server
 	server := &http.Server{
-		Addr:    ":8080",
-		Handler: http.HandlerFunc(handleRequest),
+		Addr:              ":8080",
+		Handler:           http.HandlerFunc(handleRequest),
+		ReadHeaderTimeout: 15 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
 	}
 
 	// Start server in a goroutine

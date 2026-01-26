@@ -62,28 +62,28 @@ func TestMetricExportIntervalDefaults(t *testing.T) {
 
 func TestTemporalitySelectors(t *testing.T) {
 	tests := []struct {
-		name         string
-		temporality  string
+		name           string
+		temporality    string
 		wantCumulative bool
 	}{
 		{
-			name:         "cumulative temporality",
-			temporality:  "cumulative",
+			name:           "cumulative temporality",
+			temporality:    "cumulative",
 			wantCumulative: true,
 		},
 		{
-			name:         "delta temporality",
-			temporality:  "delta",
+			name:           "delta temporality",
+			temporality:    "delta",
 			wantCumulative: false,
 		},
 		{
-			name:         "empty defaults to cumulative",
-			temporality:  "",
+			name:           "empty defaults to cumulative",
+			temporality:    "",
 			wantCumulative: true,
 		},
 		{
-			name:         "unknown defaults to cumulative",
-			temporality:  "unknown",
+			name:           "unknown defaults to cumulative",
+			temporality:    "unknown",
 			wantCumulative: true,
 		},
 	}
@@ -93,7 +93,12 @@ func TestTemporalitySelectors(t *testing.T) {
 			got := getMetricTemporality(tt.temporality)
 			isCumulative := (got == "cumulative")
 			if isCumulative != tt.wantCumulative {
-				t.Errorf("getMetricTemporality(%q) = %q, want cumulative=%v", tt.temporality, got, tt.wantCumulative)
+				t.Errorf(
+					"getMetricTemporality(%q) = %q, want cumulative=%v",
+					tt.temporality,
+					got,
+					tt.wantCumulative,
+				)
 			}
 		})
 	}
@@ -129,7 +134,11 @@ func TestMetricConfigDefaults(t *testing.T) {
 		t.Errorf("Timeout = %v, want %v", cfg.Timeout, defaultTimeout)
 	}
 	if cfg.Retry.InitialDelay != defaultRetryInitialDelay {
-		t.Errorf("Retry.InitialDelay = %v, want %v", cfg.Retry.InitialDelay, defaultRetryInitialDelay)
+		t.Errorf(
+			"Retry.InitialDelay = %v, want %v",
+			cfg.Retry.InitialDelay,
+			defaultRetryInitialDelay,
+		)
 	}
 	if cfg.Retry.MaxDelay != defaultRetryMaxDelay {
 		t.Errorf("Retry.MaxDelay = %v, want %v", cfg.Retry.MaxDelay, defaultRetryMaxDelay)

@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package xds
 
 import (
@@ -16,7 +30,11 @@ type mockClient struct {
 	port    int
 }
 
-func (m *mockClient) NewStream(ctx context.Context, desc *stream.Desc, method string) (stream.ClientStream, error) {
+func (m *mockClient) NewStream(
+	ctx context.Context,
+	desc *stream.Desc,
+	method string,
+) (stream.ClientStream, error) {
 	return nil, nil
 }
 
@@ -59,7 +77,10 @@ func (m *mockBalancerClient) UpdateState(state balancer.State) {
 	m.state = state
 }
 
-func (m *mockBalancerClient) NewRemoteClient(endpoint resolver.Endpoint, opts balancer.NewRemoteClientOptions) (remote.Client, error) {
+func (m *mockBalancerClient) NewRemoteClient(
+	endpoint resolver.Endpoint,
+	opts balancer.NewRemoteClientOptions,
+) (remote.Client, error) {
 	return &mockClient{}, nil
 }
 
@@ -230,8 +251,14 @@ func TestLeastRequest_Report_Bug(t *testing.T) {
 	}
 
 	endpoints := []resolver.Endpoint{
-		resolver.BaseEndpoint{Address: "127.0.0.1:8080", Attributes: map[string]any{"weight": uint32(1)}},
-		resolver.BaseEndpoint{Address: "127.0.0.2:8080", Attributes: map[string]any{"weight": uint32(1)}},
+		resolver.BaseEndpoint{
+			Address:    "127.0.0.1:8080",
+			Attributes: map[string]any{"weight": uint32(1)},
+		},
+		resolver.BaseEndpoint{
+			Address:    "127.0.0.2:8080",
+			Attributes: map[string]any{"weight": uint32(1)},
+		},
 	}
 
 	state := resolver.BaseState{

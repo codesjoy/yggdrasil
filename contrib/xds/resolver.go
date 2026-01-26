@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package xds
 
 import (
@@ -62,14 +76,7 @@ type resourceDependencies struct {
 	clusters  map[string]bool
 }
 
-type xdsResolverClient struct {
-	resolver *xdsResolver
-}
-
-func (c *xdsResolverClient) UpdateState(state resolver.State) {
-	c.resolver.notifyState(state)
-}
-
+// NewResolver creates a new xDS resolver
 func NewResolver(name string, cfg ResolverConfig) (resolver.Resolver, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -103,7 +110,7 @@ func (r *xdsResolver) AddWatch(target string, client resolver.Client) error {
 	defer r.core.mu.Unlock()
 
 	if r.core.onUpdate != nil {
-		r.core.onUpdate = func(s string, st resolver.State) {
+		r.core.onUpdate = func(_ string, st resolver.State) {
 			client.UpdateState(st)
 		}
 	}
@@ -140,19 +147,13 @@ func (r *xdsResolver) AddWatch(target string, client resolver.Client) error {
 	return nil
 }
 
-func (r *xdsResolver) DelWatch(target string, client resolver.Client) error {
+func (r *xdsResolver) DelWatch(target string, _ resolver.Client) error {
 	r.core.mu.Lock()
 	defer r.core.mu.Unlock()
 
 	delete(r.core.apps, target)
 	r.core.reconcileSubscriptions()
 	return nil
-}
-
-func (r *xdsResolver) notifyState(state resolver.State) {
-	if r.core.onUpdate != nil {
-		r.core.onUpdate("", state)
-	}
 }
 
 func (c *xdsCore) handleDiscoveryEvent(e discoveryEvent) {
@@ -199,7 +200,7 @@ func (c *xdsCore) trackDependencies(listenerName string, ls *listenerSnapshot) {
 	}
 }
 
-func (c *xdsCore) updateRouteDependencies(routeName string, rs *routeSnapshot) {
+func (c *xdsCore) updateRouteDependencies(_ string, rs *routeSnapshot) {
 	if rs == nil {
 		return
 	}
@@ -264,9 +265,7 @@ func (c *xdsCore) reconcileSubscriptions() {
 		}
 	}
 
-	for _, cluster := range cdsNames {
-		edsNames = append(edsNames, cluster)
-	}
+	edsNames = append(edsNames, cdsNames...)
 
 	if c.ads != nil {
 		c.ads.UpdateSubscriptions(ldsNames, rdsNames, cdsNames, edsNames)
@@ -351,7 +350,11 @@ func (c *xdsCore) notifyApps() {
 	}
 }
 
-func buildRouteConfig(app *appInfo, routes map[string]*routeSnapshot, listeners map[string]*listenerSnapshot) []*VirtualHost {
+func buildRouteConfig(
+	app *appInfo,
+	routes map[string]*routeSnapshot,
+	listeners map[string]*listenerSnapshot,
+) []*VirtualHost {
 	var vhosts []*VirtualHost
 	for listenerName := range app.listeners {
 		if ls, ok := listeners[listenerName]; ok {

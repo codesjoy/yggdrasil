@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -10,7 +24,6 @@ import (
 	"time"
 
 	"github.com/codesjoy/yggdrasil/contrib/etcd/v2"
-	_ "github.com/codesjoy/yggdrasil/contrib/etcd/v2"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/config/source/file"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -82,7 +95,11 @@ logging:
 				log.Printf("[config] failed to scan server config: %v", err)
 				return
 			}
-			log.Printf("[config] server config updated: host=%s, port=%d", serverConfig.Host, serverConfig.Port)
+			log.Printf(
+				"[config] server config updated: host=%s, port=%d",
+				serverConfig.Host,
+				serverConfig.Port,
+			)
 		}
 	})
 
@@ -97,7 +114,12 @@ logging:
 				log.Printf("[config] failed to scan database config: %v", err)
 				return
 			}
-			log.Printf("[config] database config updated: host=%s, port=%d, name=%s", dbConfig.Host, dbConfig.Port, dbConfig.Name)
+			log.Printf(
+				"[config] database config updated: host=%s, port=%d, name=%s",
+				dbConfig.Host,
+				dbConfig.Port,
+				dbConfig.Name,
+			)
 		}
 	})
 

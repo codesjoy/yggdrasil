@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package etcd
 
 import (
@@ -7,10 +21,13 @@ import (
 )
 
 const (
+	// ConfigSourceModeBlob is the mode for blob config source.
 	ConfigSourceModeBlob = "blob"
-	ConfigSourceModeKV   = "kv"
+	// ConfigSourceModeKV is the mode for kv config source.
+	ConfigSourceModeKV = "kv"
 )
 
+// ClientConfig defines the configuration for an etcd client.
 type ClientConfig struct {
 	Endpoints   []string      `mapstructure:"endpoints"`
 	DialTimeout time.Duration `mapstructure:"dialTimeout"`
@@ -18,6 +35,7 @@ type ClientConfig struct {
 	Password    string        `mapstructure:"password"`
 }
 
+// ConfigSourceConfig defines the configuration for an etcd config source.
 type ConfigSourceConfig struct {
 	Client ClientConfig  `mapstructure:"client"`
 	Key    string        `mapstructure:"key"`
@@ -28,6 +46,7 @@ type ConfigSourceConfig struct {
 	Name   string        `mapstructure:"name"`
 }
 
+// RegistryConfig defines the configuration for an etcd registry.
 type RegistryConfig struct {
 	Client        ClientConfig  `mapstructure:"client"`
 	Prefix        string        `mapstructure:"prefix"`
@@ -36,6 +55,7 @@ type RegistryConfig struct {
 	RetryInterval time.Duration `mapstructure:"retryInterval"`
 }
 
+// ResolverConfig defines the configuration for an etcd resolver.
 type ResolverConfig struct {
 	Client    ClientConfig  `mapstructure:"client"`
 	Prefix    string        `mapstructure:"prefix"`

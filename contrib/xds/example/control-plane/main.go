@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -51,7 +65,13 @@ func main() {
 		slog.Info("Using custom xDS config file from environment", "file", xdsConfigFile)
 	}
 
-	slog.Info("Server configuration loaded", "port", config.Server.Port, "configFile", xdsConfigFile)
+	slog.Info(
+		"Server configuration loaded",
+		"port",
+		config.Server.Port,
+		"configFile",
+		xdsConfigFile,
+	)
 
 	if err := yggdrasil.Init("github.com.codesjoy.yggdrasil.contrib.xds.control-plane"); err != nil {
 		slog.Error("Failed to initialize yggdrasil", "error", err)
@@ -110,6 +130,7 @@ func main() {
 	slog.Info("xDS Control Plane Server stopped")
 }
 
+//nolint:gosec // G304: File path is controlled by the application, not user input
 func loadConfig(filePath string) (*Config, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -124,6 +145,7 @@ func loadConfig(filePath string) (*Config, error) {
 	return &config, nil
 }
 
+//nolint:gosec // G304: File path is controlled by the application, not user input
 func loadAndUpdateSnapshot(filePath string, snapshotCache cache.SnapshotCache) error {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -138,7 +160,19 @@ func loadAndUpdateSnapshot(filePath string, snapshotCache cache.SnapshotCache) e
 	version := snapshotVersion.Add(1)
 	versionStr := strconv.FormatUint(version, 10)
 
-	slog.Info("Building snapshot", "version", versionStr, "clusters", len(xdsConfig.Clusters), "endpoints", len(xdsConfig.Endpoints), "listeners", len(xdsConfig.Listeners), "routes", len(xdsConfig.Routes))
+	slog.Info(
+		"Building snapshot",
+		"version",
+		versionStr,
+		"clusters",
+		len(xdsConfig.Clusters),
+		"endpoints",
+		len(xdsConfig.Endpoints),
+		"listeners",
+		len(xdsConfig.Listeners),
+		"routes",
+		len(xdsConfig.Routes),
+	)
 
 	builder := snapshot.NewBuilder(versionStr)
 	snap, err := builder.BuildSnapshot(&xdsConfig)
@@ -164,7 +198,15 @@ func parseDuration(s string, defaultDuration time.Duration) time.Duration {
 	}
 	d, err := time.ParseDuration(s)
 	if err != nil {
-		slog.Warn("Failed to parse duration, using default", "input", s, "default", defaultDuration, "error", err)
+		slog.Warn(
+			"Failed to parse duration, using default",
+			"input",
+			s,
+			"default",
+			defaultDuration,
+			"error",
+			err,
+		)
 		return defaultDuration
 	}
 	return d

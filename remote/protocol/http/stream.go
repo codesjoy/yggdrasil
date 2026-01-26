@@ -1,4 +1,18 @@
-package http
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package protocolhttp
 
 import (
 	"bytes"
@@ -22,7 +36,9 @@ import (
 )
 
 const (
-	MetadataHeaderPrefix  = "Yggdrasil-Metadata-"
+	// MetadataHeaderPrefix is the prefix for metadata headers.
+	MetadataHeaderPrefix = "Yggdrasil-Metadata-"
+	// MetadataTrailerPrefix is the prefix for metadata trailers.
 	MetadataTrailerPrefix = "Yggdrasil-Trailer-"
 )
 
@@ -206,7 +222,7 @@ func (cs *httpClientStream) RecvMsg(m interface{}) error {
 		cs.finish(nil, nil, err, ch)
 		return err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() // nolint
 
 	headerMD := extractMetadataWithPrefix(resp.Header, MetadataHeaderPrefix)
 	statsHandler.HandleRPC(ctx, &stats.RPCClientInHeaderBase{
@@ -219,7 +235,16 @@ func (cs *httpClientStream) RecvMsg(m interface{}) error {
 	body, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
 		cs.finish(headerMD, nil, readErr, ch)
-		statsHandler.HandleRPC(ctx, &stats.RPCEndBase{Client: true, BeginTime: beginTime, EndTime: time.Now(), Err: readErr, Protocol: scheme})
+		statsHandler.HandleRPC(
+			ctx,
+			&stats.RPCEndBase{
+				Client:    true,
+				BeginTime: beginTime,
+				EndTime:   time.Now(),
+				Err:       readErr,
+				Protocol:  scheme,
+			},
+		)
 		return readErr
 	}
 
@@ -238,12 +263,30 @@ func (cs *httpClientStream) RecvMsg(m interface{}) error {
 		if umErr := respMarshaler.Unmarshal(body, &pb); umErr != nil {
 			err = status.New(status.HTTPCodeToStuCode(int32(resp.StatusCode)), string(body)).Err()
 			cs.finish(headerMD, trailerMD, err, ch)
-			statsHandler.HandleRPC(ctx, &stats.RPCEndBase{Client: true, BeginTime: beginTime, EndTime: time.Now(), Err: err, Protocol: scheme})
+			statsHandler.HandleRPC(
+				ctx,
+				&stats.RPCEndBase{
+					Client:    true,
+					BeginTime: beginTime,
+					EndTime:   time.Now(),
+					Err:       err,
+					Protocol:  scheme,
+				},
+			)
 			return err
 		}
 		err = status.FromProto(&pb).Err()
 		cs.finish(headerMD, trailerMD, err, ch)
-		statsHandler.HandleRPC(ctx, &stats.RPCEndBase{Client: true, BeginTime: beginTime, EndTime: time.Now(), Err: err, Protocol: scheme})
+		statsHandler.HandleRPC(
+			ctx,
+			&stats.RPCEndBase{
+				Client:    true,
+				BeginTime: beginTime,
+				EndTime:   time.Now(),
+				Err:       err,
+				Protocol:  scheme,
+			},
+		)
 		return err
 	}
 
@@ -258,12 +301,30 @@ func (cs *httpClientStream) RecvMsg(m interface{}) error {
 
 	if umErr := respMarshaler.Unmarshal(body, m); umErr != nil {
 		cs.finish(headerMD, trailerMD, umErr, ch)
-		statsHandler.HandleRPC(ctx, &stats.RPCEndBase{Client: true, BeginTime: beginTime, EndTime: time.Now(), Err: umErr, Protocol: scheme})
+		statsHandler.HandleRPC(
+			ctx,
+			&stats.RPCEndBase{
+				Client:    true,
+				BeginTime: beginTime,
+				EndTime:   time.Now(),
+				Err:       umErr,
+				Protocol:  scheme,
+			},
+		)
 		return umErr
 	}
 
 	cs.finish(headerMD, trailerMD, nil, ch)
-	statsHandler.HandleRPC(ctx, &stats.RPCEndBase{Client: true, BeginTime: beginTime, EndTime: time.Now(), Err: nil, Protocol: scheme})
+	statsHandler.HandleRPC(
+		ctx,
+		&stats.RPCEndBase{
+			Client:    true,
+			BeginTime: beginTime,
+			EndTime:   time.Now(),
+			Err:       nil,
+			Protocol:  scheme,
+		},
+	)
 	return nil
 }
 
@@ -452,7 +513,16 @@ func (ss *httpServerStream) Finish(reply any, err error) {
 			writeTrailers(w, trMD)
 			statsHandler.HandleRPC(ss.ctx, &stats.OutTrailerBase{Client: false, Trailer: trMD})
 		}
-		statsHandler.HandleRPC(ss.ctx, &stats.RPCEndBase{Client: false, BeginTime: beginTime, EndTime: time.Now(), Err: err, Protocol: scheme})
+		statsHandler.HandleRPC(
+			ss.ctx,
+			&stats.RPCEndBase{
+				Client:    false,
+				BeginTime: beginTime,
+				EndTime:   time.Now(),
+				Err:       err,
+				Protocol:  scheme,
+			},
+		)
 		return
 	}
 
@@ -462,7 +532,16 @@ func (ss *httpServerStream) Finish(reply any, err error) {
 			writeTrailers(w, trMD)
 			statsHandler.HandleRPC(ss.ctx, &stats.OutTrailerBase{Client: false, Trailer: trMD})
 		}
-		statsHandler.HandleRPC(ss.ctx, &stats.RPCEndBase{Client: false, BeginTime: beginTime, EndTime: time.Now(), Err: nil, Protocol: scheme})
+		statsHandler.HandleRPC(
+			ss.ctx,
+			&stats.RPCEndBase{
+				Client:    false,
+				BeginTime: beginTime,
+				EndTime:   time.Now(),
+				Err:       nil,
+				Protocol:  scheme,
+			},
+		)
 		return
 	}
 
@@ -490,7 +569,16 @@ func (ss *httpServerStream) Finish(reply any, err error) {
 			writeTrailers(w, trMD)
 			statsHandler.HandleRPC(ss.ctx, &stats.OutTrailerBase{Client: false, Trailer: trMD})
 		}
-		statsHandler.HandleRPC(ss.ctx, &stats.RPCEndBase{Client: false, BeginTime: beginTime, EndTime: time.Now(), Err: mErr, Protocol: scheme})
+		statsHandler.HandleRPC(
+			ss.ctx,
+			&stats.RPCEndBase{
+				Client:    false,
+				BeginTime: beginTime,
+				EndTime:   time.Now(),
+				Err:       mErr,
+				Protocol:  scheme,
+			},
+		)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -507,7 +595,16 @@ func (ss *httpServerStream) Finish(reply any, err error) {
 		writeTrailers(w, trMD)
 		statsHandler.HandleRPC(ss.ctx, &stats.OutTrailerBase{Client: false, Trailer: trMD})
 	}
-	statsHandler.HandleRPC(ss.ctx, &stats.RPCEndBase{Client: false, BeginTime: beginTime, EndTime: time.Now(), Err: nil, Protocol: scheme})
+	statsHandler.HandleRPC(
+		ss.ctx,
+		&stats.RPCEndBase{
+			Client:    false,
+			BeginTime: beginTime,
+			EndTime:   time.Now(),
+			Err:       nil,
+			Protocol:  scheme,
+		},
+	)
 }
 
 func (ss *httpServerStream) SetHeader(md metadata.MD) error {

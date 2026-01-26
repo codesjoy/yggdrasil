@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -66,7 +80,7 @@ func main() {
 	<-sigChan
 
 	slog.Info("Shutting down...")
-	yggdrasil.Stop()
+	_ = yggdrasil.Stop()
 	slog.Info("Shutdown complete")
 }
 
@@ -87,8 +101,26 @@ func loadConfigSources() error {
 func printConfig(cfg *AppConfig) {
 	slog.Info("=== Current Configuration ===")
 	slog.Info("Server", "host", cfg.Server.Host, "port", cfg.Server.Port)
-	slog.Info("Database", "host", cfg.Database.Host, "port", cfg.Database.Port, "name", cfg.Database.Name)
-	slog.Info("Cache", "enabled", cfg.Cache.Enabled, "host", cfg.Cache.Host, "port", cfg.Cache.Port, "ttl", cfg.Cache.TTL)
+	slog.Info(
+		"Database",
+		"host",
+		cfg.Database.Host,
+		"port",
+		cfg.Database.Port,
+		"name",
+		cfg.Database.Name,
+	)
+	slog.Info(
+		"Cache",
+		"enabled",
+		cfg.Cache.Enabled,
+		"host",
+		cfg.Cache.Host,
+		"port",
+		cfg.Cache.Port,
+		"ttl",
+		cfg.Cache.TTL,
+	)
 }
 
 func validateConfig(cfg *AppConfig) error {

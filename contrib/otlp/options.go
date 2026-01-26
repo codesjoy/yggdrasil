@@ -20,10 +20,10 @@ import (
 	"os"
 	"time"
 
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	otlpmetricgrpc "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	otlpmetrichttp "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -232,7 +232,7 @@ func createHTTPMeterClientOptions(cfg MetricExporterConfig) []otlpmetrichttp.Opt
 }
 
 // createGRPCDialOptions creates gRPC dial options based on TLS and retry config.
-func createGRPCDialOptions(tlsCfg TLSConfig, retryCfg RetryConfig) ([]grpc.DialOption, error) {
+func createGRPCDialOptions(tlsCfg TLSConfig, _ RetryConfig) ([]grpc.DialOption, error) {
 	var opts []grpc.DialOption
 
 	if tlsCfg.Insecure {
@@ -240,7 +240,7 @@ func createGRPCDialOptions(tlsCfg TLSConfig, retryCfg RetryConfig) ([]grpc.DialO
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	} else if tlsCfg.Enabled {
 		// TLS with custom certificates
-		tlsConfig := &tls.Config{}
+		tlsConfig := &tls.Config{} // nolint:gosec
 
 		if tlsCfg.CAFile != "" {
 			caCert, err := os.ReadFile(tlsCfg.CAFile)
@@ -276,7 +276,7 @@ func createHTTPClientTLSOption(tlsCfg TLSConfig) otlptracehttp.Option {
 	}
 
 	if tlsCfg.Enabled {
-		tlsConfig := &tls.Config{}
+		tlsConfig := &tls.Config{} // nolint:gosec
 
 		if tlsCfg.CAFile != "" {
 			caCert, err := os.ReadFile(tlsCfg.CAFile)
@@ -308,7 +308,7 @@ func createHTTPMetricClientTLSOption(tlsCfg TLSConfig) otlpmetrichttp.Option {
 	}
 
 	if tlsCfg.Enabled {
-		tlsConfig := &tls.Config{}
+		tlsConfig := &tls.Config{} // nolint:gosec
 
 		if tlsCfg.CAFile != "" {
 			caCert, err := os.ReadFile(tlsCfg.CAFile)

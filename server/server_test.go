@@ -548,14 +548,14 @@ func TestServePartialFailure(t *testing.T) {
 func TestServe_SignalHandling(t *testing.T) {
 	t.Run("successful startup closes channel", func(t *testing.T) {
 		s := &server{
-			servers:     []remote.Server{},
-			state:       serverStateInit,
-			restEnable:  false,
-			serverWG:    sync.WaitGroup{},
-			services:    make(map[string]*ServiceInfo),
-			servicesDesc: make(map[string][]methodInfo),
+			servers:        []remote.Server{},
+			state:          serverStateInit,
+			restEnable:     false,
+			serverWG:       sync.WaitGroup{},
+			services:       make(map[string]*ServiceInfo),
+			servicesDesc:   make(map[string][]methodInfo),
 			restRouterDesc: []restRouterInfo{},
-			stats:       nil,
+			stats:          nil,
 		}
 		s.initInterceptor()
 		startFlag := make(chan struct{}, 1)

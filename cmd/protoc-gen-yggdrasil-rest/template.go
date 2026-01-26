@@ -106,9 +106,9 @@ type methodDesc struct {
 	PathVars map[string]string
 	Path     string
 
-	Body    string
+	Body     string
 	BodyType string
-	HasBody bool
+	HasBody  bool
 }
 
 func (s *serviceDesc) execute() string {

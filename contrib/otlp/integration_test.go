@@ -17,8 +17,8 @@ package otlp_test
 import (
 	"testing"
 
-	xotel "github.com/codesjoy/yggdrasil/v2/otel"
 	_ "github.com/codesjoy/yggdrasil/contrib/otlp/v2"
+	xotel "github.com/codesjoy/yggdrasil/v2/otel"
 )
 
 // TestBuilderRegistration verifies that all OTLP builders are properly registered.

@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -10,7 +24,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/config/source/file"
 	helloworldv1 "github.com/codesjoy/yggdrasil/v2/example/protogen/helloworld"
 	libraryv1 "github.com/codesjoy/yggdrasil/v2/example/protogen/library/v1"
-	"google.golang.org/grpc/metadata"
+	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -49,7 +63,15 @@ func (s *LibraryMSImpl) ListShelves(
 	ctx context.Context,
 	req *libraryv1.ListShelvesRequest,
 ) (*libraryv1.ListShelvesResponse, error) {
-	slog.Info("ListShelves called", "parent", req.Parent, "server", s.serverID)
+	slog.Info(
+		"ListShelves called",
+		"page_size",
+		req.PageSize,
+		"page_token",
+		req.PageToken,
+		"server",
+		s.serverID,
+	)
 	_ = metadata.SetTrailer(ctx, metadata.Pairs("server", s.serverID))
 	_ = metadata.SetHeader(ctx, metadata.Pairs("server", s.serverID))
 	return &libraryv1.ListShelvesResponse{
@@ -150,7 +172,7 @@ func (s *GreeterMSImpl) SayError(
 }
 
 func (s *GreeterMSImpl) SayHelloStream(
-	stream helloworldv1.GreeterService_SayHelloStreamServer,
+	stream helloworldv1.GreeterServiceSayHelloStreamServer,
 ) error {
 	for {
 		req, err := stream.Recv()
@@ -168,7 +190,7 @@ func (s *GreeterMSImpl) SayHelloStream(
 }
 
 func (s *GreeterMSImpl) SayHelloClientStream(
-	stream helloworldv1.GreeterService_SayHelloClientStreamServer,
+	stream helloworldv1.GreeterServiceSayHelloClientStreamServer,
 ) error {
 	var names []string
 	for {
@@ -186,7 +208,7 @@ func (s *GreeterMSImpl) SayHelloClientStream(
 
 func (s *GreeterMSImpl) SayHelloServerStream(
 	req *helloworldv1.SayHelloServerStreamRequest,
-	stream helloworldv1.GreeterService_SayHelloServerStreamServer,
+	stream helloworldv1.GreeterServiceSayHelloServerStreamServer,
 ) error {
 	slog.Info("SayHelloServerStream called", "name", req.Name, "server", s.serverID)
 	for i := 0; i < 3; i++ {

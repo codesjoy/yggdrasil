@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package xds
 
 import (
@@ -46,9 +60,13 @@ func NewCircuitBreaker(config *CircuitBreakerConfig) *CircuitBreaker {
 type ResourceType int
 
 const (
+	// ResourceConnection represents a connection resource
 	ResourceConnection ResourceType = iota
+	// ResourcePendingRequest represents a pending request resource
 	ResourcePendingRequest
+	// ResourceRequest represents an active request resource
 	ResourceRequest
+	// ResourceRetry represents a retry resource
 	ResourceRetry
 )
 
@@ -188,7 +206,7 @@ func (cb *CircuitBreaker) releaseRetry() {
 	atomic.AddUint32(&cb.activeRetries, ^uint32(0)) // Decrement
 }
 
-// Stats represents circuit breaker statistics
+// CircuitBreakerStats represents circuit breaker statistics
 type CircuitBreakerStats struct {
 	ActiveConnections uint32
 	PendingRequests   uint32
