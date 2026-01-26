@@ -27,6 +27,13 @@ import (
 // ErrNoAvailableInstance is returned when no available instance is found
 var ErrNoAvailableInstance = fmt.Errorf("no available instance")
 
+const (
+	// DefaultBalancerName is the default balancer name used when not specified
+	DefaultBalancerName = "default"
+	// DefaultBalancerType is the default balancer type fallback
+	DefaultBalancerType = "round_robin"
+)
+
 // RPCInfo contains information about the RPC request
 type RPCInfo struct {
 	// Context of the RPC request

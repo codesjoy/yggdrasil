@@ -100,6 +100,13 @@ type Resolver interface {
 	Type() string
 }
 
+const (
+	// DefaultResolverName is the default resolver name
+	DefaultResolverName = "default"
+	// NoResolverType indicates no dynamic resolver should be used
+	NoResolverType = ""
+)
+
 // Builder is a function that creates a resolver.
 type Builder func(name string) (Resolver, error)
 
@@ -130,9 +137,16 @@ func Get(name string) (Resolver, error) {
 		return r, nil
 	}
 	typeName := config.Get(config.Join(config.KeyBase, "resolver", name, "type")).String("")
+
+	// Handle "default" resolver without configuration
 	if typeName == "" {
+		if name == DefaultResolverName {
+			// Return nil to indicate no dynamic resolver (use static endpoints)
+			return nil, nil
+		}
 		return nil, fmt.Errorf("not found resolver type, name: %s", name)
 	}
+
 	f, ok := builder[typeName]
 	if !ok {
 		return nil, fmt.Errorf("not found resolver builder, type: %s", typeName)
