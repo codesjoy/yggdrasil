@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -541,4 +542,126 @@ func TestServePartialFailure(t *testing.T) {
 	s.mu.RLock()
 	assert.Equal(t, serverStateClosing, s.state)
 	s.mu.RUnlock()
+}
+
+// TestServe_SignalHandling tests that the startFlag channel is properly closed
+func TestServe_SignalHandling(t *testing.T) {
+	t.Run("successful startup closes channel", func(t *testing.T) {
+		s := &server{
+			servers:     []remote.Server{},
+			state:       serverStateInit,
+			restEnable:  false,
+			serverWG:    sync.WaitGroup{},
+			services:    make(map[string]*ServiceInfo),
+			servicesDesc: make(map[string][]methodInfo),
+			restRouterDesc: []restRouterInfo{},
+			stats:       nil,
+		}
+		s.initInterceptor()
+		startFlag := make(chan struct{}, 1)
+
+		var serveErr error
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			serveErr = s.Serve(startFlag)
+		}()
+
+		// Wait for start signal
+		select {
+		case <-startFlag:
+			// Server started successfully
+		case <-time.After(2 * time.Second):
+			t.Fatal("Timeout waiting for server to start")
+		}
+
+		// Verify channel is closed
+		select {
+		case _, ok := <-startFlag:
+			if ok {
+				t.Error("startFlag should be closed after Serve() sends start signal")
+			}
+		case <-time.After(1 * time.Second):
+			t.Error("Timeout verifying channel closure")
+		}
+
+		// Stop the server
+		if err := s.Stop(); err != nil {
+			t.Errorf("Stop() error = %v", err)
+		}
+
+		wg.Wait()
+		assert.NoError(t, serveErr)
+	})
+
+	t.Run("failed startup closes channel", func(t *testing.T) {
+		// Create a server that will fail during startup
+		failServer := &mockFailingServer{}
+
+		s := &server{
+			servers: []remote.Server{failServer},
+			state:   serverStateInit,
+		}
+
+		startFlag := make(chan struct{}, 1)
+		err := s.Serve(startFlag)
+
+		// Should fail
+		assert.Error(t, err)
+
+		// Verify channel is closed
+		select {
+		case _, ok := <-startFlag:
+			if ok {
+				t.Error("startFlag should be closed after failed Serve()")
+			}
+		case <-time.After(1 * time.Second):
+			t.Error("Timeout verifying channel closure after failure")
+		}
+	})
+
+	t.Run("channel closure synchronization", func(t *testing.T) {
+		// Test that the channel closure doesn't cause race conditions
+		s := &server{
+			servers:        []remote.Server{},
+			state:          serverStateInit,
+			restEnable:     false,
+			serverWG:       sync.WaitGroup{},
+			services:       make(map[string]*ServiceInfo),
+			servicesDesc:   make(map[string][]methodInfo),
+			restRouterDesc: []restRouterInfo{},
+		}
+		s.initInterceptor()
+		startFlag := make(chan struct{}, 1)
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = s.Serve(startFlag)
+		}()
+
+		// Wait for start signal
+		<-startFlag
+
+		// Try multiple reads from the closed channel
+		for i := 0; i < 5; i++ {
+			select {
+			case _, ok := <-startFlag:
+				if ok {
+					t.Errorf("Iteration %d: startFlag should be closed", i)
+				}
+			case <-time.After(100 * time.Millisecond):
+				t.Error("Timeout reading from closed channel")
+			}
+		}
+
+		// Stop the server
+		if err := s.Stop(); err != nil {
+			t.Errorf("Stop() error = %v", err)
+		}
+
+		wg.Wait()
+	})
 }

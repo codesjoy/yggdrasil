@@ -244,11 +244,13 @@ func (app *application) startServers() error {
 	}
 
 	eg.Go(func() error {
+		// Wait for servers to start
 		_, ok := <-svrStarCh
 		if !ok {
+			// Channel closed without value - startup failed
 			return nil
 		}
-		defer close(svrStarCh)
+		// Servers started successfully, register the service
 		app.register()
 		return nil
 	})
@@ -282,16 +284,17 @@ func (app *application) stopServers() error {
 		}
 		slog.Info("internal server stopped", slog.Int("index", idx))
 	}
-
-	eg.Go(func() error {
-		slog.Info("stopping governor")
-		if err := app.governor.Stop(); err != nil {
-			slog.Error("failed to stop governor", slog.Any("error", err))
-			return err
-		}
-		slog.Info("governor stopped")
-		return nil
-	})
+	if app.governor != nil {
+		eg.Go(func() error {
+			slog.Info("stopping governor")
+			if err := app.governor.Stop(); err != nil {
+				slog.Error("failed to stop governor", slog.Any("error", err))
+				return err
+			}
+			slog.Info("governor stopped")
+			return nil
+		})
+	}
 
 	// 等待所有服务器停止或超时
 	if err := eg.Wait(); err != nil {

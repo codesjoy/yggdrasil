@@ -262,10 +262,13 @@ func (s *server) Serve(startFlag chan<- struct{}) error {
 
 	var err error
 	defer func() {
+		// Always close startFlag to signal completion
+		// This ensures the channel is closed even if there's an error
 		if err != nil {
 			_ = s.Stop()
-			close(startFlag)
 		}
+		// Close the channel in all cases
+		close(startFlag)
 	}()
 
 	for _, svr := range s.servers {
@@ -278,8 +281,13 @@ func (s *server) Serve(startFlag chan<- struct{}) error {
 		return err
 	}
 
+	// Signal that servers have started
 	startFlag <- struct{}{}
+
+	// Wait for all server goroutines to complete
+	// This will unblock when Stop() is called and all servers finish
 	s.serverWG.Wait()
+
 	return nil
 }
 
@@ -308,18 +316,14 @@ func (s *server) Endpoints() []Endpoint {
 func (s *server) initInterceptor() {
 	unaryNames := config.Get(config.Join(config.KeyBase, "interceptor", "unary_server")).
 		StringSlice()
-	if len(unaryNames) != 0 {
-		s.unaryInterceptor = interceptor.ChainUnaryServerInterceptors(
-			xarray.DelDupStable(unaryNames),
-		)
-	}
+	s.unaryInterceptor = interceptor.ChainUnaryServerInterceptors(
+		xarray.DelDupStable(unaryNames),
+	)
 	streamNames := config.Get(config.Join(config.KeyBase, "interceptor", "stream_server")).
 		StringSlice()
-	if len(streamNames) != 0 {
-		s.streamInterceptor = interceptor.ChainStreamServerInterceptors(
-			xarray.DelDupStable(streamNames),
-		)
-	}
+	s.streamInterceptor = interceptor.ChainStreamServerInterceptors(
+		xarray.DelDupStable(streamNames),
+	)
 }
 
 func (s *server) initRemoteServer() error {
