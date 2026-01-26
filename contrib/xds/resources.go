@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package xds
 
 import (
@@ -23,12 +37,7 @@ const (
 type discoveryEvent struct {
 	typ  discoveryEventType
 	name string
-	data interface{}
-}
-
-type weightedRoute struct {
-	cluster string
-	weight  uint32
+	data any
 }
 
 type clusterPolicy struct {
@@ -46,6 +55,7 @@ type weightedEndpoint struct {
 	metadata map[string]string
 }
 
+// Endpoint represents a service endpoint
 type Endpoint struct {
 	Address string
 	Port    int
@@ -200,7 +210,8 @@ func parseCluster(c *clusterType.Cluster) []discoveryEvent {
 		snapshot.policy.lbPolicy = "round_robin"
 	}
 
-	if c.MaxRequestsPerConnection != nil {
+	//nolint:staticcheck // SA1019: MaxRequestsPerConnection is deprecated but still used in older xDS configs
+	if c.MaxRequestsPerConnection != nil { //nolint:staticcheck
 		snapshot.policy.maxRequests = c.MaxRequestsPerConnection.Value
 	}
 
@@ -291,7 +302,7 @@ func parseEndpoint(e *endpointType.ClusterLoadAssignment) []discoveryEvent {
 					we := &weightedEndpoint{
 						endpoint: endpoint,
 						weight:   weight * localityWeight,
-						priority: uint32(priority),
+						priority: priority,
 						metadata: metadata,
 					}
 
@@ -340,19 +351,19 @@ func parseRouteMatch(m *routeType.RouteMatch) *RouteMatch {
 
 			switch spec := h.HeaderMatchSpecifier.(type) {
 			case *routeType.HeaderMatcher_ExactMatch:
-				hm.ExactMatch = spec.ExactMatch
+				hm.ExactMatch = spec.ExactMatch //nolint:staticcheck
 			case *routeType.HeaderMatcher_SafeRegexMatch:
-				if spec.SafeRegexMatch != nil && spec.SafeRegexMatch.Regex != "" {
-					if r, err := regexp.Compile(spec.SafeRegexMatch.Regex); err == nil {
+				if spec.SafeRegexMatch != nil && spec.SafeRegexMatch.Regex != "" { //nolint:staticcheck
+					if r, err := regexp.Compile(spec.SafeRegexMatch.Regex); err == nil { //nolint:staticcheck
 						hm.RegexMatch = r
 					}
 				}
 			case *routeType.HeaderMatcher_PresentMatch:
 				hm.Present = spec.PresentMatch
 			case *routeType.HeaderMatcher_PrefixMatch:
-				hm.PrefixMatch = spec.PrefixMatch
+				hm.PrefixMatch = spec.PrefixMatch //nolint:staticcheck
 			case *routeType.HeaderMatcher_SuffixMatch:
-				hm.SuffixMatch = spec.SuffixMatch
+				hm.SuffixMatch = spec.SuffixMatch //nolint:staticcheck
 			}
 
 			rm.Headers = append(rm.Headers, hm)
@@ -377,8 +388,8 @@ func parseRouteAction(r *routeType.RouteAction) *RouteAction {
 			wc := &WeightedClusters{
 				TotalWeight: 0,
 			}
-			if c.WeightedClusters.TotalWeight != nil {
-				wc.TotalWeight = c.WeightedClusters.TotalWeight.Value
+			if c.WeightedClusters.TotalWeight != nil { //nolint:staticcheck
+				wc.TotalWeight = c.WeightedClusters.TotalWeight.Value //nolint:staticcheck
 			}
 			for _, cl := range c.WeightedClusters.Clusters {
 				w := uint32(0)

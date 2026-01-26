@@ -96,11 +96,6 @@ func buildRegistryWithJSONPbConfig(schemes []string) marshaler.Registry {
 				},
 			}
 			_ = mr.Register(item, m)
-		} else {
-			// For other schemes, use the default builder
-			// Ideally we would want to mix configured jsonpb with other default marshalers
-			// But buildMarshaller is not easily accessible here directly if we wanted to be 100% correct without duplication
-			// However, the logic below handles the remaining items.
 		}
 	}
 

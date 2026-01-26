@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -27,9 +41,23 @@ func (s *LibraryImpl) CreateShelf(
 	ctx context.Context,
 	req *librarypb2.CreateShelfRequest,
 ) (*librarypb2.Shelf, error) {
-	slog.Info("CreateShelf called", "name", req.Shelf.Name, "theme", req.Shelf.Theme, "deployment_type", s.deploymentType)
-	_ = metadata.SetTrailer(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
-	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
+	slog.Info(
+		"CreateShelf called",
+		"name",
+		req.Shelf.Name,
+		"theme",
+		req.Shelf.Theme,
+		"deployment_type",
+		s.deploymentType,
+	)
+	_ = metadata.SetTrailer(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
+	_ = metadata.SetHeader(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
 	return &librarypb2.Shelf{
 		Name:  req.Shelf.Name,
 		Theme: req.Shelf.Theme,
@@ -41,8 +69,14 @@ func (s *LibraryImpl) GetShelf(
 	req *librarypb2.GetShelfRequest,
 ) (*librarypb2.Shelf, error) {
 	slog.Info("GetShelf called", "name", req.Name, "deployment_type", s.deploymentType)
-	_ = metadata.SetTrailer(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
-	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
+	_ = metadata.SetTrailer(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
+	_ = metadata.SetHeader(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
 
 	theme := "Stable Version"
 	if s.deploymentType == "canary" {
@@ -59,9 +93,15 @@ func (s *LibraryImpl) ListShelves(
 	ctx context.Context,
 	req *librarypb2.ListShelvesRequest,
 ) (*librarypb2.ListShelvesResponse, error) {
-	slog.Info("ListShelves called", "parent", req.Parent, "deployment_type", s.deploymentType)
-	_ = metadata.SetTrailer(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
-	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
+	slog.Info("ListShelves called", "parent", req.PageSize, "deployment_type", s.deploymentType)
+	_ = metadata.SetTrailer(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
+	_ = metadata.SetHeader(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
 
 	theme := "Stable Version"
 	if s.deploymentType == "canary" {
@@ -81,8 +121,14 @@ func (s *LibraryImpl) DeleteShelf(
 	req *librarypb2.DeleteShelfRequest,
 ) (*emptypb.Empty, error) {
 	slog.Info("DeleteShelf called", "name", req.Name, "deployment_type", s.deploymentType)
-	_ = metadata.SetTrailer(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
-	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
+	_ = metadata.SetTrailer(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
+	_ = metadata.SetHeader(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
 	return &emptypb.Empty{}, nil
 }
 
@@ -90,9 +136,23 @@ func (s *LibraryImpl) MergeShelves(
 	ctx context.Context,
 	req *librarypb2.MergeShelvesRequest,
 ) (*librarypb2.Shelf, error) {
-	slog.Info("MergeShelves called", "name", req.Name, "other_shelf", req.OtherShelf, "deployment_type", s.deploymentType)
-	_ = metadata.SetTrailer(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
-	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
+	slog.Info(
+		"MergeShelves called",
+		"name",
+		req.Name,
+		"other_shelf",
+		req.OtherShelf,
+		"deployment_type",
+		s.deploymentType,
+	)
+	_ = metadata.SetTrailer(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
+	_ = metadata.SetHeader(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
 	return &librarypb2.Shelf{
 		Name:  req.Name,
 		Theme: "Merged Theme - " + s.deploymentType,
@@ -103,9 +163,23 @@ func (s *LibraryImpl) CreateBook(
 	ctx context.Context,
 	req *librarypb2.CreateBookRequest,
 ) (*librarypb2.Book, error) {
-	slog.Info("CreateBook called", "parent", req.Parent, "book", req.Book.Name, "deployment_type", s.deploymentType)
-	_ = metadata.SetTrailer(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
-	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
+	slog.Info(
+		"CreateBook called",
+		"parent",
+		req.Parent,
+		"book",
+		req.Book.Name,
+		"deployment_type",
+		s.deploymentType,
+	)
+	_ = metadata.SetTrailer(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
+	_ = metadata.SetHeader(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
 	return &librarypb2.Book{
 		Name:   req.Parent + "/books/" + req.Book.Name,
 		Author: req.Book.Author,
@@ -119,8 +193,14 @@ func (s *LibraryImpl) GetBook(
 	req *librarypb2.GetBookRequest,
 ) (*librarypb2.Book, error) {
 	slog.Info("GetBook called", "name", req.Name, "deployment_type", s.deploymentType)
-	_ = metadata.SetTrailer(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
-	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
+	_ = metadata.SetTrailer(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
+	_ = metadata.SetHeader(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
 	return &librarypb2.Book{
 		Name:   req.Name,
 		Author: "Canary Author - " + s.deploymentType,
@@ -134,12 +214,26 @@ func (s *LibraryImpl) ListBooks(
 	req *librarypb2.ListBooksRequest,
 ) (*librarypb2.ListBooksResponse, error) {
 	slog.Info("ListBooks called", "parent", req.Parent, "deployment_type", s.deploymentType)
-	_ = metadata.SetTrailer(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
-	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
+	_ = metadata.SetTrailer(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
+	_ = metadata.SetHeader(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
 	return &librarypb2.ListBooksResponse{
 		Books: []*librarypb2.Book{
-			{Name: req.Parent + "/books/book1", Author: "Author 1 - " + s.deploymentType, Title: "Book 1 - " + s.deploymentType},
-			{Name: req.Parent + "/books/book2", Author: "Author 2 - " + s.deploymentType, Title: "Book 2 - " + s.deploymentType},
+			{
+				Name:   req.Parent + "/books/book1",
+				Author: "Author 1 - " + s.deploymentType,
+				Title:  "Book 1 - " + s.deploymentType,
+			},
+			{
+				Name:   req.Parent + "/books/book2",
+				Author: "Author 2 - " + s.deploymentType,
+				Title:  "Book 2 - " + s.deploymentType,
+			},
 		},
 	}, nil
 }
@@ -149,8 +243,14 @@ func (s *LibraryImpl) DeleteBook(
 	req *librarypb2.DeleteBookRequest,
 ) (*emptypb.Empty, error) {
 	slog.Info("DeleteBook called", "name", req.Name, "deployment_type", s.deploymentType)
-	_ = metadata.SetTrailer(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
-	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
+	_ = metadata.SetTrailer(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
+	_ = metadata.SetHeader(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
 	return &emptypb.Empty{}, nil
 }
 
@@ -159,8 +259,14 @@ func (s *LibraryImpl) UpdateBook(
 	req *librarypb2.UpdateBookRequest,
 ) (*librarypb2.Book, error) {
 	slog.Info("UpdateBook called", "book", req.Book.Name, "deployment_type", s.deploymentType)
-	_ = metadata.SetTrailer(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
-	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
+	_ = metadata.SetTrailer(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
+	_ = metadata.SetHeader(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
 	return &librarypb2.Book{
 		Name:   req.Book.Name,
 		Author: req.Book.Author,
@@ -173,10 +279,28 @@ func (s *LibraryImpl) MoveBook(
 	ctx context.Context,
 	req *librarypb2.MoveBookRequest,
 ) (*librarypb2.Book, error) {
-	slog.Info("MoveBook called", "name", req.Name, "other_shelf_name", req.OtherShelfName, "deployment_type", s.deploymentType)
-	_ = metadata.SetTrailer(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
-	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "canary-server", "deployment", s.deploymentType))
-	return nil, status.FromReason(errors.New("book not found"), librarypb.Reason_BOOK_NOT_FOUND, nil)
+	slog.Info(
+		"MoveBook called",
+		"name",
+		req.Name,
+		"other_shelf_name",
+		req.OtherShelfName,
+		"deployment_type",
+		s.deploymentType,
+	)
+	_ = metadata.SetTrailer(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
+	_ = metadata.SetHeader(
+		ctx,
+		metadata.Pairs("server", "canary-server", "deployment", s.deploymentType),
+	)
+	return nil, status.FromReason(
+		errors.New("book not found"),
+		librarypb.Reason_BOOK_NOT_FOUND,
+		nil,
+	)
 }
 
 func main() {

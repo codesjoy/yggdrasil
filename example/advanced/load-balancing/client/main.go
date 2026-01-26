@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -99,7 +113,11 @@ func main() {
 	slog.Info("Load balancing tests completed successfully!")
 }
 
-func testLoadBalancing(ctx context.Context, client helloworldpb.GreeterServiceClient, stats *LoadBalancerStats) error {
+func testLoadBalancing(
+	ctx context.Context,
+	client helloworldpb.GreeterServiceClient,
+	stats *LoadBalancerStats,
+) error {
 	slog.Info("Testing unary RPC load balancing...")
 
 	for i := 0; i < 10; i++ {
@@ -127,7 +145,11 @@ func testLoadBalancing(ctx context.Context, client helloworldpb.GreeterServiceCl
 	return nil
 }
 
-func testStreamLoadBalancing(ctx context.Context, client helloworldpb.GreeterServiceClient, stats *LoadBalancerStats) error {
+func testStreamLoadBalancing(
+	ctx context.Context,
+	client helloworldpb.GreeterServiceClient,
+	stats *LoadBalancerStats,
+) error {
 	slog.Info("Testing stream RPC load balancing...")
 
 	stream, err := client.SayHelloStream(ctx)

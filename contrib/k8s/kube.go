@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package k8s
 
 import (
@@ -16,6 +30,7 @@ var (
 	kubeClientErr  error
 )
 
+// GetKubeClient returns a kubernetes client.
 func GetKubeClient(kubeconfigPath string) (kubernetes.Interface, error) {
 	kubeClientOnce.Do(func() {
 		var config *rest.Config
@@ -37,12 +52,14 @@ func GetKubeClient(kubeconfigPath string) (kubernetes.Interface, error) {
 	return kubeClient, kubeClientErr
 }
 
+// ResetKubeClient resets the kubernetes client.
 func ResetKubeClient() {
 	kubeClient = nil
 	kubeClientOnce = sync.Once{}
 	kubeClientErr = nil
 }
 
+// IsInCluster returns true if the program is running in a Kubernetes cluster.
 func IsInCluster() bool {
 	_, err := rest.InClusterConfig()
 	if err != nil {

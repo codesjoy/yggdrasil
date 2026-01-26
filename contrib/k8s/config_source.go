@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package k8s
 
 import (
@@ -17,6 +31,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/config/source"
 )
 
+// ConfigSourceConfig defines the configuration for a Kubernetes ConfigMap or Secret source.
 type ConfigSourceConfig struct {
 	Namespace   string          `mapstructure:"namespace"`
 	Name        string          `mapstructure:"name"`
@@ -28,6 +43,7 @@ type ConfigSourceConfig struct {
 	Kubeconfig  string          `mapstructure:"kubeconfig"`
 }
 
+// NewConfigMapSource creates a new ConfigMap source.
 func NewConfigMapSource(cfg ConfigSourceConfig) (source.Source, error) {
 	if cfg.Name == "" {
 		return nil, errors.New("empty configmap name")
@@ -43,6 +59,7 @@ func NewConfigMapSource(cfg ConfigSourceConfig) (source.Source, error) {
 	}, nil
 }
 
+// NewSecretSource creates a new Secret source.
 func NewSecretSource(cfg ConfigSourceConfig) (source.Source, error) {
 	if cfg.Name == "" {
 		return nil, errors.New("empty secret name")
@@ -213,7 +230,9 @@ func (s *configSource) fetch() (map[string]any, source.Parser, error) {
 		parser source.Parser
 	)
 	if s.resourceType == "configmap" {
-		cm, err := kube.CoreV1().ConfigMaps(s.cfg.Namespace).Get(context.Background(), s.cfg.Name, metav1.GetOptions{})
+		cm, err := kube.CoreV1().
+			ConfigMaps(s.cfg.Namespace).
+			Get(context.Background(), s.cfg.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get configmap: %w", err)
 		}
@@ -241,13 +260,13 @@ func (s *configSource) fetch() (map[string]any, source.Parser, error) {
 			parser = inferParser(s.cfg.Key)
 		}
 	}
-	if data == nil {
-		data = map[string]any{}
-	}
 	return data, parser, nil
 }
 
-func (s *configSource) doWatch(ctx context.Context, kube kubernetes.Interface) (<-chan watch.Event, error) {
+func (s *configSource) doWatch(
+	ctx context.Context,
+	kube kubernetes.Interface,
+) (<-chan watch.Event, error) {
 	opts := metav1.ListOptions{
 		FieldSelector: fmt.Sprintf("metadata.name=%s", s.cfg.Name),
 	}

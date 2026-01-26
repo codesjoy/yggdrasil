@@ -1,3 +1,19 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Package xds provides xDS (Envoy discovery service) integration for service discovery and configuration.
+// It implements the ADS (Aggregated Discovery Service) protocol for dynamic configuration updates.
 package xds
 
 import (
@@ -66,6 +82,7 @@ func newADSClient(cfg ResolverConfig, handle func(discoveryEvent)) (*adsClient, 
 	}
 	metadata, err := structpb.NewStruct(metadataMap)
 	if err != nil {
+		cancel() // Clean up context on error
 		return nil, err
 	}
 
@@ -136,7 +153,8 @@ func (c *adsClient) connect() error {
 	}
 
 	if c.cfg.Server.TLS.Enable {
-		tlsConfig := &tls.Config{}
+		//nolint:gosec // G402: MinVersion is intentionally not set to allow configuration flexibility
+		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
 		if c.cfg.Server.TLS.CertFile != "" && c.cfg.Server.TLS.KeyFile != "" {
 			cert, err := tls.LoadX509KeyPair(c.cfg.Server.TLS.CertFile, c.cfg.Server.TLS.KeyFile)
 			if err != nil {
@@ -164,12 +182,13 @@ func (c *adsClient) connect() error {
 	ctx, cancel := context.WithTimeout(c.ctx, c.cfg.Server.Timeout)
 	defer cancel()
 
+	//nolint:staticcheck // SA1019: DialContext is deprecated but still supported in gRPC 1.x
 	// Dial with timeout
 	conn, err := grpc.DialContext(ctx, c.cfg.Server.Address, opts...)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint
 
 	client := discoveryv3.NewAggregatedDiscoveryServiceClient(conn)
 	// Use the main context for the stream, not the dial timeout context
@@ -210,7 +229,7 @@ func (c *adsClient) connect() error {
 		return nil
 	case err := <-errCh:
 		// Attempt to close stream to unblock the other loop
-		stream.CloseSend()
+		_ = stream.CloseSend()
 		return err
 	}
 }
@@ -273,7 +292,9 @@ func (c *adsClient) sendSubscriptionRequestLocked(typeURL string) {
 	}
 }
 
-func (c *adsClient) sendLoop(stream discoveryv3.AggregatedDiscoveryService_StreamAggregatedResourcesClient) error {
+func (c *adsClient) sendLoop(
+	stream discoveryv3.AggregatedDiscoveryService_StreamAggregatedResourcesClient,
+) error {
 	for {
 		select {
 		case <-c.ctx.Done():
@@ -288,7 +309,9 @@ func (c *adsClient) sendLoop(stream discoveryv3.AggregatedDiscoveryService_Strea
 	}
 }
 
-func (c *adsClient) watchResources(stream discoveryv3.AggregatedDiscoveryService_StreamAggregatedResourcesClient) error {
+func (c *adsClient) watchResources(
+	stream discoveryv3.AggregatedDiscoveryService_StreamAggregatedResourcesClient,
+) error {
 	for {
 		resp, err := stream.Recv()
 		if err != nil {
@@ -320,10 +343,10 @@ func (c *adsClient) resetRetries() {
 func (c *adsClient) Close() {
 	c.cancel()
 	if c.stream != nil {
-		c.stream.CloseSend()
+		_ = c.stream.CloseSend()
 	}
 	if c.conn != nil {
-		c.conn.Close()
+		_ = c.conn.Close()
 	}
 	close(c.sendCh)
 }
@@ -442,9 +465,9 @@ func subscriptionsEqual(a, b subscriptions) bool {
 	return true
 }
 
-func getResourceName(any *anypb.Any) string {
-	if any == nil {
+func getResourceName(msg *anypb.Any) string {
+	if msg == nil {
 		return ""
 	}
-	return string(any.Value)
+	return string(msg.Value)
 }

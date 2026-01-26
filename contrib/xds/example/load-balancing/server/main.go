@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -27,7 +41,15 @@ func (s *LibraryImpl) CreateShelf(
 	ctx context.Context,
 	req *librarypb2.CreateShelfRequest,
 ) (*librarypb2.Shelf, error) {
-	slog.Info("CreateShelf called", "name", req.Shelf.Name, "theme", req.Shelf.Theme, "server", s.serverID)
+	slog.Info(
+		"CreateShelf called",
+		"name",
+		req.Shelf.Name,
+		"theme",
+		req.Shelf.Theme,
+		"server",
+		s.serverID,
+	)
 	_ = metadata.SetTrailer(ctx, metadata.Pairs("server", s.serverID))
 	_ = metadata.SetHeader(ctx, metadata.Pairs("server", s.serverID))
 	return &librarypb2.Shelf{
@@ -78,7 +100,15 @@ func (s *LibraryImpl) MergeShelves(
 	ctx context.Context,
 	req *librarypb2.MergeShelvesRequest,
 ) (*librarypb2.Shelf, error) {
-	slog.Info("MergeShelves called", "name", req.Name, "other_shelf", req.OtherShelf, "server", s.serverID)
+	slog.Info(
+		"MergeShelves called",
+		"name",
+		req.Name,
+		"other_shelf",
+		req.OtherShelf,
+		"server",
+		s.serverID,
+	)
 	_ = metadata.SetTrailer(ctx, metadata.Pairs("server", s.serverID))
 	_ = metadata.SetHeader(ctx, metadata.Pairs("server", s.serverID))
 	return &librarypb2.Shelf{
@@ -91,7 +121,15 @@ func (s *LibraryImpl) CreateBook(
 	ctx context.Context,
 	req *librarypb2.CreateBookRequest,
 ) (*librarypb2.Book, error) {
-	slog.Info("CreateBook called", "parent", req.Parent, "book", req.Book.Name, "server", s.serverID)
+	slog.Info(
+		"CreateBook called",
+		"parent",
+		req.Parent,
+		"book",
+		req.Book.Name,
+		"server",
+		s.serverID,
+	)
 	_ = metadata.SetTrailer(ctx, metadata.Pairs("server", s.serverID))
 	_ = metadata.SetHeader(ctx, metadata.Pairs("server", s.serverID))
 	return &librarypb2.Book{
@@ -126,8 +164,16 @@ func (s *LibraryImpl) ListBooks(
 	_ = metadata.SetHeader(ctx, metadata.Pairs("server", s.serverID))
 	return &librarypb2.ListBooksResponse{
 		Books: []*librarypb2.Book{
-			{Name: req.Parent + "/books/book1", Author: "Author 1 - " + s.serverID, Title: "Book 1 - " + s.serverID},
-			{Name: req.Parent + "/books/book2", Author: "Author 2 - " + s.serverID, Title: "Book 2 - " + s.serverID},
+			{
+				Name:   req.Parent + "/books/book1",
+				Author: "Author 1 - " + s.serverID,
+				Title:  "Book 1 - " + s.serverID,
+			},
+			{
+				Name:   req.Parent + "/books/book2",
+				Author: "Author 2 - " + s.serverID,
+				Title:  "Book 2 - " + s.serverID,
+			},
 		},
 	}, nil
 }
@@ -161,10 +207,22 @@ func (s *LibraryImpl) MoveBook(
 	ctx context.Context,
 	req *librarypb2.MoveBookRequest,
 ) (*librarypb2.Book, error) {
-	slog.Info("MoveBook called", "name", req.Name, "other_shelf_name", req.OtherShelfName, "server", s.serverID)
+	slog.Info(
+		"MoveBook called",
+		"name",
+		req.Name,
+		"other_shelf_name",
+		req.OtherShelfName,
+		"server",
+		s.serverID,
+	)
 	_ = metadata.SetTrailer(ctx, metadata.Pairs("server", s.serverID))
 	_ = metadata.SetHeader(ctx, metadata.Pairs("server", s.serverID))
-	return nil, status.FromReason(errors.New("book not found"), librarypb.Reason_BOOK_NOT_FOUND, nil)
+	return nil, status.FromReason(
+		errors.New("book not found"),
+		librarypb.Reason_BOOK_NOT_FOUND,
+		nil,
+	)
 }
 
 func main() {

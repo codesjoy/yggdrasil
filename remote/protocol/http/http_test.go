@@ -1,4 +1,18 @@
-package http
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package protocolhttp
 
 import (
 	"context"
@@ -18,8 +32,14 @@ import (
 
 func startHTTPTestServer(t *testing.T, handle remote.MethodHandle) (addr string, stop func()) {
 	t.Helper()
-	_ = config.Set(config.Join(config.KeyBase, "remote", "protocol", scheme, "server", "address"), "127.0.0.1:0")
-	_ = config.Set(config.Join(config.KeyBase, "remote", "protocol", scheme, "server", "network"), "tcp")
+	_ = config.Set(
+		config.Join(config.KeyBase, "remote", "protocol", scheme, "server", "address"),
+		"127.0.0.1:0",
+	)
+	_ = config.Set(
+		config.Join(config.KeyBase, "remote", "protocol", scheme, "server", "network"),
+		"tcp",
+	)
 	svr, err := newServer(handle)
 	require.NoError(t, err)
 

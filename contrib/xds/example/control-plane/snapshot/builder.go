@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package snapshot
 
 import (
@@ -20,16 +34,19 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+// Builder builds xDS resource snapshots
 type Builder struct {
 	version string
 }
 
+// NewBuilder creates a new Builder
 func NewBuilder(version string) *Builder {
 	return &Builder{
 		version: version,
 	}
 }
 
+// BuildSnapshot builds a snapshot from the given configuration
 func (b *Builder) BuildSnapshot(config *XDSConfig) (*cache.Snapshot, error) {
 	clusters := b.buildClusters(config.Clusters)
 	endpoints := b.buildEndpoints(config.Endpoints)
@@ -76,10 +93,18 @@ func (b *Builder) buildClusters(configs []Cluster) []types.Resource {
 			c.CircuitBreakers = &cluster.CircuitBreakers{
 				Thresholds: []*cluster.CircuitBreakers_Thresholds{
 					{
-						MaxConnections:     &wrapperspb.UInt32Value{Value: cfg.CircuitBreakers.MaxConnections},
-						MaxPendingRequests: &wrapperspb.UInt32Value{Value: cfg.CircuitBreakers.MaxPendingRequests},
-						MaxRequests:        &wrapperspb.UInt32Value{Value: cfg.CircuitBreakers.MaxRequests},
-						MaxRetries:         &wrapperspb.UInt32Value{Value: cfg.CircuitBreakers.MaxRetries},
+						MaxConnections: &wrapperspb.UInt32Value{
+							Value: cfg.CircuitBreakers.MaxConnections,
+						},
+						MaxPendingRequests: &wrapperspb.UInt32Value{
+							Value: cfg.CircuitBreakers.MaxPendingRequests,
+						},
+						MaxRequests: &wrapperspb.UInt32Value{
+							Value: cfg.CircuitBreakers.MaxRequests,
+						},
+						MaxRetries: &wrapperspb.UInt32Value{
+							Value: cfg.CircuitBreakers.MaxRetries,
+						},
 					},
 				},
 			}
@@ -88,22 +113,52 @@ func (b *Builder) buildClusters(configs []Cluster) []types.Resource {
 		if cfg.OutlierDetection != nil {
 			od := cfg.OutlierDetection
 			c.OutlierDetection = &cluster.OutlierDetection{
-				Consecutive_5Xx:                &wrapperspb.UInt32Value{Value: od.Consecutive5xx},
-				ConsecutiveGatewayFailure:      &wrapperspb.UInt32Value{Value: od.ConsecutiveGatewayFailure},
-				ConsecutiveLocalOriginFailure:  &wrapperspb.UInt32Value{Value: od.ConsecutiveLocalOriginFailure},
-				Interval:                       durationpb.New(ParseDuration(od.Interval, 10*time.Second)),
-				BaseEjectionTime:               durationpb.New(ParseDuration(od.BaseEjectionTime, 30*time.Second)),
-				MaxEjectionTime:                durationpb.New(ParseDuration(od.MaxEjectionTime, 300*time.Second)),
-				MaxEjectionPercent:             &wrapperspb.UInt32Value{Value: od.MaxEjectionPercent},
-				EnforcingConsecutive_5Xx:       &wrapperspb.UInt32Value{Value: od.EnforcingConsecutive5xx},
-				EnforcingSuccessRate:           &wrapperspb.UInt32Value{Value: od.EnforcingSuccessRate},
-				SuccessRateMinimumHosts:        &wrapperspb.UInt32Value{Value: od.SuccessRateMinimumHosts},
-				SuccessRateRequestVolume:       &wrapperspb.UInt32Value{Value: od.SuccessRateRequestVolume},
-				SuccessRateStdevFactor:         &wrapperspb.UInt32Value{Value: od.SuccessRateStdevFactor},
-				FailurePercentageThreshold:     &wrapperspb.UInt32Value{Value: od.FailurePercentageThreshold},
-				EnforcingFailurePercentage:     &wrapperspb.UInt32Value{Value: od.EnforcingFailurePercentage},
-				FailurePercentageMinimumHosts:  &wrapperspb.UInt32Value{Value: od.FailurePercentageMinimumHosts},
-				FailurePercentageRequestVolume: &wrapperspb.UInt32Value{Value: od.FailurePercentageRequestVolume},
+				Consecutive_5Xx: &wrapperspb.UInt32Value{Value: od.Consecutive5xx},
+				ConsecutiveGatewayFailure: &wrapperspb.UInt32Value{
+					Value: od.ConsecutiveGatewayFailure,
+				},
+				ConsecutiveLocalOriginFailure: &wrapperspb.UInt32Value{
+					Value: od.ConsecutiveLocalOriginFailure,
+				},
+				Interval: durationpb.New(
+					ParseDuration(od.Interval, 10*time.Second),
+				),
+				BaseEjectionTime: durationpb.New(
+					ParseDuration(od.BaseEjectionTime, 30*time.Second),
+				),
+				MaxEjectionTime: durationpb.New(
+					ParseDuration(od.MaxEjectionTime, 300*time.Second),
+				),
+				MaxEjectionPercent: &wrapperspb.UInt32Value{
+					Value: od.MaxEjectionPercent,
+				},
+				EnforcingConsecutive_5Xx: &wrapperspb.UInt32Value{
+					Value: od.EnforcingConsecutive5xx,
+				},
+				EnforcingSuccessRate: &wrapperspb.UInt32Value{
+					Value: od.EnforcingSuccessRate,
+				},
+				SuccessRateMinimumHosts: &wrapperspb.UInt32Value{
+					Value: od.SuccessRateMinimumHosts,
+				},
+				SuccessRateRequestVolume: &wrapperspb.UInt32Value{
+					Value: od.SuccessRateRequestVolume,
+				},
+				SuccessRateStdevFactor: &wrapperspb.UInt32Value{
+					Value: od.SuccessRateStdevFactor,
+				},
+				FailurePercentageThreshold: &wrapperspb.UInt32Value{
+					Value: od.FailurePercentageThreshold,
+				},
+				EnforcingFailurePercentage: &wrapperspb.UInt32Value{
+					Value: od.EnforcingFailurePercentage,
+				},
+				FailurePercentageMinimumHosts: &wrapperspb.UInt32Value{
+					Value: od.FailurePercentageMinimumHosts,
+				},
+				FailurePercentageRequestVolume: &wrapperspb.UInt32Value{
+					Value: od.FailurePercentageRequestVolume,
+				},
 				SplitExternalLocalOriginErrors: od.SplitExternalLocalOriginErrors,
 			}
 		}
@@ -115,13 +170,22 @@ func (b *Builder) buildClusters(configs []Cluster) []types.Resource {
 					"yggdrasil.rate_limit": {
 						Fields: map[string]*structpb.Value{
 							"max_tokens": {
-								Kind: &structpb.Value_NumberValue{NumberValue: float64(rl.MaxTokens)},
+								Kind: &structpb.Value_NumberValue{
+									NumberValue: float64(rl.MaxTokens),
+								},
 							},
 							"tokens_per_fill": {
-								Kind: &structpb.Value_NumberValue{NumberValue: float64(rl.TokensPerFill)},
+								Kind: &structpb.Value_NumberValue{
+									NumberValue: float64(rl.TokensPerFill),
+								},
 							},
 							"fill_interval": {
-								Kind: &structpb.Value_NumberValue{NumberValue: ParseDuration(rl.FillInterval, time.Second).Seconds()},
+								Kind: &structpb.Value_NumberValue{
+									NumberValue: ParseDuration(
+										rl.FillInterval,
+										time.Second,
+									).Seconds(),
+								},
 							},
 						},
 					},
@@ -247,7 +311,7 @@ func (b *Builder) buildRoutes(configs []Route) []types.Resource {
 		for _, vh := range cfg.VirtualHosts {
 			var routeMatches []*route.Route
 			for _, rm := range vh.Routes {
-				var match = &route.RouteMatch{}
+				match := &route.RouteMatch{}
 
 				if rm.Match.Path != nil {
 					if rm.Match.Path.Prefix != "" {

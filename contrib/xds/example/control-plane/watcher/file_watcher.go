@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package watcher
 
 import (
@@ -9,6 +23,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
+// FileWatcher watches a file for changes
 type FileWatcher struct {
 	filePath string
 	watcher  *fsnotify.Watcher
@@ -18,7 +33,12 @@ type FileWatcher struct {
 	timer    *time.Timer
 }
 
-func NewFileWatcher(filePath string, callback func(string), debounce time.Duration) (*FileWatcher, error) {
+// NewFileWatcher creates a new file watcher
+func NewFileWatcher(
+	filePath string,
+	callback func(string),
+	debounce time.Duration,
+) (*FileWatcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
@@ -40,6 +60,7 @@ func NewFileWatcher(filePath string, callback func(string), debounce time.Durati
 	return fw, nil
 }
 
+// Start starts the file watcher
 func (fw *FileWatcher) Start() {
 	go fw.watch()
 }
@@ -56,7 +77,8 @@ func (fw *FileWatcher) watch() {
 				continue
 			}
 
-			if event.Op&fsnotify.Write == fsnotify.Write || event.Op&fsnotify.Create == fsnotify.Create {
+			if event.Op&fsnotify.Write == fsnotify.Write ||
+				event.Op&fsnotify.Create == fsnotify.Create {
 				slog.Info("File changed", "path", event.Name)
 				fw.debounceCallback()
 			}
@@ -83,6 +105,7 @@ func (fw *FileWatcher) debounceCallback() {
 	})
 }
 
+// Close closes the file watcher
 func (fw *FileWatcher) Close() error {
 	return fw.watcher.Close()
 }

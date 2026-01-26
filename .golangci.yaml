@@ -44,6 +44,15 @@ linters:
         linters:
           - revive
         text: "package-comments:"
+      - path: example/
+        linters:
+          - revive
+        text: "unused-parameter:"
+      - path: example/
+        linters:
+          - errcheck
+          - noctx
+          - unused
 
 formatters:
   enable:

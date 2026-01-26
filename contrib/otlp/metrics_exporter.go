@@ -23,14 +23,16 @@ import (
 	xotel "github.com/codesjoy/yggdrasil/v2/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
-	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
 )
 
 // NewMeterProvider creates a new OTLP meter provider.
-func NewMeterProvider(serviceName string, cfg MetricExporterConfig) (*sdkmetric.MeterProvider, error) {
+func NewMeterProvider(
+	serviceName string,
+	cfg MetricExporterConfig,
+) (*sdkmetric.MeterProvider, error) {
 	ctx := context.Background()
 
 	var (
@@ -91,7 +93,10 @@ func NewMeterProvider(serviceName string, cfg MetricExporterConfig) (*sdkmetric.
 }
 
 // createGRPCMeterExporter creates a gRPC OTLP metric exporter.
-func createGRPCMeterExporter(ctx context.Context, cfg MetricExporterConfig) (sdkmetric.Exporter, error) {
+func createGRPCMeterExporter(
+	ctx context.Context,
+	cfg MetricExporterConfig,
+) (sdkmetric.Exporter, error) {
 	opts, err := createGRPCMeterClientOptions(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create gRPC client options: %w", err)
@@ -106,7 +111,10 @@ func createGRPCMeterExporter(ctx context.Context, cfg MetricExporterConfig) (sdk
 }
 
 // createHTTPMeterExporter creates an HTTP OTLP metric exporter.
-func createHTTPMeterExporter(ctx context.Context, cfg MetricExporterConfig) (sdkmetric.Exporter, error) {
+func createHTTPMeterExporter(
+	ctx context.Context,
+	cfg MetricExporterConfig,
+) (sdkmetric.Exporter, error) {
 	opts := createHTTPMeterClientOptions(cfg)
 
 	exporter, err := otlpmetrichttp.New(ctx, opts...)
@@ -186,16 +194,6 @@ func loadMetricConfig() MetricExporterConfig {
 	}
 
 	return cfg
-}
-
-// cumulativeTemporalitySelector always returns cumulative temporality.
-func cumulativeTemporalitySelector(sdkmetric.InstrumentKind) metricdata.Temporality {
-	return metricdata.CumulativeTemporality
-}
-
-// deltaTemporalitySelector always returns delta temporality.
-func deltaTemporalitySelector(sdkmetric.InstrumentKind) metricdata.Temporality {
-	return metricdata.DeltaTemporality
 }
 
 const (

@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -20,7 +34,10 @@ type GreeterServer struct {
 	helloworldpb.UnimplementedGreeterServiceServer
 }
 
-func (s *GreeterServer) SayHello(ctx context.Context, req *helloworldpb.SayHelloRequest) (*helloworldpb.SayHelloResponse, error) {
+func (s *GreeterServer) SayHello(
+	ctx context.Context,
+	req *helloworldpb.SayHelloRequest,
+) (*helloworldpb.SayHelloResponse, error) {
 	md, ok := metadata.FromInContext(ctx)
 	if !ok {
 		slog.Warn("no metadata found")
@@ -28,13 +45,13 @@ func (s *GreeterServer) SayHello(ctx context.Context, req *helloworldpb.SayHello
 		slog.Info("received request metadata", "metadata", md)
 	}
 
-	userId := md["user-id"]
-	traceId := md["trace-id"]
+	userID := md["user-id"]
+	traceID := md["trace-id"]
 	authorization := md["authorization"]
 
 	slog.Info("request info",
-		"user-id", userId,
-		"trace-id", traceId,
+		"user-id", userID,
+		"trace-id", traceID,
 		"has-authorization", len(authorization) > 0,
 	)
 
@@ -55,7 +72,9 @@ func (s *GreeterServer) SayHello(ctx context.Context, req *helloworldpb.SayHello
 	}, nil
 }
 
-func (s *GreeterServer) SayHelloStream(stream helloworldpb.GreeterServiceSayHelloStreamServer) error {
+func (s *GreeterServer) SayHelloStream(
+	stream helloworldpb.GreeterServiceSayHelloStreamServer,
+) error {
 	slog.Info("SayHelloStream started")
 
 	md, ok := metadata.FromInContext(stream.Context())
@@ -91,7 +110,9 @@ func (s *GreeterServer) SayHelloStream(stream helloworldpb.GreeterServiceSayHell
 	}
 }
 
-func (s *GreeterServer) SayHelloClientStream(stream helloworldpb.GreeterServiceSayHelloClientStreamServer) error {
+func (s *GreeterServer) SayHelloClientStream(
+	stream helloworldpb.GreeterServiceSayHelloClientStreamServer,
+) error {
 	slog.Info("SayHelloClientStream started")
 
 	md, ok := metadata.FromInContext(stream.Context())
@@ -124,7 +145,10 @@ func (s *GreeterServer) SayHelloClientStream(stream helloworldpb.GreeterServiceS
 	return stream.SendAndClose(resp)
 }
 
-func (s *GreeterServer) SayHelloServerStream(req *helloworldpb.SayHelloServerStreamRequest, stream helloworldpb.GreeterServiceSayHelloServerStreamServer) error {
+func (s *GreeterServer) SayHelloServerStream(
+	req *helloworldpb.SayHelloServerStreamRequest,
+	stream helloworldpb.GreeterServiceSayHelloServerStreamServer,
+) error {
 	slog.Info("SayHelloServerStream started", "name", req.Name)
 
 	md, ok := metadata.FromInContext(stream.Context())

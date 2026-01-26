@@ -57,6 +57,7 @@ var (
 )
 
 // MarshalerRegistry is a registry for marshaler.
+// revive:disable:exported
 type MarshalerRegistry struct {
 	mimeMap map[string]Marshaler
 }

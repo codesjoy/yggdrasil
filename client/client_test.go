@@ -374,4 +374,3 @@ func TestNewClient_WithDefaults(t *testing.T) {
 	// The balancer should have received the static endpoint
 	// We can't check the concrete type since it's not exported, but we verified the Type()
 }
-

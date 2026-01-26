@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package xds
 
 import (
@@ -8,6 +22,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/config"
 )
 
+// ResolverConfig holds the configuration for xDS resolver
 type ResolverConfig struct {
 	Server     ServerConfig
 	Node       NodeConfig
@@ -18,12 +33,14 @@ type ResolverConfig struct {
 	Retry      RetryConfig
 }
 
+// ServerConfig holds the xDS server connection configuration
 type ServerConfig struct {
 	Address string
 	Timeout time.Duration
 	TLS     TLSConfig
 }
 
+// TLSConfig holds TLS configuration for xDS server connection
 type TLSConfig struct {
 	Enable   bool
 	CertFile string
@@ -31,6 +48,7 @@ type TLSConfig struct {
 	CAFile   string
 }
 
+// NodeConfig holds the node identification information
 type NodeConfig struct {
 	ID       string
 	Cluster  string
@@ -38,22 +56,26 @@ type NodeConfig struct {
 	Locality *Locality
 }
 
+// Locality holds the node locality information
 type Locality struct {
 	Region  string
 	Zone    string
 	SubZone string
 }
 
+// HealthConfig holds health check configuration
 type HealthConfig struct {
 	HealthyOnly    bool
 	IgnoreStatuses []string
 }
 
+// RetryConfig holds retry configuration
 type RetryConfig struct {
 	MaxRetries int
 	Backoff    time.Duration
 }
 
+// LoadResolverConfig loads xDS resolver configuration from the config source
 func LoadResolverConfig(resolverName string) ResolverConfig {
 	cfg := ResolverConfig{
 		Server: ServerConfig{
@@ -183,10 +205,12 @@ func LoadResolverConfig(resolverName string) ResolverConfig {
 	return cfg
 }
 
-func LoadBalancerConfig(name string) BalancerConfig {
+// LoadBalancerConfig loads xDS balancer configuration from the config source
+func LoadBalancerConfig(_ string) BalancerConfig {
 	return BalancerConfig{}
 }
 
+// BalancerConfig holds xDS balancer configuration
 type BalancerConfig struct{}
 
 func (b *BalancerConfig) String() string {

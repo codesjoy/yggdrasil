@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package xds
 
 import (
@@ -10,14 +24,21 @@ import (
 	"time"
 )
 
+// HealthStatus represents the health status of an endpoint
 type HealthStatus int
 
 const (
+	// HealthUnknown indicates health status is unknown
 	HealthUnknown HealthStatus = iota
+	// HealthHealthy indicates endpoint is healthy
 	HealthHealthy
+	// HealthUnhealthy indicates endpoint is unhealthy
 	HealthUnhealthy
+	// HealthDraining indicates endpoint is draining
 	HealthDraining
+	// HealthTimeout indicates endpoint has timed out
 	HealthTimeout
+	// HealthDegraded indicates endpoint is degraded
 	HealthDegraded
 )
 
@@ -38,6 +59,7 @@ func (h HealthStatus) String() string {
 	}
 }
 
+// ParseHealthStatus parses a health status string
 func ParseHealthStatus(s string) HealthStatus {
 	switch strings.ToUpper(s) {
 	case "HEALTHY":

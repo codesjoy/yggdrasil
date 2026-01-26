@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -104,9 +118,9 @@ func main() {
 func waitForServer(url string, maxAttempts int, interval time.Duration) error {
 	client := &http.Client{Timeout: 1 * time.Second}
 	for i := 0; i < maxAttempts; i++ {
-		resp, err := client.Get(url + "/v1/shelves")
+		resp, err := client.Get(url + "/v1/shelves") // nolint
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			slog.Info("Server is ready")
 			return nil
 		}
@@ -129,7 +143,11 @@ func testCreateShelf() error {
 		return err
 	}
 
-	httpReq, err := http.NewRequest("POST", "http://localhost:55887/v1/shelves", bytes.NewBuffer(body))
+	httpReq, err := http.NewRequest(
+		"POST",
+		"http://localhost:55887/v1/shelves",
+		bytes.NewBuffer(body),
+	)
 	if err != nil {
 		return err
 	}
@@ -214,7 +232,11 @@ func testCreateBook(parent string) error {
 		return err
 	}
 
-	httpReq, err := http.NewRequest("POST", fmt.Sprintf("http://localhost:55887/v1/%s/books", parent), bytes.NewBuffer(body))
+	httpReq, err := http.NewRequest(
+		"POST",
+		fmt.Sprintf("http://localhost:55887/v1/%s/books", parent),
+		bytes.NewBuffer(body),
+	)
 	if err != nil {
 		return err
 	}
@@ -299,7 +321,11 @@ func testUpdateBook(name string) error {
 		return err
 	}
 
-	httpReq, err := http.NewRequest("PATCH", fmt.Sprintf("http://localhost:55887/v1/%s", name), bytes.NewBuffer(body))
+	httpReq, err := http.NewRequest(
+		"PATCH",
+		fmt.Sprintf("http://localhost:55887/v1/%s", name),
+		bytes.NewBuffer(body),
+	)
 	if err != nil {
 		return err
 	}
@@ -326,7 +352,11 @@ func testUpdateBook(name string) error {
 }
 
 func testDeleteBook(name string) error {
-	httpReq, err := http.NewRequest("DELETE", fmt.Sprintf("http://localhost:55887/v1/%s", name), nil)
+	httpReq, err := http.NewRequest(
+		"DELETE",
+		fmt.Sprintf("http://localhost:55887/v1/%s", name),
+		nil,
+	)
 	if err != nil {
 		return err
 	}
@@ -347,7 +377,11 @@ func testDeleteBook(name string) error {
 }
 
 func testDeleteShelf(name string) error {
-	httpReq, err := http.NewRequest("DELETE", fmt.Sprintf("http://localhost:55887/v1/%s", name), nil)
+	httpReq, err := http.NewRequest(
+		"DELETE",
+		fmt.Sprintf("http://localhost:55887/v1/%s", name),
+		nil,
+	)
 	if err != nil {
 		return err
 	}

@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -21,7 +35,10 @@ type LibraryImpl struct {
 	libraryv1.UnimplementedLibraryServiceServer
 }
 
-func (s *LibraryImpl) CreateShelf(ctx context.Context, req *libraryv1.CreateShelfRequest) (*libraryv1.Shelf, error) {
+func (s *LibraryImpl) CreateShelf(
+	ctx context.Context,
+	req *libraryv1.CreateShelfRequest,
+) (*libraryv1.Shelf, error) {
 	slog.Info("CreateShelf called", "shelf", req.Shelf)
 
 	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "rest-server"))
@@ -34,7 +51,10 @@ func (s *LibraryImpl) CreateShelf(ctx context.Context, req *libraryv1.CreateShel
 	}, nil
 }
 
-func (s *LibraryImpl) GetShelf(ctx context.Context, req *libraryv1.GetShelfRequest) (*libraryv1.Shelf, error) {
+func (s *LibraryImpl) GetShelf(
+	ctx context.Context,
+	req *libraryv1.GetShelfRequest,
+) (*libraryv1.Shelf, error) {
 	slog.Info("GetShelf called", "name", req.Name)
 
 	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "rest-server"))
@@ -46,7 +66,10 @@ func (s *LibraryImpl) GetShelf(ctx context.Context, req *libraryv1.GetShelfReque
 	}, nil
 }
 
-func (s *LibraryImpl) ListShelves(ctx context.Context, req *libraryv1.ListShelvesRequest) (*libraryv1.ListShelvesResponse, error) {
+func (s *LibraryImpl) ListShelves(
+	ctx context.Context,
+	_ *libraryv1.ListShelvesRequest,
+) (*libraryv1.ListShelvesResponse, error) {
 	slog.Info("ListShelves called")
 
 	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "rest-server"))
@@ -61,7 +84,10 @@ func (s *LibraryImpl) ListShelves(ctx context.Context, req *libraryv1.ListShelve
 	}, nil
 }
 
-func (s *LibraryImpl) DeleteShelf(ctx context.Context, req *libraryv1.DeleteShelfRequest) (*emptypb.Empty, error) {
+func (s *LibraryImpl) DeleteShelf(
+	ctx context.Context,
+	req *libraryv1.DeleteShelfRequest,
+) (*emptypb.Empty, error) {
 	slog.Info("DeleteShelf called", "name", req.Name)
 
 	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "rest-server"))
@@ -70,7 +96,10 @@ func (s *LibraryImpl) DeleteShelf(ctx context.Context, req *libraryv1.DeleteShel
 	return &emptypb.Empty{}, nil
 }
 
-func (s *LibraryImpl) MergeShelves(ctx context.Context, req *libraryv1.MergeShelvesRequest) (*libraryv1.Shelf, error) {
+func (s *LibraryImpl) MergeShelves(
+	ctx context.Context,
+	req *libraryv1.MergeShelvesRequest,
+) (*libraryv1.Shelf, error) {
 	slog.Info("MergeShelves called", "name", req.Name)
 
 	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "rest-server"))
@@ -82,7 +111,10 @@ func (s *LibraryImpl) MergeShelves(ctx context.Context, req *libraryv1.MergeShel
 	}, nil
 }
 
-func (s *LibraryImpl) CreateBook(ctx context.Context, req *libraryv1.CreateBookRequest) (*libraryv1.Book, error) {
+func (s *LibraryImpl) CreateBook(
+	ctx context.Context,
+	req *libraryv1.CreateBookRequest,
+) (*libraryv1.Book, error) {
 	slog.Info("CreateBook called", "parent", req.Parent, "book", req.Book)
 
 	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "rest-server"))
@@ -97,7 +129,10 @@ func (s *LibraryImpl) CreateBook(ctx context.Context, req *libraryv1.CreateBookR
 	}, nil
 }
 
-func (s *LibraryImpl) GetBook(ctx context.Context, req *libraryv1.GetBookRequest) (*libraryv1.Book, error) {
+func (s *LibraryImpl) GetBook(
+	ctx context.Context,
+	req *libraryv1.GetBookRequest,
+) (*libraryv1.Book, error) {
 	slog.Info("GetBook called", "name", req.Name)
 
 	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "rest-server"))
@@ -111,7 +146,10 @@ func (s *LibraryImpl) GetBook(ctx context.Context, req *libraryv1.GetBookRequest
 	}, nil
 }
 
-func (s *LibraryImpl) ListBooks(ctx context.Context, req *libraryv1.ListBooksRequest) (*libraryv1.ListBooksResponse, error) {
+func (s *LibraryImpl) ListBooks(
+	ctx context.Context,
+	req *libraryv1.ListBooksRequest,
+) (*libraryv1.ListBooksResponse, error) {
 	slog.Info("ListBooks called", "parent", req.Parent)
 
 	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "rest-server"))
@@ -119,14 +157,32 @@ func (s *LibraryImpl) ListBooks(ctx context.Context, req *libraryv1.ListBooksReq
 
 	return &libraryv1.ListBooksResponse{
 		Books: []*libraryv1.Book{
-			{Name: fmt.Sprintf("%s/books/1", req.Parent), Author: "Author 1", Title: "Title 1", Read: false},
-			{Name: fmt.Sprintf("%s/books/2", req.Parent), Author: "Author 2", Title: "Title 2", Read: true},
-			{Name: fmt.Sprintf("%s/books/3", req.Parent), Author: "Author 3", Title: "Title 3", Read: false},
+			{
+				Name:   fmt.Sprintf("%s/books/1", req.Parent),
+				Author: "Author 1",
+				Title:  "Title 1",
+				Read:   false,
+			},
+			{
+				Name:   fmt.Sprintf("%s/books/2", req.Parent),
+				Author: "Author 2",
+				Title:  "Title 2",
+				Read:   true,
+			},
+			{
+				Name:   fmt.Sprintf("%s/books/3", req.Parent),
+				Author: "Author 3",
+				Title:  "Title 3",
+				Read:   false,
+			},
 		},
 	}, nil
 }
 
-func (s *LibraryImpl) DeleteBook(ctx context.Context, req *libraryv1.DeleteBookRequest) (*emptypb.Empty, error) {
+func (s *LibraryImpl) DeleteBook(
+	ctx context.Context,
+	req *libraryv1.DeleteBookRequest,
+) (*emptypb.Empty, error) {
 	slog.Info("DeleteBook called", "name", req.Name)
 
 	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "rest-server"))
@@ -135,7 +191,10 @@ func (s *LibraryImpl) DeleteBook(ctx context.Context, req *libraryv1.DeleteBookR
 	return &emptypb.Empty{}, nil
 }
 
-func (s *LibraryImpl) UpdateBook(ctx context.Context, req *libraryv1.UpdateBookRequest) (*libraryv1.Book, error) {
+func (s *LibraryImpl) UpdateBook(
+	ctx context.Context,
+	req *libraryv1.UpdateBookRequest,
+) (*libraryv1.Book, error) {
 	slog.Info("UpdateBook called", "book", req.Book)
 
 	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "rest-server"))
@@ -149,7 +208,10 @@ func (s *LibraryImpl) UpdateBook(ctx context.Context, req *libraryv1.UpdateBookR
 	}, nil
 }
 
-func (s *LibraryImpl) MoveBook(ctx context.Context, req *libraryv1.MoveBookRequest) (*libraryv1.Book, error) {
+func (s *LibraryImpl) MoveBook(
+	ctx context.Context,
+	req *libraryv1.MoveBookRequest,
+) (*libraryv1.Book, error) {
 	slog.Info("MoveBook called", "name", req.Name, "other_shelf_name", req.OtherShelfName)
 
 	_ = metadata.SetHeader(ctx, metadata.Pairs("server", "rest-server"))

@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package k8s
 
 import (
@@ -18,6 +32,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/resolver"
 )
 
+// Resolver implements resolver.Resolver
 type Resolver struct {
 	name    string
 	cfg     ResolverConfig
@@ -30,6 +45,7 @@ type Resolver struct {
 	states   map[string]resolver.State
 }
 
+// NewResolver implements resolver.NewResolver
 func NewResolver(name string, cfg ResolverConfig) (*Resolver, error) {
 	return &Resolver{
 		name:     name,
@@ -41,10 +57,12 @@ func NewResolver(name string, cfg ResolverConfig) (*Resolver, error) {
 	}, nil
 }
 
+// Type implements resolver.Resolver
 func (r *Resolver) Type() string {
 	return "kubernetes"
 }
 
+// AddWatch implements resolver.Resolver
 func (r *Resolver) AddWatch(appName string, w resolver.Client) error {
 	if r.initErr != nil {
 		return r.initErr
@@ -73,6 +91,7 @@ func (r *Resolver) AddWatch(appName string, w resolver.Client) error {
 	return nil
 }
 
+// DelWatch implements resolver.Resolver
 func (r *Resolver) DelWatch(appName string, w resolver.Client) error {
 	r.mu.Lock()
 	ws := r.watchers[appName]
@@ -164,7 +183,12 @@ func (r *Resolver) watch(ctx context.Context, appName string) error {
 	return r.watchEndpoints(ctx, kube, appName)
 }
 
-func (r *Resolver) watchEndpoints(ctx context.Context, kube kubernetes.Interface, appName string) error {
+//nolint:staticcheck // SA1019: corev1.Endpoints is deprecated in v1.33+, kept for backward compatibility with older Kubernetes clusters
+func (r *Resolver) watchEndpoints(
+	ctx context.Context,
+	kube kubernetes.Interface,
+	appName string,
+) error {
 	listOpts := metav1.ListOptions{
 		FieldSelector: fmt.Sprintf("metadata.name=%s", appName),
 	}
@@ -210,7 +234,12 @@ func (r *Resolver) watchEndpoints(ctx context.Context, kube kubernetes.Interface
 	}
 }
 
-func (r *Resolver) listEndpoints(ctx context.Context, kube kubernetes.Interface, appName string) (resolver.State, error) {
+//nolint:staticcheck // SA1019: corev1.Endpoints is deprecated in v1.33+, kept for backward compatibility with older Kubernetes clusters
+func (r *Resolver) listEndpoints(
+	ctx context.Context,
+	kube kubernetes.Interface,
+	appName string,
+) (resolver.State, error) {
 	opts := metav1.GetOptions{}
 	ep, err := kube.CoreV1().Endpoints(r.cfg.Namespace).Get(ctx, appName, opts)
 	if err != nil {
@@ -219,6 +248,7 @@ func (r *Resolver) listEndpoints(ctx context.Context, kube kubernetes.Interface,
 	return r.endpointsToState(ep), nil
 }
 
+//nolint:staticcheck // SA1019: corev1.Endpoints is deprecated in v1.33+, kept for backward compatibility with older Kubernetes clusters
 func (r *Resolver) endpointsToState(ep *corev1.Endpoints) resolver.State {
 	baseState := resolver.BaseState{
 		Attributes: map[string]any{
@@ -261,6 +291,7 @@ func (r *Resolver) endpointsToState(ep *corev1.Endpoints) resolver.State {
 	return baseState
 }
 
+//nolint:staticcheck // SA1019: corev1.EndpointPort is deprecated in v1.33+, kept for backward compatibility with older Kubernetes clusters
 func (r *Resolver) selectPort(ports []corev1.EndpointPort) *corev1.EndpointPort {
 	if len(ports) == 0 {
 		return nil
@@ -282,7 +313,11 @@ func (r *Resolver) selectPort(ports []corev1.EndpointPort) *corev1.EndpointPort 
 	return &ports[0]
 }
 
-func (r *Resolver) watchEndpointSlice(ctx context.Context, kube kubernetes.Interface, appName string) error {
+func (r *Resolver) watchEndpointSlice(
+	ctx context.Context,
+	kube kubernetes.Interface,
+	appName string,
+) error {
 	listOpts := metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("kubernetes.io/service-name=%s", appName),
 	}
@@ -328,7 +363,11 @@ func (r *Resolver) watchEndpointSlice(ctx context.Context, kube kubernetes.Inter
 	}
 }
 
-func (r *Resolver) listEndpointSlice(ctx context.Context, kube kubernetes.Interface, appName string) (resolver.State, error) {
+func (r *Resolver) listEndpointSlice(
+	ctx context.Context,
+	kube kubernetes.Interface,
+	appName string,
+) (resolver.State, error) {
 	opts := metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("kubernetes.io/service-name=%s", appName),
 	}
@@ -353,7 +392,7 @@ func (r *Resolver) endpointSlicesToState(slices []discoveryv1.EndpointSlice) res
 				continue
 			}
 			for _, endpoint := range slice.Endpoints {
-				if endpoint.Addresses == nil || len(endpoint.Addresses) == 0 {
+				if len(endpoint.Addresses) == 0 {
 					continue
 				}
 				for _, addr := range endpoint.Addresses {

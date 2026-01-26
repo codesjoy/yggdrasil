@@ -1,7 +1,22 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package etcd
 
 import (
 	"context"
+	// nolint:gosec
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
@@ -14,6 +29,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
+// Registry is a registry for etcd.
 type Registry struct {
 	cfg RegistryConfig
 	cli *clientv3.Client
@@ -29,6 +45,7 @@ type registryEntry struct {
 	lease  clientv3.LeaseID
 }
 
+// NewRegistry creates a new registry.
 func NewRegistry(cfg RegistryConfig) (*Registry, error) {
 	if cfg.Prefix == "" {
 		cfg.Prefix = "/yggdrasil/registry"
@@ -51,8 +68,10 @@ func NewRegistry(cfg RegistryConfig) (*Registry, error) {
 	}, nil
 }
 
+// Type returns the registry type.
 func (r *Registry) Type() string { return "etcd" }
 
+// Register adds a service instance to the registry.
 func (r *Registry) Register(ctx context.Context, inst yregistry.Instance) error {
 	if inst == nil {
 		return errors.New("nil instance")
@@ -76,9 +95,7 @@ func (r *Registry) Register(ctx context.Context, inst yregistry.Instance) error 
 	go func() {
 		defer func() {
 			r.mu.Lock()
-			if _, ok := r.regs[key]; ok {
-				delete(r.regs, key)
-			}
+			delete(r.regs, key)
 			r.mu.Unlock()
 		}()
 
@@ -97,6 +114,7 @@ func (r *Registry) Register(ctx context.Context, inst yregistry.Instance) error 
 	return r.putOnce(ctx, key, value)
 }
 
+// Deregister deletes a service instance from the registry.
 func (r *Registry) Deregister(ctx context.Context, inst yregistry.Instance) error {
 	if inst == nil {
 		return errors.New("nil instance")
@@ -118,6 +136,7 @@ func (r *Registry) Deregister(ctx context.Context, inst yregistry.Instance) erro
 	return err
 }
 
+// Close closes the registry.
 func (r *Registry) Close() error {
 	r.once.Do(func() {
 		close(r.close)
@@ -236,7 +255,7 @@ func (r *Registry) buildKeyValue(inst yregistry.Instance) (string, string, error
 	if err != nil {
 		return "", "", err
 	}
-	h := sha1.New()
+	h := sha1.New() // nolint:gosec
 	h.Write(b)
 	sum := hex.EncodeToString(h.Sum(nil))
 

@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package xds
 
 import (
@@ -7,12 +21,14 @@ import (
 	"time"
 )
 
+// RateLimiterConfig holds rate limiter configuration
 type RateLimiterConfig struct {
 	MaxTokens     uint32
 	TokensPerFill uint32
 	FillInterval  time.Duration
 }
 
+// RateLimiter implements token bucket rate limiting
 type RateLimiter struct {
 	config *RateLimiterConfig
 
@@ -28,6 +44,7 @@ type RateLimiter struct {
 	wg     sync.WaitGroup
 }
 
+// NewRateLimiter creates a new rate limiter with the given configuration
 func NewRateLimiter(config *RateLimiterConfig) *RateLimiter {
 	if config == nil {
 		config = &RateLimiterConfig{
@@ -77,6 +94,7 @@ func (rl *RateLimiter) refillTokens() {
 	}
 }
 
+// Allow checks if a request is allowed under the rate limit
 func (rl *RateLimiter) Allow() bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
@@ -92,6 +110,7 @@ func (rl *RateLimiter) Allow() bool {
 	return false
 }
 
+// Wait blocks until a request is allowed or context is cancelled
 func (rl *RateLimiter) Wait(ctx context.Context) error {
 	for {
 		if rl.Allow() {
@@ -107,11 +126,13 @@ func (rl *RateLimiter) Wait(ctx context.Context) error {
 	}
 }
 
+// Stop stops the rate limiter's token refill goroutine
 func (rl *RateLimiter) Stop() {
 	rl.cancel()
 	rl.wg.Wait()
 }
 
+// RateLimiterStats holds rate limiter statistics
 type RateLimiterStats struct {
 	CurrentTokens uint32
 	MaxTokens     uint32
@@ -119,6 +140,7 @@ type RateLimiterStats struct {
 	RejectedCount uint64
 }
 
+// GetStats returns current rate limiter statistics
 func (rl *RateLimiter) GetStats() RateLimiterStats {
 	return RateLimiterStats{
 		CurrentTokens: atomic.LoadUint32(&rl.tokens),

@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package xds
 
 import (
@@ -55,8 +69,18 @@ func TestMatchRoute(t *testing.T) {
 	}{
 		{"exact match", "/exact", nil, "cluster-exact"},
 		{"prefix match without header", "/prefix/foo", nil, "cluster-prefix"},
-		{"prefix match with header", "/prefix/foo", map[string]string{"x-version": "v2"}, "cluster-prefix-header"},
-		{"prefix match with wrong header", "/prefix/foo", map[string]string{"x-version": "v1"}, "cluster-prefix"},
+		{
+			"prefix match with header",
+			"/prefix/foo",
+			map[string]string{"x-version": "v2"},
+			"cluster-prefix-header",
+		},
+		{
+			"prefix match with wrong header",
+			"/prefix/foo",
+			map[string]string{"x-version": "v1"},
+			"cluster-prefix",
+		},
 		{"regex match", "/regex/123", nil, "cluster-regex"},
 		{"regex no match", "/regex/abc", nil, "cluster-default"},
 		{"default catch-all", "/other", nil, "cluster-default"},
