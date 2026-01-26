@@ -1,12 +1,14 @@
 yggdrasil:
   application:
     namespace: "dev"
+
   client:
-    github.com.codesjoy.yggdrasil.example.advanced.error-handling:
+    github.com.codesjoy.yggdrasil.example.protogen.error-handling:
       remote:
         endpoints:
-          - address: "127.0.0.1:55882"
+          - address: "127.0.0.1:55884"
             protocol: "grpc"
+
   interceptor:
     unary_client: "logging"
     stream_client: "logging"

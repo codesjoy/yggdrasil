@@ -6,7 +6,7 @@ yggdrasil:
   remote:
     protocol:
       grpc:
-        address: "127.0.0.1:55882"
+        address: "127.0.0.1:55884"
 
   interceptor:
     unary_server: "logging"

@@ -1,186 +1,315 @@
-# 错误处理示例
+# Error Handling Example
 
-本示例演示如何在 Yggdrasil 框架中处理错误，包括自定义错误 reason、错误传播和重试机制。
+This example demonstrates comprehensive error handling in Yggdrasil using the Reason system.
 
-## 你会得到什么
+## Overview
 
-- 自定义错误 reason 的定义和使用
-- 错误传播和包装
-- 错误码映射
-- 重试机制
-- 错误恢复
+This example shows how to:
+- Define Reason enums in protobuf
+- Use `protoc-gen-yggdrasil-reason` to generate error handling code
+- Return structured errors with metadata from the server using `status.FromReason()`
+- Parse and handle errors on the client using `status.FromError()` and `status.IsReason()`
+- Implement retry mechanisms with exponential backoff
 
-## 错误处理核心概念
+## Architecture
 
-### 1. 错误 Reason
+The example implements a simple library management service with the following error scenarios:
 
-Yggdrasil 使用 `reason` 来表示业务错误类型，比传统的错误码更具语义化。
+### User Errors (4xx)
+- `USER_NOT_FOUND` - User does not exist
+- `INVALID_CREDENTIALS` - Authentication failed
+- `INVALID_INPUT` - Invalid request parameters
+- `EMAIL_ALREADY_EXISTS` - Email already registered
 
-**定义 Reason**:
+### Resource Errors (4xx)
+- `BOOK_NOT_FOUND` - Book does not exist
+- `SHELF_NOT_FOUND` - Shelf does not exist
+- `BOOK_ALREADY_BORROWED` - Book is already borrowed
+- `SHELF_FULL` - Shelf has reached capacity
 
-```protobuf
-enum Reason {
-  REASON_UNSPECIFIED = 0;
-  USER_NOT_FOUND = 1;
-  BOOK_NOT_FOUND = 2;
-  INVALID_INPUT = 3;
-  INTERNAL_ERROR = 4;
+### System Errors (5xx)
+- `INTERNAL_ERROR` - Unexpected internal error
+- `DATABASE_ERROR` - Database operation failed
+- `NETWORK_ERROR` - Network operation failed
+
+## Error Handling Core Concepts
+
+### Reason System
+
+The Reason system provides:
+1. **Structured error codes** - Enum values for each error type
+2. **gRPC status code mapping** - Automatic mapping to gRPC codes (NOT_FOUND, INVALID_ARGUMENT, etc.)
+3. **Error metadata propagation** - Attach context to errors for debugging
+4. **HTTP status code mapping** - Automatic conversion for REST endpoints
+
+### Status API
+
+**Server-side:**
+- `status.FromReason(err, reason, metadata)` - Create a status with reason and metadata
+- `status.WithCode(code, err)` - Create a status with gRPC code
+- `st.WithDetails(details)` - Add additional details to the status
+
+**Client-side:**
+- `status.FromError(err)` - Parse error into Status
+- `status.IsReason(err, reason)` - Check if error matches specific reason
+- `st.Code()` - Get gRPC status code
+- `st.HTTPCode()` - Get HTTP status code
+- `st.ErrorInfo().Metadata` - Get error metadata
+
+## Running the Example
+
+### 1. Generate Code
+
+```bash
+cd example/proto/error-handling
+make generate
+```
+
+This generates:
+- `reason.pb.go` - Reason enum definitions
+- `reason_reason.pb.go` - Reason methods and gRPC code mappings
+- `service.pb.go` - Message definitions
+- `service_rpc.pb.go` - Service client and server interfaces
+
+### 2. Start Server
+
+Terminal 1:
+```bash
+cd example/protogen/error-handling/server
+go run main.go
+```
+
+The server will start on `127.0.0.1:55884`.
+
+### 3. Run Client
+
+Terminal 2:
+```bash
+cd example/protogen/error-handling/client
+go run main.go
+```
+
+The client will run all 12 test scenarios and display the results.
+
+## Expected Output
+
+### Test 1: Successful CreateBook
+```
+✓ Book created successfully
+```
+
+### Test 2: USER_NOT_FOUND
+```
+✓ Correctly identified USER_NOT_FOUND
+grpc_code: NOT_FOUND
+http_code: 404
+message: "user non-existent-user not found"
+metadata: {user_id: "non-existent-user"}
+```
+
+### Test 3: INVALID_INPUT
+```
+✓ Correctly identified INVALID_INPUT
+grpc_code: INVALID_ARGUMENT
+http_code: 400
+message: "invalid email format"
+metadata: {field: "email", value: "invalid-email"}
+```
+
+### Test 4: INVALID_CREDENTIALS
+```
+✓ Correctly identified INVALID_CREDENTIALS
+grpc_code: UNAUTHENTICATED
+http_code: 401
+message: "invalid credentials"
+metadata: {email: "test@example.com"}
+```
+
+### Test 5: EMAIL_ALREADY_EXISTS
+```
+✓ Correctly identified EMAIL_ALREADY_EXISTS
+grpc_code: ALREADY_EXISTS
+http_code: 409
+message: "email duplicate@example.com already registered"
+metadata: {email: "duplicate@example.com"}
+```
+
+### Test 6: BOOK_NOT_FOUND
+```
+✓ Correctly identified BOOK_NOT_FOUND
+grpc_code: NOT_FOUND
+http_code: 404
+message: "book non-existent-book not found"
+metadata: {book_id: "non-existent-book"}
+```
+
+### Test 7: BOOK_ALREADY_BORROWED
+```
+✓ Correctly identified BOOK_ALREADY_BORROWED
+grpc_code: FAILED_PRECONDITION
+http_code: 400
+message: "book is already borrowed"
+metadata: {book_id: "...", borrower_id: "..."}
+```
+
+### Test 8: SHELF_FULL
+```
+✓ Correctly identified SHELF_FULL
+grpc_code: RESOURCE_EXHAUSTED
+http_code: 429
+message: "shelf shelf-X is full"
+metadata: {shelf_id: "...", capacity: "1", current_count: "1"}
+```
+
+### Test 9: DATABASE_ERROR
+```
+✓ Correctly identified DATABASE_ERROR
+grpc_code: UNAVAILABLE
+http_code: 503
+message: "database connection failed"
+metadata: {host: "localhost:5432", database: "library_db"}
+```
+
+### Test 10: NETWORK_ERROR
+```
+✓ Correctly identified NETWORK_ERROR
+grpc_code: UNAVAILABLE
+http_code: 503
+message: "network timeout"
+metadata: {target: "external-api.example.com", timeout: "30s"}
+```
+
+### Test 11: INTERNAL_ERROR
+```
+✓ Correctly identified INTERNAL_ERROR
+grpc_code: INTERNAL
+http_code: 500
+message: "unexpected internal error"
+metadata: {component: "library-service", version: "1.0.0"}
+```
+
+### Test 12: Retry Mechanism
+```
+✓ Retry mechanism test completed
+attempts: 1
+result: all retries exhausted (as expected for non-retryable error)
+```
+
+## Server Error Handling Patterns
+
+### 1. Parameter Validation
+
+```go
+if req.Email == "" || !strings.Contains(req.Email, "@") {
+    return nil, status.FromReason(
+        errors.New("invalid email format"),
+        errorhandlingpb.Reason_INVALID_INPUT,
+        map[string]string{"field": "email", "value": req.Email},
+    )
 }
 ```
 
-**使用 Reason**:
+### 2. Resource Not Found
 
 ```go
-import "github.com/codesjoy/yggdrasil/v2/status"
+if !s.userExists(req.UserId) {
+    return nil, status.FromReason(
+        fmt.Errorf("user %s not found", req.UserId),
+        errorhandlingpb.Reason_USER_NOT_FOUND,
+        map[string]string{"user_id": req.UserId},
+    )
+}
+```
 
+### 3. Business Logic Errors
+
+```go
+if book.BorrowerId != "" {
+    return nil, status.FromReason(
+        errors.New("book is already borrowed"),
+        errorhandlingpb.Reason_BOOK_ALREADY_BORROWED,
+        map[string]string{
+            "book_id": req.BookId,
+            "borrower_id": book.BorrowerId,
+        },
+    )
+}
+```
+
+### 4. System Errors
+
+```go
 return nil, status.FromReason(
-    errors.New("user not found"),
-    librarypb.Reason_USER_NOT_FOUND,
-    nil,
+    errors.New("database connection failed"),
+    errorhandlingpb.Reason_DATABASE_ERROR,
+    map[string]string{"host": "localhost:5432"},
 )
 ```
 
-### 2. 错误码映射
+## Client Error Handling Patterns
 
-Yggdrasil 自动将错误 reason 映射到 gRPC 错误码和 HTTP 状态码：
-
-| Reason | gRPC Code | HTTP Code |
-|--------|-----------|------------|
-| USER_NOT_FOUND | NOT_FOUND (5) | 404 |
-| INVALID_INPUT | INVALID_ARGUMENT (3) | 400 |
-| INTERNAL_ERROR | INTERNAL (13) | 500 |
-
-### 3. 错误传播
-
-错误从服务端传播到客户端时，保持原始错误信息：
-
-**服务端**:
+### 1. Error Parsing
 
 ```go
-func (s *Server) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.User, error) {
-    user, err := s.db.GetUser(req.Id)
-    if err != nil {
-        if errors.Is(err, ErrUserNotFound) {
-            return nil, status.FromReason(
-                err,
-                pb.Reason_USER_NOT_FOUND,
-                nil,
-            )
-        }
-        return nil, status.FromError(err)
-    }
-    return user, nil
-}
-```
-
-**客户端**:
-
-```go
-resp, err := client.GetUser(ctx, &pb.GetUserRequest{Id: "123"})
+_, err := client.GetUser(ctx, &pb.GetUserRequest{UserId: "123"})
 if err != nil {
     st := status.FromError(err)
-    
-    if st.ErrorInfo().Reason == pb.Reason_USER_NOT_FOUND {
-        slog.Info("user not found", "id", "123")
-        return nil
-    }
-    
-    slog.Error("failed to get user", slog.Any("error", err))
-    return err
+    slog.Info("Error details",
+        "code", st.Code(),
+        "http_code", st.HTTPCode(),
+        "message", st.Message(),
+    )
 }
 ```
 
-## 错误处理模式
-
-### 1. 基本错误处理
-
-**服务端**:
+### 2. Reason Checking
 
 ```go
-func (s *Server) CreateBook(ctx context.Context, req *pb.CreateBookRequest) (*pb.Book, error) {
-    if req.Book.Title == "" {
-        return nil, status.FromReason(
-            errors.New("book title is required"),
-            pb.Reason_INVALID_INPUT,
-            nil,
-        )
-    }
-    
-    book, err := s.db.CreateBook(req.Book)
-    if err != nil {
-        return nil, status.FromError(err)
-    }
-    
-    return book, nil
+if status.IsReason(err, pb.Reason_USER_NOT_FOUND) {
+    slog.Info("✓ Correctly identified USER_NOT_FOUND")
+    // Handle user not found
 }
 ```
 
-### 2. 错误包装
-
-使用 `fmt.Errorf` 包装错误，保留原始错误信息：
+### 3. Metadata Extraction
 
 ```go
-func (s *Server) CreateBook(ctx context.Context, req *pb.CreateBookRequest) (*pb.Book, error) {
-    book, err := s.db.CreateBook(req.Book)
-    if err != nil {
-        return nil, status.FromError(fmt.Errorf("failed to create book: %w", err))
-    }
-    return book, nil
+if st.ErrorInfo() != nil {
+    slog.Info("Error metadata", "metadata", st.ErrorInfo().Metadata)
 }
 ```
 
-### 3. 错误恢复
-
-使用 `recover()` 捕获 panic，返回错误：
-
-```go
-func (s *Server) ProcessData(ctx context.Context, req *pb.ProcessDataRequest) (*pb.ProcessDataResponse, error) {
-    defer func() {
-        if r := recover(); r != nil {
-            slog.Error("panic recovered", "error", r)
-        }
-    }()
-    
-    result := s.process(req.Data)
-    return &pb.ProcessDataResponse{Result: result}, nil
-}
-```
-
-### 4. 重试机制
-
-**指数退避重试**:
+### 4. Retry Mechanism
 
 ```go
 func retryWithBackoff(fn func() error, maxAttempts int) error {
     var lastErr error
-    
+
     for i := 0; i < maxAttempts; i++ {
         err := fn()
         if err == nil {
             return nil
         }
-        
+
         lastErr = err
-        
         st := status.FromError(err)
+
+        // Check if error is retryable
         if isRetryable(st) {
             backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
-            slog.Warn("retrying", "attempt", i+1, "backoff", backoff)
             time.Sleep(backoff)
             continue
         }
-        
+
         return err
     }
-    
+
     return fmt.Errorf("max retries reached: %w", lastErr)
 }
 
 func isRetryable(st *status.Status) bool {
-    code := st.Code()
-    
-    switch code {
-    case codes.DeadlineExceeded, codes.Unavailable, codes.Aborted:
+    switch st.Code() {
+    case code.Code_DEADLINE_EXCEEDED, code.Code_UNAVAILABLE, code.Code_ABORTED:
         return true
     default:
         return false
@@ -188,223 +317,133 @@ func isRetryable(st *status.Status) bool {
 }
 ```
 
-**使用重试**:
+## Common Pitfalls
 
+### 1. Forgetting to Check Error Info
+
+❌ **Bad:**
 ```go
-err := retryWithBackoff(func() error {
-    _, err := client.Call(ctx, req)
-    return err
-}, 3)
-```
-
-### 5. 错误聚合
-
-聚合多个错误：
-
-```go
-type MultiError struct {
-    Errors []error
-}
-
-func (e *MultiError) Error() string {
-    var sb strings.Builder
-    for i, err := range e.Errors {
-        if i > 0 {
-            sb.WriteString("; ")
-        }
-        sb.WriteString(err.Error())
-    }
-    return sb.String()
-}
-
-func (e *MultiError) Add(err error) {
-    if err != nil {
-        e.Errors = append(e.Errors, err)
-    }
-}
-
-func (e *MultiError) ToStatus() error {
-    if len(e.Errors) == 0 {
-        return nil
-    }
-    
-    return status.FromReason(e, pb.Reason_INTERNAL_ERROR, nil)
+if err != nil {
+    slog.Error("Error", "error", err)
 }
 ```
 
-## 错误最佳实践
-
-### 1. 定义清晰的错误 Reason
-
-```protobuf
-enum Reason {
-  REASON_UNSPECIFIED = 0;
-  
-  User errors (4xx)
-  USER_NOT_FOUND = 1;
-  INVALID_CREDENTIALS = 2;
-  INVALID_INPUT = 3;
-  
-  Resource errors (4xx)
-  BOOK_NOT_FOUND = 10;
-  BOOK_ALREADY_EXISTS = 11;
-  
-  System errors (5xx)
-  INTERNAL_ERROR = 100;
-  DATABASE_ERROR = 101;
-  NETWORK_ERROR = 102;
-}
-```
-
-### 2. 错误日志记录
-
-记录足够的错误信息，但不记录敏感数据：
-
+✅ **Good:**
 ```go
-func (s *Server) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.User, error) {
-    if req.Email == "" {
-        slog.Warn("invalid input", "field", "email")
-        return nil, status.FromReason(
-            errors.New("email is required"),
-            pb.Reason_INVALID_INPUT,
-            nil,
-        )
-    }
-    
-    user, err := s.db.CreateUser(req.User)
-    if err != nil {
-        slog.Error("failed to create user", "email", req.Email, "error", err)
-        return nil, status.FromError(err)
-    }
-    
-    return user, nil
-}
-```
-
-### 3. 错误上下文
-
-添加错误上下文信息：
-
-```go
-func (s *Server) GetBook(ctx context.Context, req *pb.GetBookRequest) (*pb.Book, error) {
-    book, err := s.db.GetBook(req.Id)
-    if err != nil {
-        if errors.Is(err, ErrBookNotFound) {
-            return nil, status.FromReason(
-                fmt.Errorf("book not found: %s", req.Id),
-                pb.Reason_BOOK_NOT_FOUND,
-                map[string]string{"book_id": req.Id},
-            )
-        }
-        return nil, status.FromError(err)
-    }
-    return book, nil
-}
-```
-
-### 4. 错误恢复
-
-在关键路径上添加 panic 恢复：
-
-```go
-func (s *Server) StreamBooks(req *pb.StreamBooksRequest, stream pb.LibraryService_StreamBooksServer) error {
-    defer func() {
-        if r := recover(); r != nil {
-            slog.Error("panic in StreamBooks", "error", r)
-            _ = stream.Send(&pb.Book{Error: "internal error"})
-        }
-    }()
-    
-    for book := range s.db.ListBooks() {
-        if err := stream.Send(book); err != nil {
-            return err
-        }
-    }
-    return nil
-}
-```
-
-## 常见问题
-
-**Q: 如何选择合适的错误码？**
-
-A: 遵循以下原则：
-- 4xx 错误：客户端错误（如 INVALID_ARGUMENT、NOT_FOUND）
-- 5xx 错误：服务端错误（如 INTERNAL、UNAVAILABLE）
-- 使用具体的错误码，避免使用 UNKNOWN
-
-**Q: 什么时候使用自定义 reason？**
-
-A: 当需要区分业务逻辑错误时使用自定义 reason，例如：
-- `USER_NOT_FOUND` vs `BOOK_NOT_FOUND`
-- `INVALID_CREDENTIALS` vs `INVALID_INPUT`
-
-**Q: 如何处理错误详情？**
-
-A: 使用 `st.Details()` 获取错误详情：
-
-```go
-st := status.FromError(err)
-if details := st.Details(); len(details) > 0 {
-    for _, detail := range details {
-        if d, ok := detail.(*pb.ErrorDetail); ok {
-            slog.Info("error detail", "field", d.Field, "message", d.Message)
-        }
+if err != nil {
+    st := status.FromError(err)
+    if st.ErrorInfo() != nil {
+        slog.Error("Error", "metadata", st.ErrorInfo().Metadata)
     }
 }
 ```
 
-**Q: 如何实现重试？**
+### 2. Not Using Reason Checking
 
-A: 使用指数退避算法：
-
+❌ **Bad:**
 ```go
-for i := 0; i < maxRetries; i++ {
-    err := doRequest()
+if err != nil && strings.Contains(err.Error(), "not found") {
+    // Fragile string matching
+}
+```
+
+✅ **Good:**
+```go
+if status.IsReason(err, pb.Reason_USER_NOT_FOUND) {
+    // Reliable reason checking
+}
+```
+
+### 3. Missing Metadata
+
+❌ **Bad:**
+```go
+return nil, status.FromReason(
+    errors.New("user not found"),
+    pb.Reason_USER_NOT_FOUND,
+    nil, // Missing context!
+)
+```
+
+✅ **Good:**
+```go
+return nil, status.FromReason(
+    errors.New("user not found"),
+    pb.Reason_USER_NOT_FOUND,
+    map[string]string{"user_id": req.UserId}, // Include context
+)
+```
+
+### 4. Retry Non-Retryable Errors
+
+❌ **Bad:**
+```go
+// Retrying all errors
+for i := 0; i < 3; i++ {
+    err := fn()
     if err == nil {
         return nil
     }
-    
-    if !isRetryable(err) {
-        return err
-    }
-    
-    time.Sleep(time.Duration(math.Pow(2, float64(i))) * time.Second)
+    time.Sleep(time.Second)
 }
 ```
 
-**Q: 如何处理并发错误？**
-
-A: 使用 errgroup 或自定义错误聚合：
-
+✅ **Good:**
 ```go
-var g errgroup.Group
-var mu sync.Mutex
-var errs []error
-
-g.Go(func() error {
-    if err := doWork1(); err != nil {
-        mu.Lock()
-        errs = append(errs, err)
-        mu.Unlock()
+// Only retry retryable errors
+for i := 0; i < 3; i++ {
+    err := fn()
+    if err == nil {
+        return nil
     }
-    return nil
-})
-
-g.Wait()
+    st := status.FromError(err)
+    if !isRetryable(st) {
+        return err
+    }
+    time.Sleep(time.Second)
+}
 ```
 
-**Q: 错误日志应该记录什么？**
+## Best Practices
 
-A: 记录以下信息：
-- 错误类型和消息
-- 请求参数（脱敏）
-- 错误堆栈（对于内部错误）
-- 相关的上下文信息
+1. **Always use Reason enums** - Define all error cases in protobuf
+2. **Include metadata** - Provide context for debugging (IDs, field names, etc.)
+3. **Check specific reasons** - Use `status.IsReason()` instead of string matching
+4. **Implement retry logic** - Use exponential backoff for retryable errors
+5. **Log error details** - Include code, message, and metadata in logs
+6. **Handle non-retryable errors** - Return immediately for client errors (4xx)
+7. **Test all error scenarios** - Ensure all reasons are handled correctly
 
-## 相关文档
+## File Structure
 
-- [Yggdrasil 主文档](../../../README.md)
-- [Sample Server 示例](../../sample/server/)
-- [Sample Client 示例](../../sample/client/)
-- [中间件示例](../middleware/)
+```
+example/
+├── proto/
+│   └── error-handling/
+│       ├── Makefile
+│       ├── reason.proto          # Reason enum definitions
+│       └── service.proto         # Service definition
+└── protogen/
+    └── error-handling/
+        ├── README.md             # This file
+        ├── reason.pb.go          # Generated enum
+        ├── reason_reason.pb.go   # Generated methods
+        ├── service.pb.go         # Generated messages
+        ├── service_rpc.pb.go     # Generated service
+        ├── server/
+        │   ├── main.go           # Server implementation
+        │   └── config.yaml       # Server config
+        └── client/
+            ├── main.go           # Client implementation
+            └── config.yaml       # Client config
+```
+
+## Summary
+
+This example demonstrates a complete error handling workflow in Yggdrasil:
+- ✅ Define Reason enums in protobuf
+- ✅ Generate error handling code with protoc plugins
+- ✅ Return structured errors with metadata from server
+- ✅ Parse and handle errors on client
+- ✅ Implement retry mechanisms with exponential backoff
+- ✅ Handle different error types (user, resource, system errors)
