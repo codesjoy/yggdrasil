@@ -219,9 +219,30 @@ func buildHTTPRule(
 	} else if body != "" {
 		md.HasBody = true
 		md.Body = "." + camelCaseVars(body)
+		// Store the body field type for initialization in generated code
+		if bodyType := getBodyFieldType(g, m.Input, body); bodyType != "" {
+			md.BodyType = bodyType
+		}
 	}
 
 	return md, nil
+}
+
+// getBodyFieldType returns the Go type name of the body field from the input message
+func getBodyFieldType(g *protogen.GeneratedFile, msg *protogen.Message, bodyField string) string {
+	// The bodyField from annotations is typically in snake_case (e.g., "book")
+	// We need to match it against the protobuf field name
+	for _, field := range msg.Fields {
+		// Check if this is the field we're looking for by comparing field names
+		// The Desc.Name() returns the protobuf field name in snake_case
+		if string(field.Desc.Name()) == bodyField || field.Desc.JSONName() == bodyField {
+			// If it's a message type, return the Go type name
+			if field.Message != nil {
+				return g.QualifiedGoIdent(field.Message.GoIdent)
+			}
+		}
+	}
+	return ""
 }
 
 func buildMethodDesc(
