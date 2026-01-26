@@ -332,3 +332,46 @@ func TestBalancerClient_NewRemoteClient(t *testing.T) {
 		t.Error("expected remote client to be cached and same instance")
 	}
 }
+
+func TestNewClient_WithDefaults(t *testing.T) {
+	appName := "test_defaults_app"
+	endpoints := []resolver.BaseEndpoint{
+		{Address: "127.0.0.1:8080", Protocol: "mock_protocol"},
+	}
+	conf := map[string]interface{}{
+		"remote": map[string]interface{}{
+			"endpoints": endpoints,
+		},
+		// Note: NOT specifying balancer - should default to "default" -> round_robin
+		// Note: NOT specifying resolver - should use static endpoints
+	}
+
+	if err := setupConfig(appName, conf); err != nil {
+		t.Fatalf("setupConfig failed: %v", err)
+	}
+
+	cli, err := NewClient(context.Background(), appName)
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+	defer cli.Close()
+
+	c := cli.(*client)
+
+	// Verify resolver is nil (using static endpoints)
+	if c.resolver != nil {
+		t.Error("expected resolver to be nil for static config")
+	}
+
+	// Verify balancer is round_robin (default)
+	if c.balancer.Type() != "round_robin" {
+		t.Errorf("expected balancer type round_robin, got %s", c.balancer.Type())
+	}
+
+	// Wait for state update (async in NewClient -> updateState -> updatePicker)
+	time.Sleep(50 * time.Millisecond)
+
+	// The balancer should have received the static endpoint
+	// We can't check the concrete type since it's not exported, but we verified the Type()
+}
+

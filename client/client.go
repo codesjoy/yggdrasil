@@ -285,7 +285,11 @@ func (c *client) initResolverAndBalancer(cfg config.Values) error {
 		if err != nil {
 			return err
 		}
-		c.resolver = r
+		// r can be nil for "default" with no config (use static endpoints)
+		if r != nil {
+			c.resolver = r
+		}
+		// If r is nil (no dynamic resolver), will use updateStaticState() below
 	}
 	return nil
 }

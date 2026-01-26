@@ -18,6 +18,8 @@ import (
 	"errors"
 	"sync"
 	"testing"
+
+	"github.com/codesjoy/yggdrasil/v2/config"
 )
 
 // mockResolver is a mock implementation of Resolver interface
@@ -423,5 +425,71 @@ func TestMockResolver_Concurrent(t *testing.T) {
 	watches := r.GetWatches("app1")
 	if len(watches) != 100 {
 		t.Fatalf("expected 100 watches, got %d", len(watches))
+	}
+}
+
+func TestGet_WithDefault(t *testing.T) {
+	RegisterBuilder("mock", func(name string) (Resolver, error) {
+		return newMockResolver("mock"), nil
+	})
+
+	tests := []struct {
+		name         string
+		resolverName string
+		setupConfig  func() error
+		wantNil      bool
+		wantErr      bool
+	}{
+		{
+			name:         "default resolver with no config returns nil (static mode)",
+			resolverName: "default",
+			setupConfig:  func() error { return nil },
+			wantNil:      true,
+			wantErr:      false,
+		},
+		{
+			name:         "custom resolver without config returns error",
+			resolverName: "custom",
+			setupConfig:  func() error { return nil },
+			wantNil:      true, // When error is returned, resolver should be nil
+			wantErr:      true,
+		},
+		{
+			name:         "configured resolver returns resolver",
+			resolverName: "my-resolver",
+			setupConfig: func() error {
+				return config.Set(
+					config.Join(config.KeyBase, "resolver", "my-resolver", "type"),
+					"mock",
+				)
+			},
+			wantNil: false,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Clear the resolver cache by removing it from the map
+			mu.Lock()
+			delete(resolver, tt.resolverName)
+			mu.Unlock()
+
+			// Reset config for this specific resolver
+			_ = config.Set(config.Join(config.KeyBase, "resolver", tt.resolverName, "type"), "")
+
+			if err := tt.setupConfig(); err != nil {
+				t.Fatalf("setupConfig failed: %v", err)
+			}
+
+			got, err := Get(tt.resolverName)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Get() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if (got == nil) != tt.wantNil {
+				t.Errorf("Get() nil = %v, wantNil %v", got == nil, tt.wantNil)
+			}
+		})
 	}
 }
