@@ -15,7 +15,7 @@
 package main
 
 import (
-	"github.com/codesjoy/yggdrasil/v2/proto/codesjoy/yggdrasil/reason"
+	"github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-reason/v2/proto/reason"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/proto"

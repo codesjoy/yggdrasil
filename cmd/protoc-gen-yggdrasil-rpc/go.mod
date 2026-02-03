@@ -1,9 +1,10 @@
-module github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rpc/v2
+module github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-rpc/v2
 
 go 1.24.6
 
 require (
 	github.com/stretchr/testify v1.11.1
+	golang.org/x/text v0.31.0
 	google.golang.org/protobuf v1.36.11
 )
 

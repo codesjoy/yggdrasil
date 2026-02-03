@@ -20,7 +20,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/codesjoy/yggdrasil/v2/utils/xstring"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/proto"
@@ -314,9 +315,20 @@ func camelCaseVars(s string) string {
 		subs = strings.Split(s, ".")
 	)
 	for _, sub := range subs {
-		vars = append(vars, xstring.StrToCamelCase(sub))
+		vars = append(vars, strToCamelCase(sub))
 	}
 	return strings.Join(vars, ".")
+}
+
+// strToCamelCase converts from underscore separated form to camel case form.
+func strToCamelCase(s string) string {
+	if s == "" {
+		return ""
+	}
+	words := strings.ReplaceAll(s, "_", " ")
+	caser := cases.Title(language.Und)
+	titleStr := caser.String(words)
+	return strings.ReplaceAll(titleStr, " ", "")
 }
 
 const deprecationComment = "// Deprecated: Do not use."
