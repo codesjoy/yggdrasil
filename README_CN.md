@@ -204,6 +204,11 @@ Yggdrasil 采用模块化架构，关注点清晰分离：
 
 ## 📚 文档
 
+- 文档索引（英文）：[docs/README.md](docs/README.md)
+- 文档索引（中文）：[docs/README_CN.md](docs/README_CN.md)
+- 示例总览：[example/README.md](example/README.md)
+- Contrib 模块：[contrib/](contrib/)
+
 ### 核心概念
 
 - **服务注册**: 自动服务注册，支持健康检查
@@ -232,9 +237,9 @@ Yggdrasil 提供三个 protoc 插件：
 make install
 
 # 或手动安装
-go install github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rpc@latest
-go install github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rest@latest
-go install github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-reason@latest
+go install github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-rpc@latest
+go install github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-rest@latest
+go install github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-reason@latest
 ```
 
 ## 📖 示例

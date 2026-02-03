@@ -68,6 +68,11 @@ protoc --go_out=. --go_opt=paths=source_relative \
 # Generate REST code (optional)
 protoc --yggdrasil-rest_out=. --yggdrasil-rest_opt=paths=source_relative \
   your_service.proto
+
+
+# Generate REASON code (optional)
+protoc --yggdrasil-reason_out=. --yggdrasil-reason_opt=paths=source_relative \
+  your_service.proto
 ```
 
 ### 3. Implement Service
@@ -204,6 +209,11 @@ Yggdrasil adopts a modular architecture with clearly separated concerns:
 
 ## 📚 Documentation
 
+- Docs index: [docs/README.md](docs/README.md)
+- Docs index (ZH-CN): [docs/README_CN.md](docs/README_CN.md)
+- Examples: [example/README.md](example/README.md)
+- Contrib modules: [contrib/](contrib/)
+
 ### Core Concepts
 
 - **Service Registration**: Automatic service registration with support for health checks
@@ -232,9 +242,9 @@ Installation:
 make install
 
 # Or install manually
-go install github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rpc@latest
-go install github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rest@latest
-go install github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-reason@latest
+go install github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-rpc@latest
+go install github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-rest@latest
+go install github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-reason@latest
 ```
 
 ## 📖 Examples

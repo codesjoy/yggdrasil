@@ -94,7 +94,6 @@ example/
 |------|------|--------|------|------|
 | [Sample](sample/) | 框架基础使用 | ⭐ | 15分钟 | ✅ |
 | [Streaming](advanced/streaming/) | 流式通信 | ⭐⭐ | 20分钟 | 📝 |
-| [Middleware](advanced/middleware/) | 中间件使用 | ⭐⭐ | 25分钟 | 📝 |
 | [REST API](advanced/rest/) | REST API 使用 | ⭐⭐ | 20分钟 | 📝 |
 
 ### 🔧 进阶示例
