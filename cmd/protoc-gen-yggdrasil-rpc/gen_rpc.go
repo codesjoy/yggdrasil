@@ -15,7 +15,10 @@
 package main
 
 import (
-	"github.com/codesjoy/yggdrasil/v2/utils/xstring"
+	"strings"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
@@ -76,7 +79,7 @@ func genService(g *protogen.GeneratedFile, service *protogen.Service, file *prot
 		ServiceType:           service.GoName,
 		ServiceName:           string(service.Desc.FullName()),
 		FullServerName:        string(service.Desc.FullName()),
-		LowerFirstServiceType: xstring.ToLowerFirstCamelCase(service.GoName),
+		LowerFirstServiceType: toLowerFirstCamelCase(service.GoName),
 		Context:               g.QualifiedGoIdent(contextPackage.Ident("Context")),
 		Code:                  g.QualifiedGoIdent(codePackage.Ident("")),
 		Status:                g.QualifiedGoIdent(statusPackage.Ident("")),
@@ -105,6 +108,30 @@ func genService(g *protogen.GeneratedFile, service *protogen.Service, file *prot
 	if len(sd.Methods) != 0 {
 		g.P(sd.execute(tpl))
 	}
+}
+
+// toLowerFirstCamelCase returns the given string in camelcase formatted string
+// but with the first letter being lowercase.
+func toLowerFirstCamelCase(s string) string {
+	if s == "" {
+		return s
+	}
+	if len(s) == 1 {
+		return strings.ToLower(string(s[0]))
+	}
+	s = strToCamelCase(s)
+	return strings.ToLower(string(s[0])) + s[1:]
+}
+
+// strToCamelCase converts from underscore separated form to camel case form.
+func strToCamelCase(s string) string {
+	if s == "" {
+		return ""
+	}
+	words := strings.ReplaceAll(s, "_", " ")
+	caser := cases.Title(language.Und)
+	titleStr := caser.String(words)
+	return strings.ReplaceAll(titleStr, " ", "")
 }
 
 const deprecationComment = "// Deprecated: Do not use."

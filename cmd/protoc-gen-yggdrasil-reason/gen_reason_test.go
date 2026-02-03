@@ -18,7 +18,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/codesjoy/yggdrasil/v2/proto/codesjoy/yggdrasil/reason"
+	"github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-reason/v2/proto/reason"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/protobuf/compiler/protogen"

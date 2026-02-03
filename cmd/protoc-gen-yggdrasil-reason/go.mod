@@ -1,4 +1,4 @@
-module github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-reason
+module github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-reason/v2
 
 go 1.24.6
 
