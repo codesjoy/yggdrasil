@@ -14,7 +14,7 @@
 
 - Go 1.24 或更高版本
 - 已安装 Yggdrasil 框架
-- 已生成 protobuf 代码（在 `../protogen/` 目录）
+- 已生成 protobuf 代码（在 `../../protogen/` 目录）
 
 ## 启动方式
 
@@ -292,7 +292,7 @@ A: 修改 `config.yaml`，设置 `rest.enable: false`。
 **Q: 如何添加新的 RPC 方法？**
 
 A: 1. 在 proto 文件中定义方法
-2. 重新生成代码：`make generate`
+2. 重新生成代码：`cd example && buf generate`
 3. 在 `LibraryImpl` 中实现新方法
 
 **Q: 如何启用 HTTPS？**
@@ -335,7 +335,6 @@ yggdrasil.Serve(
 - [Yggdrasil 主文档](../../../README.md)
 - [Sample Client 示例](../client/)
 - [REST API 示例](../advanced/rest/)
-- [中间件示例](../advanced/middleware/)
 
 ## 退出
 

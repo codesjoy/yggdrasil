@@ -13,7 +13,7 @@
 
 - Go 1.24 或更高版本
 - 已安装 Yggdrasil 框架
-- 已生成 protobuf 代码（在 `../protogen/` 目录）
+- 已生成 protobuf 代码（在 `../../protogen/` 目录）
 - 服务端已启动（见 [server/README.md](../server/README.md)）
 
 ## 启动方式
