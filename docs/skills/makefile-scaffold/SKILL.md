@@ -6,16 +6,14 @@ description: Scaffold and standardize Makefile targets, modular make-rule .mk fi
 # Makefile Scaffold
 
 ## Installation (User Environment)
-This skill is meant to be installed into the user's Codex environment, not used only inside this repo.
+This skill is meant to be installed into the user's tooling environment, not used only inside this repo.
 
-To install, copy this skill folder into the local Codex skills directory:
-
-- Default destination: `$CODEX_HOME/skills/makefile-scaffold` (or `~/.codex/skills/makefile-scaffold`)
+To install, copy this skill folder into the skills directory used by your tool/platform.
 
 Example (use any copy method you prefer):
 ```bash
 SKILL_SRC="/path/to/makefile-scaffold"   # folder that contains SKILL.md
-SKILL_DEST="${CODEX_HOME:-$HOME/.codex}/skills/makefile-scaffold"
+SKILL_DEST="/path/to/your/skills/makefile-scaffold"
 rm -rf "$SKILL_DEST" && mkdir -p "$(dirname "$SKILL_DEST")"
 cp -R "$SKILL_SRC" "$SKILL_DEST"
 ```
