@@ -1,0 +1,4 @@
+interface:
+  display_name: "Makefile Scaffold"
+  short_description: "Scaffold Makefile + bash scripts (modular)"
+  default_prompt: "Use $makefile-scaffold to scaffold Makefile targets, make-rule modules, and bash scripts in the current repo's conventions."

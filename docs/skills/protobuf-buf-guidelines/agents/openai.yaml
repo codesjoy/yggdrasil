@@ -1,0 +1,4 @@
+interface:
+  display_name: "Protobuf Governance & Buf"
+  short_description: "Protobuf standards, annotations, Buf workflows"
+  default_prompt: "Use $protobuf-buf-guidelines to define and review Protobuf conventions and Buf configuration."
