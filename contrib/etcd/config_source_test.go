@@ -107,14 +107,14 @@ func TestConfigSource_KVRead(t *testing.T) {
 	if err := data.Unmarshal(&m); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if m["a"] != "1" {
+	if m["a"] != 1 {
 		t.Fatalf("expected a=1, got %v", m["a"])
 	}
-	if m["b"] != "2" {
+	if m["b"] != 2 {
 		t.Fatalf("expected b=2, got %v", m["b"])
 	}
 	c, ok := m["c"].(map[string]any)
-	if !ok || c["d"] != "3" {
+	if !ok || c["d"] != 3 {
 		t.Fatalf("expected c.d=3, got %v", m["c"])
 	}
 }

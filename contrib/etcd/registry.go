@@ -92,6 +92,14 @@ func (r *Registry) Register(ctx context.Context, inst yregistry.Instance) error 
 	r.regs[key] = registryEntry{cancel: cancel}
 	r.mu.Unlock()
 
+	if err := r.putOnce(ctx, key, value); err != nil {
+		cancel()
+		r.mu.Lock()
+		delete(r.regs, key)
+		r.mu.Unlock()
+		return err
+	}
+
 	go func() {
 		defer func() {
 			r.mu.Lock()
@@ -99,19 +107,19 @@ func (r *Registry) Register(ctx context.Context, inst yregistry.Instance) error 
 			r.mu.Unlock()
 		}()
 
+		if keepAlive {
+			r.keepAliveLoop(bgCtx, key, value)
+			return
+		}
+
 		select {
 		case <-r.close:
 			cancel()
 		case <-bgCtx.Done():
 		}
-
-		if !keepAlive {
-			return
-		}
-		r.keepAliveLoop(bgCtx, key, value)
 	}()
 
-	return r.putOnce(ctx, key, value)
+	return nil
 }
 
 // Deregister deletes a service instance from the registry.
