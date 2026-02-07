@@ -21,7 +21,7 @@
 package error_handling
 
 import (
-	_ "github.com/codesjoy/yggdrasil/v2/proto/codesjoy/yggdrasil/reason"
+	_ "github.com/codesjoy/yggdrasil/v2/status/reason"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"

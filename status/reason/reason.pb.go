@@ -73,8 +73,8 @@ const file_reason_reason_proto_rawDesc = "" +
 	"\n" +
 	"\x13reason/reason.proto\x12\x19codesjoy.yggdrasil.reason\x1a google/protobuf/descriptor.proto\x1a\x15google/rpc/code.proto:D\n" +
 	"\x0edefault_reason\x12\x1c.google.protobuf.EnumOptions\x18\xd4\b \x01(\x05R\rdefaultReason:H\n" +
-	"\x04code\x12!.google.protobuf.EnumValueOptions\x18\xd5\b \x01(\x0e2\x10.google.rpc.CodeR\x04codeB\xfb\x01\n" +
-	"\x1dcom.codesjoy.yggdrasil.reasonB\vReasonProtoP\x01ZGgithub.com/codesjoy/yggdrasil/v2/proto/codesjoy/yggdrasil/reason;reason\xa2\x02\x03CYR\xaa\x02\x19Codesjoy.Yggdrasil.Reason\xca\x02\x19Codesjoy\\Yggdrasil\\Reason\xe2\x02%Codesjoy\\Yggdrasil\\Reason\\GPBMetadata\xea\x02\x1bCodesjoy::Yggdrasil::Reasonb\x06proto3"
+	"\x04code\x12!.google.protobuf.EnumValueOptions\x18\xd5\b \x01(\x0e2\x10.google.rpc.CodeR\x04codeB\xe9\x01\n" +
+	"\x1dcom.codesjoy.yggdrasil.reasonB\vReasonProtoP\x01Z5github.com/codesjoy/yggdrasil/v2/status/reason;reason\xa2\x02\x03CYR\xaa\x02\x19Codesjoy.Yggdrasil.Reason\xca\x02\x19Codesjoy\\Yggdrasil\\Reason\xe2\x02%Codesjoy\\Yggdrasil\\Reason\\GPBMetadata\xea\x02\x1bCodesjoy::Yggdrasil::Reasonb\x06proto3"
 
 var file_reason_reason_proto_goTypes = []any{
 	(*descriptorpb.EnumOptions)(nil),      // 0: google.protobuf.EnumOptions
