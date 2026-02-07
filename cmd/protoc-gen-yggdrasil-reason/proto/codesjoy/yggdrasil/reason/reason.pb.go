@@ -16,7 +16,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: reason/reason.proto
+// source: codesjoy/yggdrasil/reason/reason.proto
 
 package reason
 
@@ -36,14 +36,14 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-var file_reason_reason_proto_extTypes = []protoimpl.ExtensionInfo{
+var file_codesjoy_yggdrasil_reason_reason_proto_extTypes = []protoimpl.ExtensionInfo{
 	{
 		ExtendedType:  (*descriptorpb.EnumOptions)(nil),
 		ExtensionType: (*int32)(nil),
 		Field:         1108,
 		Name:          "codesjoy.yggdrasil.reason.default_reason",
 		Tag:           "varint,1108,opt,name=default_reason",
-		Filename:      "reason/reason.proto",
+		Filename:      "codesjoy/yggdrasil/reason/reason.proto",
 	},
 	{
 		ExtendedType:  (*descriptorpb.EnumValueOptions)(nil),
@@ -51,37 +51,37 @@ var file_reason_reason_proto_extTypes = []protoimpl.ExtensionInfo{
 		Field:         1109,
 		Name:          "codesjoy.yggdrasil.reason.code",
 		Tag:           "varint,1109,opt,name=code,enum=google.rpc.Code",
-		Filename:      "reason/reason.proto",
+		Filename:      "codesjoy/yggdrasil/reason/reason.proto",
 	},
 }
 
 // Extension fields to descriptorpb.EnumOptions.
 var (
 	// optional int32 default_reason = 1108;
-	E_DefaultReason = &file_reason_reason_proto_extTypes[0]
+	E_DefaultReason = &file_codesjoy_yggdrasil_reason_reason_proto_extTypes[0]
 )
 
 // Extension fields to descriptorpb.EnumValueOptions.
 var (
 	// optional google.rpc.Code code = 1109;
-	E_Code = &file_reason_reason_proto_extTypes[1]
+	E_Code = &file_codesjoy_yggdrasil_reason_reason_proto_extTypes[1]
 )
 
-var File_reason_reason_proto protoreflect.FileDescriptor
+var File_codesjoy_yggdrasil_reason_reason_proto protoreflect.FileDescriptor
 
-const file_reason_reason_proto_rawDesc = "" +
+const file_codesjoy_yggdrasil_reason_reason_proto_rawDesc = "" +
 	"\n" +
-	"\x13reason/reason.proto\x12\x19codesjoy.yggdrasil.reason\x1a google/protobuf/descriptor.proto\x1a\x15google/rpc/code.proto:D\n" +
+	"&codesjoy/yggdrasil/reason/reason.proto\x12\x19codesjoy.yggdrasil.reason\x1a google/protobuf/descriptor.proto\x1a\x15google/rpc/code.proto:D\n" +
 	"\x0edefault_reason\x12\x1c.google.protobuf.EnumOptions\x18\xd4\b \x01(\x05R\rdefaultReason:H\n" +
 	"\x04code\x12!.google.protobuf.EnumValueOptions\x18\xd5\b \x01(\x0e2\x10.google.rpc.CodeR\x04codeB\xe9\x01\n" +
 	"\x1dcom.codesjoy.yggdrasil.reasonB\vReasonProtoP\x01Z5github.com/codesjoy/yggdrasil/v2/status/reason;reason\xa2\x02\x03CYR\xaa\x02\x19Codesjoy.Yggdrasil.Reason\xca\x02\x19Codesjoy\\Yggdrasil\\Reason\xe2\x02%Codesjoy\\Yggdrasil\\Reason\\GPBMetadata\xea\x02\x1bCodesjoy::Yggdrasil::Reasonb\x06proto3"
 
-var file_reason_reason_proto_goTypes = []any{
+var file_codesjoy_yggdrasil_reason_reason_proto_goTypes = []any{
 	(*descriptorpb.EnumOptions)(nil),      // 0: google.protobuf.EnumOptions
 	(*descriptorpb.EnumValueOptions)(nil), // 1: google.protobuf.EnumValueOptions
 	(code.Code)(0),                        // 2: google.rpc.Code
 }
-var file_reason_reason_proto_depIdxs = []int32{
+var file_codesjoy_yggdrasil_reason_reason_proto_depIdxs = []int32{
 	0, // 0: codesjoy.yggdrasil.reason.default_reason:extendee -> google.protobuf.EnumOptions
 	1, // 1: codesjoy.yggdrasil.reason.code:extendee -> google.protobuf.EnumValueOptions
 	2, // 2: codesjoy.yggdrasil.reason.code:type_name -> google.rpc.Code
@@ -92,26 +92,26 @@ var file_reason_reason_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for field type_name
 }
 
-func init() { file_reason_reason_proto_init() }
-func file_reason_reason_proto_init() {
-	if File_reason_reason_proto != nil {
+func init() { file_codesjoy_yggdrasil_reason_reason_proto_init() }
+func file_codesjoy_yggdrasil_reason_reason_proto_init() {
+	if File_codesjoy_yggdrasil_reason_reason_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reason_reason_proto_rawDesc), len(file_reason_reason_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_codesjoy_yggdrasil_reason_reason_proto_rawDesc), len(file_codesjoy_yggdrasil_reason_reason_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   0,
 			NumExtensions: 2,
 			NumServices:   0,
 		},
-		GoTypes:           file_reason_reason_proto_goTypes,
-		DependencyIndexes: file_reason_reason_proto_depIdxs,
-		ExtensionInfos:    file_reason_reason_proto_extTypes,
+		GoTypes:           file_codesjoy_yggdrasil_reason_reason_proto_goTypes,
+		DependencyIndexes: file_codesjoy_yggdrasil_reason_reason_proto_depIdxs,
+		ExtensionInfos:    file_codesjoy_yggdrasil_reason_reason_proto_extTypes,
 	}.Build()
-	File_reason_reason_proto = out.File
-	file_reason_reason_proto_goTypes = nil
-	file_reason_reason_proto_depIdxs = nil
+	File_codesjoy_yggdrasil_reason_reason_proto = out.File
+	file_codesjoy_yggdrasil_reason_reason_proto_goTypes = nil
+	file_codesjoy_yggdrasil_reason_reason_proto_depIdxs = nil
 }

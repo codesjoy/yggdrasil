@@ -10,9 +10,8 @@ modules:
   - path: ./
     name: buf.build/codesjoy/yggdrasil
     lint:
-      ignore_only:
-        PACKAGE_VERSION_SUFFIX:
-          - codesjoy/yggdrasil/reason/reason.proto
+      except:
+        - PACKAGE_VERSION_SUFFIX
 
 deps:
   - buf.build/googleapis/googleapis
