@@ -17,6 +17,8 @@ syntax = "proto3";
 
 package codesjoy.yggdrasil.example.proto.library.v1;
 
+option go_package = "github.com/codesjoy/yggdrasil/v2/example/protogen/library/v1;library_v1";
+
 import "google/api/annotations.proto";
 import "google/api/client.proto";
 import "google/api/field_behavior.proto";
