@@ -85,8 +85,13 @@ func (b *xdsBalancer) UpdateState(state resolver.State) {
 
 	remoteCli := make(map[string]remote.Client, len(endpoints))
 	for _, item := range endpoints {
-		if cli, ok := b.remotesClient[item.Name()]; ok {
-			remoteCli[item.Name()] = cli
+		endpointKey := item.GetAddress()
+		if endpointKey == "" {
+			endpointKey = item.Name()
+		}
+
+		if cli, ok := b.remotesClient[endpointKey]; ok {
+			remoteCli[endpointKey] = cli
 			continue
 		}
 		cli, err := b.cli.NewRemoteClient(
@@ -98,7 +103,7 @@ func (b *xdsBalancer) UpdateState(state resolver.State) {
 			continue
 		}
 		if cli != nil {
-			remoteCli[item.Name()] = cli
+			remoteCli[endpointKey] = cli
 			cli.Connect()
 		}
 	}
