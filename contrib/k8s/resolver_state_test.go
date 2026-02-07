@@ -26,6 +26,7 @@ func TestEndpointsToState(t *testing.T) {
 	r := &Resolver{cfg: ResolverConfig{Protocol: "grpc"}}
 	//nolint:staticcheck // SA1019: corev1.Endpoints is deprecated in v1.33+, test kept for backward compatibility with older Kubernetes clusters
 	ep := &corev1.Endpoints{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-svc", Namespace: "default"},
 		//nolint:staticcheck // SA1019: corev1.EndpointSubset is deprecated in v1.33+, test kept for backward compatibility with older Kubernetes clusters
 		Subsets: []corev1.EndpointSubset{
 			{
