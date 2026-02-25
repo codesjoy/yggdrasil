@@ -30,7 +30,7 @@ go get -u github.com/codesjoy/yggdrasil/v2
 
 ### 环境要求
 
-- Go 1.24 或更高版本
+- Go 1.25 或更高版本
 - Protocol Buffers 编译器 (protoc)
 
 ## 🚀 快速开始
@@ -224,11 +224,11 @@ Yggdrasil 采用模块化架构，关注点清晰分离：
 
 ## 🛠️ 代码生成工具
 
-Yggdrasil 提供三个 protoc 插件：
+Yggdrasil 使用两个内置 protoc 插件和一个共享外部插件：
 
 1. **protoc-gen-yggdrasil-rpc**: 生成 RPC 服务代码
 2. **protoc-gen-yggdrasil-rest**: 生成 RESTful API 处理器
-3. **protoc-gen-yggdrasil-reason**: 生成错误原因码
+3. **protoc-gen-codesjoy-reason**: 生成错误原因码（来自 `codesjoy/pkg`）
 
 安装方法：
 
@@ -239,7 +239,11 @@ make install
 # 或手动安装
 go install github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-rpc@latest
 go install github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-rest@latest
-go install github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-reason@latest
+
+# 从 codesjoy/pkg 安装 reason 插件
+git clone https://github.com/codesjoy/pkg.git
+cd pkg
+go install ./tools/protoc-gen-codesjoy-reason
 ```
 
 ## 📖 示例

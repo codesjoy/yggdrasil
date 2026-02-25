@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/config/source/file"
@@ -31,7 +32,6 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
 	"github.com/codesjoy/yggdrasil/v2/server"
-	"github.com/codesjoy/yggdrasil/v2/status"
 )
 
 type LibraryImpl struct {
@@ -60,7 +60,7 @@ func (s *LibraryImpl) MoveBook(
 	_ context.Context,
 	_ *librarypb2.MoveBookRequest,
 ) (*librarypb2.Book, error) {
-	return nil, status.FromReason(errors.New("test reason"), librarypb.Reason_BOOK_NOT_FOUND, nil)
+	return nil, xerror.WrapWithReason(errors.New("test reason"), librarypb.Reason_BOOK_NOT_FOUND, "", nil)
 }
 
 func (s *LibraryImpl) GetBook(

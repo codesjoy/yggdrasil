@@ -1,6 +1,6 @@
 module github.com/codesjoy/yggdrasil/contrib/xds/v2/example
 
-go 1.24.6
+go 1.25.7
 
 replace (
 	github.com/codesjoy/yggdrasil/contrib/xds/v2 => ../
@@ -9,6 +9,7 @@ replace (
 )
 
 require (
+	github.com/codesjoy/pkg/basic/xerror v0.0.0-20260225033528-924cf61d0622
 	github.com/codesjoy/yggdrasil/contrib/xds/v2 v2.0.0-00010101000000-000000000000
 	github.com/codesjoy/yggdrasil/v2 v2.0.0
 	github.com/codesjoy/yggdrasil/v2/example/protogen v0.0.0-00010101000000-000000000000

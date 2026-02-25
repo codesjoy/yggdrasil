@@ -21,7 +21,6 @@
 package library
 
 import (
-	_ "github.com/codesjoy/yggdrasil/v2/status/reason"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -87,7 +86,7 @@ var File_library_reason_proto protoreflect.FileDescriptor
 
 const file_library_reason_proto_rawDesc = "" +
 	"\n" +
-	"\x14library/reason.proto\x12(codesjoy.yggdrasil.example.proto.library\x1a&codesjoy/yggdrasil/reason/reason.proto*E\n" +
+	"\x14library/reason.proto\x12(codesjoy.yggdrasil.example.proto.library\x1a\x1fcodesjoy/reason/v1/reason.proto*E\n" +
 	"\x06Reason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x0eBOOK_NOT_FOUND\x10\x01\x1a\x03\xa8E\x05\x1a\x04\xa0E\xf4\x03B\x95\x02\n" +

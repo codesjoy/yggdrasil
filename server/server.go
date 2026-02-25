@@ -26,6 +26,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/governor"
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
@@ -35,7 +36,6 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/remote/rest"
 	"github.com/codesjoy/yggdrasil/v2/stats"
-	"github.com/codesjoy/yggdrasil/v2/status"
 	"github.com/codesjoy/yggdrasil/v2/stream"
 	"github.com/codesjoy/yggdrasil/v2/utils/xarray"
 	"google.golang.org/genproto/googleapis/rpc/code"
@@ -480,7 +480,7 @@ func (s *server) handleStream(ss remote.ServerStream) {
 	if pos == -1 {
 		ss.Finish(
 			nil,
-			status.New(code.Code_UNIMPLEMENTED, fmt.Sprintf("malformed method name: %q", sm)),
+			xerror.New(code.Code_UNIMPLEMENTED, fmt.Sprintf("malformed method name: %q", sm)),
 		)
 		return
 	}
@@ -504,7 +504,7 @@ func (s *server) handleStream(ss remote.ServerStream) {
 	} else {
 		errDesc = fmt.Sprintf("unknown method %v for service %v", method, service)
 	}
-	ss.Finish(nil, status.New(code.Code_UNIMPLEMENTED, errDesc))
+	ss.Finish(nil, xerror.New(code.Code_UNIMPLEMENTED, errDesc))
 }
 
 func (s *server) processUnaryRPC(desc *MethodDesc, srv *ServiceInfo, ss remote.ServerStream) {

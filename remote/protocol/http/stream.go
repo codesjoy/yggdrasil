@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote/peer"
 	"github.com/codesjoy/yggdrasil/v2/stats"
@@ -120,7 +121,7 @@ func (cs *httpClientStream) SendMsg(m interface{}) error {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	if cs.reqSent {
-		return status.New(code.Code_FAILED_PRECONDITION, "message already sent").Err()
+		return xerror.New(code.Code_FAILED_PRECONDITION, "message already sent")
 	}
 	cs.reqMarshaler = cs.cache.getOutbound()
 	if cs.reqMarshaler == nil {
@@ -144,7 +145,7 @@ func (cs *httpClientStream) RecvMsg(m interface{}) error {
 	}
 	if !cs.reqSent {
 		cs.mu.Unlock()
-		return status.New(code.Code_FAILED_PRECONDITION, "request not sent").Err()
+		return xerror.New(code.Code_FAILED_PRECONDITION, "request not sent")
 	}
 	if cs.headersReady == nil {
 		cs.headersReady = make(chan struct{})
@@ -261,7 +262,7 @@ func (cs *httpClientStream) RecvMsg(m interface{}) error {
 	if resp.StatusCode != http.StatusOK {
 		var pb stpb.Status
 		if umErr := respMarshaler.Unmarshal(body, &pb); umErr != nil {
-			err = status.New(status.HTTPCodeToStuCode(int32(resp.StatusCode)), string(body)).Err()
+			err = xerror.New(status.HTTPCodeToStuCode(int32(resp.StatusCode)), string(body))
 			cs.finish(headerMD, trailerMD, err, ch)
 			statsHandler.HandleRPC(
 				ctx,
@@ -389,12 +390,12 @@ func (ss *httpServerStream) Method() string {
 
 func (ss *httpServerStream) Start(isClientStream, isServerStream bool) error {
 	if isClientStream || isServerStream {
-		return status.New(code.Code_UNIMPLEMENTED, "http protocol does not support streaming").Err()
+		return xerror.New(code.Code_UNIMPLEMENTED, "http protocol does not support streaming")
 	}
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 	if ss.started {
-		return status.New(code.Code_FAILED_PRECONDITION, "stream already started").Err()
+		return xerror.New(code.Code_FAILED_PRECONDITION, "stream already started")
 	}
 	ss.started = true
 	ss.inbound = ss.cache.getInbound()
@@ -423,7 +424,7 @@ func (ss *httpServerStream) Start(isClientStream, isServerStream bool) error {
 		return err
 	}
 	if int64(len(body)) > limit {
-		return status.New(code.Code_RESOURCE_EXHAUSTED, "request body too large").Err()
+		return xerror.New(code.Code_RESOURCE_EXHAUSTED, "request body too large")
 	}
 	ss.reqBody = body
 

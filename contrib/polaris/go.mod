@@ -1,10 +1,11 @@
 module github.com/codesjoy/yggdrasil/contrib/polaris/v2
 
-go 1.24.6
+go 1.25.7
 
 replace github.com/codesjoy/yggdrasil/v2 => ../..
 
 require (
+	github.com/codesjoy/pkg/basic/xerror v0.0.0-20260225033528-924cf61d0622
 	github.com/codesjoy/yggdrasil/v2 v2.0.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/pelletier/go-toml/v2 v2.2.4

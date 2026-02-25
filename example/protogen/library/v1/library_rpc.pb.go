@@ -4,11 +4,11 @@ package libraryv1
 
 import (
 	context "context"
+	xerror "github.com/codesjoy/pkg/basic/xerror"
 	client "github.com/codesjoy/yggdrasil/v2/client"
 	interceptor "github.com/codesjoy/yggdrasil/v2/interceptor"
 	metadata "github.com/codesjoy/yggdrasil/v2/metadata"
 	server "github.com/codesjoy/yggdrasil/v2/server"
-	status "github.com/codesjoy/yggdrasil/v2/status"
 	code "google.golang.org/genproto/googleapis/rpc/code"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
@@ -360,47 +360,47 @@ type UnimplementedLibraryServiceServer struct {
 }
 
 func (UnimplementedLibraryServiceServer) CreateShelf(context.Context, *CreateShelfRequest) (*Shelf, error) {
-	return nil, status.New(code.Code_UNIMPLEMENTED, "method CreateShelf not implemented")
+	return nil, xerror.New(code.Code_UNIMPLEMENTED, "method CreateShelf not implemented")
 }
 
 func (UnimplementedLibraryServiceServer) GetShelf(context.Context, *GetShelfRequest) (*Shelf, error) {
-	return nil, status.New(code.Code_UNIMPLEMENTED, "method GetShelf not implemented")
+	return nil, xerror.New(code.Code_UNIMPLEMENTED, "method GetShelf not implemented")
 }
 
 func (UnimplementedLibraryServiceServer) ListShelves(context.Context, *ListShelvesRequest) (*ListShelvesResponse, error) {
-	return nil, status.New(code.Code_UNIMPLEMENTED, "method ListShelves not implemented")
+	return nil, xerror.New(code.Code_UNIMPLEMENTED, "method ListShelves not implemented")
 }
 
 func (UnimplementedLibraryServiceServer) DeleteShelf(context.Context, *DeleteShelfRequest) (*emptypb.Empty, error) {
-	return nil, status.New(code.Code_UNIMPLEMENTED, "method DeleteShelf not implemented")
+	return nil, xerror.New(code.Code_UNIMPLEMENTED, "method DeleteShelf not implemented")
 }
 
 func (UnimplementedLibraryServiceServer) MergeShelves(context.Context, *MergeShelvesRequest) (*Shelf, error) {
-	return nil, status.New(code.Code_UNIMPLEMENTED, "method MergeShelves not implemented")
+	return nil, xerror.New(code.Code_UNIMPLEMENTED, "method MergeShelves not implemented")
 }
 
 func (UnimplementedLibraryServiceServer) CreateBook(context.Context, *CreateBookRequest) (*Book, error) {
-	return nil, status.New(code.Code_UNIMPLEMENTED, "method CreateBook not implemented")
+	return nil, xerror.New(code.Code_UNIMPLEMENTED, "method CreateBook not implemented")
 }
 
 func (UnimplementedLibraryServiceServer) GetBook(context.Context, *GetBookRequest) (*Book, error) {
-	return nil, status.New(code.Code_UNIMPLEMENTED, "method GetBook not implemented")
+	return nil, xerror.New(code.Code_UNIMPLEMENTED, "method GetBook not implemented")
 }
 
 func (UnimplementedLibraryServiceServer) ListBooks(context.Context, *ListBooksRequest) (*ListBooksResponse, error) {
-	return nil, status.New(code.Code_UNIMPLEMENTED, "method ListBooks not implemented")
+	return nil, xerror.New(code.Code_UNIMPLEMENTED, "method ListBooks not implemented")
 }
 
 func (UnimplementedLibraryServiceServer) DeleteBook(context.Context, *DeleteBookRequest) (*emptypb.Empty, error) {
-	return nil, status.New(code.Code_UNIMPLEMENTED, "method DeleteBook not implemented")
+	return nil, xerror.New(code.Code_UNIMPLEMENTED, "method DeleteBook not implemented")
 }
 
 func (UnimplementedLibraryServiceServer) UpdateBook(context.Context, *UpdateBookRequest) (*Book, error) {
-	return nil, status.New(code.Code_UNIMPLEMENTED, "method UpdateBook not implemented")
+	return nil, xerror.New(code.Code_UNIMPLEMENTED, "method UpdateBook not implemented")
 }
 
 func (UnimplementedLibraryServiceServer) MoveBook(context.Context, *MoveBookRequest) (*Book, error) {
-	return nil, status.New(code.Code_UNIMPLEMENTED, "method MoveBook not implemented")
+	return nil, xerror.New(code.Code_UNIMPLEMENTED, "method MoveBook not implemented")
 }
 
 func (UnimplementedLibraryServiceServer) mustEmbedUnimplementedLibraryServiceServer() {}

@@ -4,11 +4,11 @@ package libraryv1
 
 import (
 	context "context"
+	xerror "github.com/codesjoy/pkg/basic/xerror"
 	interceptor "github.com/codesjoy/yggdrasil/v2/interceptor"
 	marshaler "github.com/codesjoy/yggdrasil/v2/remote/marshaler"
 	rest "github.com/codesjoy/yggdrasil/v2/remote/rest"
 	server "github.com/codesjoy/yggdrasil/v2/server"
-	status "github.com/codesjoy/yggdrasil/v2/status"
 	v5 "github.com/go-chi/chi/v5"
 	code "google.golang.org/genproto/googleapis/rpc/code"
 	io "io"
@@ -30,7 +30,7 @@ func local_handler_LibraryService_CreateShelf_0(w http.ResponseWriter, r *http.R
 
 	inbound := marshaler.InboundFromContext(r.Context())
 	if err := inbound.NewDecoder(r.Body).Decode(protoReq.Shelf); err != nil && err != io.EOF {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if unaryInt == nil {
@@ -50,13 +50,13 @@ func local_handler_LibraryService_CreateShelf_0(w http.ResponseWriter, r *http.R
 func local_handler_LibraryService_GetShelf_0(w http.ResponseWriter, r *http.Request, server interface{}, unaryInt interceptor.UnaryServerInterceptor) (interface{}, error) {
 	protoReq := &GetShelfRequest{}
 	if err := rest.PopulateQueryParameters(protoReq, r.URL.Query()); err != nil {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if val := "shelves/" + v5.URLParam(r, "params1"); len(val) == 0 {
-		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found name")
+		return nil, xerror.New(code.Code_INVALID_ARGUMENT, "not found name")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "name", val); err != nil {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if unaryInt == nil {
@@ -76,7 +76,7 @@ func local_handler_LibraryService_GetShelf_0(w http.ResponseWriter, r *http.Requ
 func local_handler_LibraryService_ListShelves_0(w http.ResponseWriter, r *http.Request, server interface{}, unaryInt interceptor.UnaryServerInterceptor) (interface{}, error) {
 	protoReq := &ListShelvesRequest{}
 	if err := rest.PopulateQueryParameters(protoReq, r.URL.Query()); err != nil {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if unaryInt == nil {
@@ -96,13 +96,13 @@ func local_handler_LibraryService_ListShelves_0(w http.ResponseWriter, r *http.R
 func local_handler_LibraryService_DeleteShelf_0(w http.ResponseWriter, r *http.Request, server interface{}, unaryInt interceptor.UnaryServerInterceptor) (interface{}, error) {
 	protoReq := &DeleteShelfRequest{}
 	if err := rest.PopulateQueryParameters(protoReq, r.URL.Query()); err != nil {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if val := "shelves/" + v5.URLParam(r, "params1"); len(val) == 0 {
-		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found name")
+		return nil, xerror.New(code.Code_INVALID_ARGUMENT, "not found name")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "name", val); err != nil {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if unaryInt == nil {
@@ -124,13 +124,13 @@ func local_handler_LibraryService_MergeShelves_0(w http.ResponseWriter, r *http.
 
 	inbound := marshaler.InboundFromContext(r.Context())
 	if err := inbound.NewDecoder(r.Body).Decode(protoReq); err != nil && err != io.EOF {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if val := "shelves/" + v5.URLParam(r, "params1"); len(val) == 0 {
-		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found name")
+		return nil, xerror.New(code.Code_INVALID_ARGUMENT, "not found name")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "name", val); err != nil {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if unaryInt == nil {
@@ -157,13 +157,13 @@ func local_handler_LibraryService_CreateBook_0(w http.ResponseWriter, r *http.Re
 
 	inbound := marshaler.InboundFromContext(r.Context())
 	if err := inbound.NewDecoder(r.Body).Decode(protoReq.Book); err != nil && err != io.EOF {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if val := "shelves/" + v5.URLParam(r, "params1"); len(val) == 0 {
-		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found parent")
+		return nil, xerror.New(code.Code_INVALID_ARGUMENT, "not found parent")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "parent", val); err != nil {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if unaryInt == nil {
@@ -183,13 +183,13 @@ func local_handler_LibraryService_CreateBook_0(w http.ResponseWriter, r *http.Re
 func local_handler_LibraryService_GetBook_0(w http.ResponseWriter, r *http.Request, server interface{}, unaryInt interceptor.UnaryServerInterceptor) (interface{}, error) {
 	protoReq := &GetBookRequest{}
 	if err := rest.PopulateQueryParameters(protoReq, r.URL.Query()); err != nil {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if val := "shelves/" + v5.URLParam(r, "params1") + "/books/" + v5.URLParam(r, "params2"); len(val) == 0 {
-		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found name")
+		return nil, xerror.New(code.Code_INVALID_ARGUMENT, "not found name")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "name", val); err != nil {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if unaryInt == nil {
@@ -209,13 +209,13 @@ func local_handler_LibraryService_GetBook_0(w http.ResponseWriter, r *http.Reque
 func local_handler_LibraryService_ListBooks_0(w http.ResponseWriter, r *http.Request, server interface{}, unaryInt interceptor.UnaryServerInterceptor) (interface{}, error) {
 	protoReq := &ListBooksRequest{}
 	if err := rest.PopulateQueryParameters(protoReq, r.URL.Query()); err != nil {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if val := "shelves/" + v5.URLParam(r, "params1"); len(val) == 0 {
-		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found parent")
+		return nil, xerror.New(code.Code_INVALID_ARGUMENT, "not found parent")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "parent", val); err != nil {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if unaryInt == nil {
@@ -235,13 +235,13 @@ func local_handler_LibraryService_ListBooks_0(w http.ResponseWriter, r *http.Req
 func local_handler_LibraryService_DeleteBook_0(w http.ResponseWriter, r *http.Request, server interface{}, unaryInt interceptor.UnaryServerInterceptor) (interface{}, error) {
 	protoReq := &DeleteBookRequest{}
 	if err := rest.PopulateQueryParameters(protoReq, r.URL.Query()); err != nil {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if val := "shelves/" + v5.URLParam(r, "params1") + "/books/" + v5.URLParam(r, "params2"); len(val) == 0 {
-		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found name")
+		return nil, xerror.New(code.Code_INVALID_ARGUMENT, "not found name")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "name", val); err != nil {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if unaryInt == nil {
@@ -268,13 +268,13 @@ func local_handler_LibraryService_UpdateBook_0(w http.ResponseWriter, r *http.Re
 
 	inbound := marshaler.InboundFromContext(r.Context())
 	if err := inbound.NewDecoder(r.Body).Decode(protoReq.Book); err != nil && err != io.EOF {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if val := "shelves/" + v5.URLParam(r, "params1") + "/books/" + v5.URLParam(r, "params2"); len(val) == 0 {
-		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found book.name")
+		return nil, xerror.New(code.Code_INVALID_ARGUMENT, "not found book.name")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "book.name", val); err != nil {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if unaryInt == nil {
@@ -296,13 +296,13 @@ func local_handler_LibraryService_MoveBook_0(w http.ResponseWriter, r *http.Requ
 
 	inbound := marshaler.InboundFromContext(r.Context())
 	if err := inbound.NewDecoder(r.Body).Decode(protoReq); err != nil && err != io.EOF {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if val := "shelves/" + v5.URLParam(r, "params1") + "/books/" + v5.URLParam(r, "params2"); len(val) == 0 {
-		return nil, status.New(code.Code_INVALID_ARGUMENT, "not found name")
+		return nil, xerror.New(code.Code_INVALID_ARGUMENT, "not found name")
 	} else if err := rest.PopulateFieldFromPath(protoReq, "name", val); err != nil {
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, err)
+		return nil, xerror.Wrap(err, code.Code_INVALID_ARGUMENT, "")
 	}
 
 	if unaryInt == nil {

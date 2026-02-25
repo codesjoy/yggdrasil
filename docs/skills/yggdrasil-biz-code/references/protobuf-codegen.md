@@ -37,8 +37,8 @@ plugins:
     out: ./protogen
     opt: paths=source_relative
 
-  # Yggdrasil: structured error reasons (optional)
-  - local: protoc-gen-yggdrasil-reason
+  # Shared reason plugin from codesjoy/pkg (optional)
+  - local: protoc-gen-codesjoy-reason
     out: ./protogen
     opt: paths=source_relative
 

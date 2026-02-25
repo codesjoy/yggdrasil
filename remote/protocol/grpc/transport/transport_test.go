@@ -34,6 +34,7 @@ import (
 	"testing"
 	"time"
 
+	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport/grpctest"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport/leakcheck"
 	testutils2 "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport/testutils"
@@ -123,13 +124,13 @@ func (h *testStreamHandler) handleStream(t *testing.T, s *Stream) {
 	}
 	if !bytes.Equal(p, req) {
 		t.Errorf("handleStream got %v, want %v", p, req)
-		h.t.WriteStatus(s, status.New(code.Code_INTERNAL, "panic"))
+		h.t.WriteStatus(s, istatus.New(code.Code_INTERNAL, "panic"))
 		return
 	}
 	// send a response back to the client.
 	h.t.Write(s, nil, resp, &Options{})
 	// send the trailer to end the stream.
-	h.t.WriteStatus(s, status.New(code.Code_OK, ""))
+	h.t.WriteStatus(s, istatus.New(code.Code_OK, ""))
 }
 
 func (h *testStreamHandler) handleStreamPingPong(t *testing.T, s *Stream) {
@@ -137,18 +138,18 @@ func (h *testStreamHandler) handleStreamPingPong(t *testing.T, s *Stream) {
 	for {
 		if _, err := s.Read(header); err != nil {
 			if err == io.EOF {
-				h.t.WriteStatus(s, status.New(code.Code_OK, ""))
+				h.t.WriteStatus(s, istatus.New(code.Code_OK, ""))
 				return
 			}
 			t.Errorf("Status on server while reading data header: %v", err)
-			h.t.WriteStatus(s, status.New(code.Code_INTERNAL, "panic"))
+			h.t.WriteStatus(s, istatus.New(code.Code_INTERNAL, "panic"))
 			return
 		}
 		sz := binary.BigEndian.Uint32(header[1:])
 		msg := make([]byte, int(sz))
 		if _, err := s.Read(msg); err != nil {
 			t.Errorf("Status on server while reading message: %v", err)
-			h.t.WriteStatus(s, status.New(code.Code_INTERNAL, "panic"))
+			h.t.WriteStatus(s, istatus.New(code.Code_INTERNAL, "panic"))
 			return
 		}
 		buf := make([]byte, sz+5)
@@ -287,7 +288,7 @@ func (h *testStreamHandler) handleStreamDelayRead(t *testing.T, s *Stream) {
 		return
 	}
 	// send the trailer to end the stream.
-	if err := h.t.WriteStatus(s, status.New(code.Code_OK, "")); err != nil {
+	if err := h.t.WriteStatus(s, istatus.New(code.Code_OK, "")); err != nil {
 		t.Errorf("server WriteStatus got %v, want <nil>", err)
 		return
 	}
@@ -497,7 +498,7 @@ func (s) TestInflightStreamClosing(t *testing.T) {
 	}
 
 	donec := make(chan struct{})
-	serr := status.New(code.Code_INTERNAL, "client connection is closing")
+	serr := istatus.New(code.Code_INTERNAL, "client connection is closing")
 	go func() {
 		defer close(donec)
 		if _, err := stream.Read(make([]byte, defaultWindowSize)); err != serr {
@@ -834,9 +835,10 @@ func (s) TestLargeMessageSuspension(t *testing.T) {
 	if err != errStreamDone {
 		t.Fatalf("Write got %v, want io.EOF", err)
 	}
-	expectedErr := status.New(code.Code_DEADLINE_EXCEEDED, context.DeadlineExceeded.Error())
-	if _, err := s.Read(make([]byte, 8)); err.Error() != expectedErr.Error() {
-		t.Fatalf("Read got %v of type %T, want %v", err, err, expectedErr)
+	if _, err := s.Read(make([]byte, 8)); err == nil {
+		t.Fatal("Read got nil error, want deadline exceeded")
+	} else if st := status.FromError(err); st.Code() != code.Code_DEADLINE_EXCEEDED {
+		t.Fatalf("Read got %v of type %T, want code %v", err, err, code.Code_DEADLINE_EXCEEDED)
 	}
 	ct.Close(fmt.Errorf("closed manually by test"))
 	server.stop()
@@ -866,7 +868,6 @@ func (s) TestMaxStreams(t *testing.T) {
 	pctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	timer := time.NewTimer(time.Second * 10)
-	expectedErr := status.New(code.Code_DEADLINE_EXCEEDED, context.DeadlineExceeded.Error())
 	for {
 		select {
 		case <-timer.C:
@@ -880,8 +881,9 @@ func (s) TestMaxStreams(t *testing.T) {
 		if str, err := ct.NewStream(ctx, callHdr); err == nil {
 			slist = append(slist, str)
 			continue
-		} else if err.Error() != expectedErr.Error() {
-			t.Fatalf("ct.NewStream(_,_) = _, %v, want _, %v", err, expectedErr)
+		} else if !errors.Is(err, context.DeadlineExceeded) &&
+			err.Error() != context.DeadlineExceeded.Error() {
+			t.Fatalf("ct.NewStream(_,_) = _, %v, want _, %v", err, context.DeadlineExceeded)
 		}
 		timer.Stop()
 		break
@@ -1345,7 +1347,7 @@ func (s) TestClientWithMisbehavedServer(t *testing.T) {
 	}
 }
 
-var encodingTestStatus = status.New(code.Code_INTERNAL, "\n")
+var encodingTestStatus = istatus.New(code.Code_INTERNAL, "\n")
 
 func (s) TestEncodingRequiredStatus(t *testing.T) {
 	server, ct, cancel := setUp(t, 0, math.MaxUint32, encodingRequiredStatus)
@@ -1390,7 +1392,7 @@ func (s) TestInvalidHeaderField(t *testing.T) {
 	}
 	p := make([]byte, http2MaxFrameLen)
 	_, err = s.trReader.(*transportReader).Read(p)
-	if se, ok := status.CoverError(err); !ok || !status.IsCode(se, code.Code_INTERNAL) ||
+	if se, ok := status.CoverError(err); !ok || se.Code() != code.Code_INTERNAL ||
 		!strings.Contains(err.Error(), expectedInvalidHeaderField) {
 		t.Fatalf(
 			"Read got reason %v, want reason with code %s and contains %q",
@@ -1453,14 +1455,14 @@ func (s) TestContextErr(t *testing.T) {
 		// input
 		errIn error
 		// outputs
-		errOut error
+		codeOut code.Code
 	}{
-		{context.DeadlineExceeded, status.New(code.Code_DEADLINE_EXCEEDED, context.DeadlineExceeded.Error())},
-		{context.Canceled, status.New(code.Code_CANCELLED, context.Canceled.Error())},
+		{context.DeadlineExceeded, code.Code_DEADLINE_EXCEEDED},
+		{context.Canceled, code.Code_CANCELLED},
 	} {
 		err := ContextErr(test.errIn)
-		if err.Error() != test.errOut.Error() {
-			t.Fatalf("ContextErr{%v} = %v \nwant %v", test.errIn, err, test.errOut)
+		if got := status.FromError(err).Code(); got != test.codeOut {
+			t.Fatalf("ContextErr{%v} = %v \nwant code %v", test.errIn, got, test.codeOut)
 		}
 	}
 }
@@ -2297,7 +2299,7 @@ func (s) TestClientDecodeHeaderStatusErr(t *testing.T) {
 				},
 			},
 			// no reason
-			wantStatus: status.New(code.Code_OK, ""),
+			wantStatus: istatus.New(code.Code_OK, ""),
 		},
 		{
 			name: "missing content-type header",
@@ -2307,7 +2309,7 @@ func (s) TestClientDecodeHeaderStatusErr(t *testing.T) {
 					{Name: ":status", Value: "200"},
 				},
 			},
-			wantStatus: status.New(
+			wantStatus: istatus.New(
 				code.Code_UNKNOWN,
 				"malformed header: missing HTTP content-type",
 			),
@@ -2321,7 +2323,7 @@ func (s) TestClientDecodeHeaderStatusErr(t *testing.T) {
 					{Name: ":status", Value: "200"},
 				},
 			},
-			wantStatus: status.New(
+			wantStatus: istatus.New(
 				code.Code_INTERNAL,
 				"transport: malformed grpc-status: strconv.ParseInt: parsing \"xxxx\": invalid syntax",
 			),
@@ -2333,7 +2335,7 @@ func (s) TestClientDecodeHeaderStatusErr(t *testing.T) {
 					{Name: "content-type", Value: "application/json"},
 				},
 			},
-			wantStatus: status.New(
+			wantStatus: istatus.New(
 				code.Code_INTERNAL,
 				"malformed header: missing HTTP status; transport: received unexpected content-type \"application/json\"",
 			),
@@ -2346,7 +2348,7 @@ func (s) TestClientDecodeHeaderStatusErr(t *testing.T) {
 					{Name: ":status", Value: "xxxx"},
 				},
 			},
-			wantStatus: status.New(
+			wantStatus: istatus.New(
 				code.Code_INTERNAL,
 				"transport: malformed http-status: strconv.ParseInt: parsing \"xxxx\": invalid syntax",
 			),
@@ -2357,7 +2359,7 @@ func (s) TestClientDecodeHeaderStatusErr(t *testing.T) {
 				Fields:    nil,
 				Truncated: true,
 			},
-			wantStatus: status.New(
+			wantStatus: istatus.New(
 				code.Code_INTERNAL,
 				"peer header list size exceeded limit",
 			),
@@ -2371,7 +2373,7 @@ func (s) TestClientDecodeHeaderStatusErr(t *testing.T) {
 					{Name: ":status", Value: "504"},
 				},
 			},
-			wantStatus: status.New(
+			wantStatus: istatus.New(
 				code.Code_UNAVAILABLE,
 				"unexpected HTTP status code received from server: 504 (Gateway Timeout)",
 			),
@@ -2383,7 +2385,7 @@ func (s) TestClientDecodeHeaderStatusErr(t *testing.T) {
 					{Name: "content-type", Value: "application/grpc"},
 				},
 			},
-			wantStatus: status.New(
+			wantStatus: istatus.New(
 				code.Code_INTERNAL,
 				"malformed header: missing HTTP status",
 			),

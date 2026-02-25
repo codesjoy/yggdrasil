@@ -25,7 +25,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2/config"
+	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/remote/credentials"
@@ -207,7 +209,7 @@ func (s *server) sendResponse(
 	hdr, payload := msgHeader(data, compData)
 	// TODO(dfawley): should we be checking len(data) instead?
 	if len(payload) > s.opts.MaxSendMessageSize {
-		return status.New(
+		return xerror.New(
 			code.Code_RESOURCE_EXHAUSTED,
 			fmt.Sprintf(
 				"grpc: trying to send message larger than max (%d vs. %d)",
@@ -638,7 +640,7 @@ func (ss *serverStream) SendMsg(m interface{}) error {
 
 	// TODO(dfawley): should we be checking len(data) instead?
 	if len(payload) > ss.maxSendMessageSize {
-		return status.New(
+		return xerror.New(
 			code.Code_RESOURCE_EXHAUSTED,
 			fmt.Sprintf(
 				"trying to send message larger than max (%d vs. %d)",
@@ -674,7 +676,7 @@ func (ss *serverStream) RecvMsg(m interface{}) error {
 			return err
 		}
 		if errors.Is(err, io.ErrUnexpectedEOF) {
-			err = status.New(code.Code_INTERNAL, io.ErrUnexpectedEOF.Error())
+			err = xerror.New(code.Code_INTERNAL, io.ErrUnexpectedEOF.Error())
 		}
 		return toRPCErr(err)
 	}
@@ -715,11 +717,11 @@ func (ss *serverStream) Start(isClientStream, isServerStream bool) error {
 	if rc != "" && rc != encoding.Identity {
 		ss.decomp = encoding.GetCompressor(rc)
 		if ss.decomp == nil {
-			return status.New(
+			return xerror.New(
 				code.Code_UNIMPLEMENTED,
 				fmt.Sprintf("grpc: Decompressor is not installed for grpc-encoding %q", rc),
 			)
-			//st := status.New(code.Code_UNIMPLEMENTED, fmt.Sprintf("grpc: Decompressor is not installed for grpc-encoding %q", rc))
+			//st := xerror.New(code.Code_UNIMPLEMENTED, fmt.Sprintf("grpc: Decompressor is not installed for grpc-encoding %q", rc))
 			//_ = ss.t.WriteStatus(ss.s, st)
 		}
 	}
@@ -782,5 +784,5 @@ func (ss *serverStream) Finish(reply any, err error) {
 	// TODO: Should we be logging if writing status failed here, like above?
 	// Should the logging be in WriteStatus?  Should we ignore the WriteStatus
 	// reason or allow the stats handler to see it?
-	err = ss.t.WriteStatus(ss.s, status.WithCode(code.Code_OK, nil))
+	err = ss.t.WriteStatus(ss.s, istatus.WithCode(code.Code_OK, nil))
 }

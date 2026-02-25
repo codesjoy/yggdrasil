@@ -6,9 +6,9 @@ This example demonstrates comprehensive error handling in Yggdrasil using the Re
 
 This example shows how to:
 - Define Reason enums in protobuf
-- Use `protoc-gen-yggdrasil-reason` to generate error handling code
-- Return structured errors with metadata from the server using `status.FromReason()`
-- Parse and handle errors on the client using `status.FromError()` and `status.IsReason()`
+- Use `protoc-gen-codesjoy-reason` to generate error handling code
+- Return structured errors with metadata from the server using `xerror.WrapWithReason()`
+- Parse and handle errors on the client using `status.FromError()`
 - Implement retry mechanisms with exponential backoff
 
 ## Architecture
@@ -42,19 +42,18 @@ The Reason system provides:
 3. **Error metadata propagation** - Attach context to errors for debugging
 4. **HTTP status code mapping** - Automatic conversion for REST endpoints
 
-### Status API
+### Error API
 
 **Server-side:**
-- `status.FromReason(err, reason, metadata)` - Create a status with reason and metadata
-- `status.WithCode(code, err)` - Create a status with gRPC code
-- `st.WithDetails(details)` - Add additional details to the status
+- `xerror.WrapWithReason(err, reason, msg, metadata)` - Create structured error with reason and metadata (`reason` implements `xerror.Reason`)
+- `xerror.Wrap(err, code, msg)` - Wrap with gRPC code
+- `xerror.New(code, msg)` - Create coded error
 
 **Client-side:**
-- `status.FromError(err)` - Parse error into Status
-- `status.IsReason(err, reason)` - Check if error matches specific reason
+- `status.FromError(err)` - Parse transport error into `Status`
 - `st.Code()` - Get gRPC status code
 - `st.HTTPCode()` - Get HTTP status code
-- `st.ErrorInfo().Metadata` - Get error metadata
+- `st.ErrorInfo().Reason/Domain/Metadata` - Get reason details and metadata
 
 ## Running the Example
 
@@ -201,9 +200,10 @@ result: all retries exhausted (as expected for non-retryable error)
 
 ```go
 if req.Email == "" || !strings.Contains(req.Email, "@") {
-    return nil, status.FromReason(
+    return nil, xerror.WrapWithReason(
         errors.New("invalid email format"),
         errorhandlingpb.Reason_INVALID_INPUT,
+        "",
         map[string]string{"field": "email", "value": req.Email},
     )
 }
@@ -213,9 +213,10 @@ if req.Email == "" || !strings.Contains(req.Email, "@") {
 
 ```go
 if !s.userExists(req.UserId) {
-    return nil, status.FromReason(
+    return nil, xerror.WrapWithReason(
         fmt.Errorf("user %s not found", req.UserId),
         errorhandlingpb.Reason_USER_NOT_FOUND,
+        "",
         map[string]string{"user_id": req.UserId},
     )
 }
@@ -225,9 +226,10 @@ if !s.userExists(req.UserId) {
 
 ```go
 if book.BorrowerId != "" {
-    return nil, status.FromReason(
+    return nil, xerror.WrapWithReason(
         errors.New("book is already borrowed"),
         errorhandlingpb.Reason_BOOK_ALREADY_BORROWED,
+        "",
         map[string]string{
             "book_id": req.BookId,
             "borrower_id": book.BorrowerId,
@@ -239,9 +241,10 @@ if book.BorrowerId != "" {
 ### 4. System Errors
 
 ```go
-return nil, status.FromReason(
+return nil, xerror.WrapWithReason(
     errors.New("database connection failed"),
     errorhandlingpb.Reason_DATABASE_ERROR,
+    "",
     map[string]string{"host": "localhost:5432"},
 )
 ```
@@ -265,7 +268,9 @@ if err != nil {
 ### 2. Reason Checking
 
 ```go
-if status.IsReason(err, pb.Reason_USER_NOT_FOUND) {
+if info := st.ErrorInfo(); info != nil &&
+    info.Reason == pb.Reason_USER_NOT_FOUND.Reason() &&
+    info.Domain == pb.Reason_USER_NOT_FOUND.Domain() {
     slog.Info("✓ Correctly identified USER_NOT_FOUND")
     // Handle user not found
 }
@@ -349,8 +354,10 @@ if err != nil && strings.Contains(err.Error(), "not found") {
 
 ✅ **Good:**
 ```go
-if status.IsReason(err, pb.Reason_USER_NOT_FOUND) {
-    // Reliable reason checking
+if info := st.ErrorInfo(); info != nil &&
+    info.Reason == pb.Reason_USER_NOT_FOUND.Reason() &&
+    info.Domain == pb.Reason_USER_NOT_FOUND.Domain() {
+    // Reliable reason checking after status.FromError(err)
 }
 ```
 
@@ -358,18 +365,20 @@ if status.IsReason(err, pb.Reason_USER_NOT_FOUND) {
 
 ❌ **Bad:**
 ```go
-return nil, status.FromReason(
+return nil, xerror.WrapWithReason(
     errors.New("user not found"),
     pb.Reason_USER_NOT_FOUND,
+    "",
     nil, // Missing context!
 )
 ```
 
 ✅ **Good:**
 ```go
-return nil, status.FromReason(
+return nil, xerror.WrapWithReason(
     errors.New("user not found"),
     pb.Reason_USER_NOT_FOUND,
+    "",
     map[string]string{"user_id": req.UserId}, // Include context
 )
 ```
@@ -408,7 +417,7 @@ for i := 0; i < 3; i++ {
 
 1. **Always use Reason enums** - Define all error cases in protobuf
 2. **Include metadata** - Provide context for debugging (IDs, field names, etc.)
-3. **Check specific reasons** - Use `status.IsReason()` instead of string matching
+3. **Check specific reasons** - Parse by `status.FromError(err)` and compare `ErrorInfo().Reason/Domain`
 4. **Implement retry logic** - Use exponential backoff for retryable errors
 5. **Log error details** - Include code, message, and metadata in logs
 6. **Handle non-retryable errors** - Return immediately for client errors (4xx)

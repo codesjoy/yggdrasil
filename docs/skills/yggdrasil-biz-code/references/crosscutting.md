@@ -1,15 +1,17 @@
 # Cross-Cutting Concerns (Errors / Metadata / Interceptors)
 
 ## Errors (Reason + Code)
-Use `status.FromReason` to return an error with a reason:
+Use `xerror.WrapWithReason` to return an error with a reason:
 ```go
-return nil, status.FromReason(
+return nil, xerror.WrapWithReason(
     errors.New("business error"),
     pb.Reason_INVALID_INPUT,
+    "",
     map[string]string{"field": "name"},
 )
 ```
 - `Reason_*` typically comes from generated code (reason enum).
+- Generated reason enums implement `xerror.Reason` directly.
 
 ## Metadata (Header / Trailer)
 ```go

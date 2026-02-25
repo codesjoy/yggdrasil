@@ -33,6 +33,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/codesjoy/pkg/basic/xerror"
+	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/consts"
 	stats2 "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/stats"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport/grpcrand"
@@ -464,7 +466,7 @@ func (t *http2Server) operateHeaders(
 			httpStatus:     400,
 			streamID:       streamID,
 			contentSubtype: s.contentSubtype,
-			status:         status.New(code.Code_INTERNAL, errMsg),
+			status:         istatus.New(code.Code_INTERNAL, errMsg),
 		})
 		return false
 	}
@@ -1061,7 +1063,7 @@ func (t *http2Server) Write(s *Stream, hdr []byte, data []byte, _ *Options) erro
 				return err
 			}
 			// TODO(mmukhi, dfawley): Make sure this is the right code to return.
-			return status.New(code.Code_INTERNAL, fmt.Sprintf("transport: %v", err))
+			return xerror.New(code.Code_INTERNAL, fmt.Sprintf("transport: %v", err))
 		}
 	} else {
 		// Writing headers checks for this condition.

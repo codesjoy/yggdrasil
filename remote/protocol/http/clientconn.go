@@ -22,12 +22,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
 	"github.com/codesjoy/yggdrasil/v2/stats"
-	"github.com/codesjoy/yggdrasil/v2/status"
 	"github.com/codesjoy/yggdrasil/v2/stream"
 	"google.golang.org/genproto/googleapis/rpc/code"
 )
@@ -129,12 +129,11 @@ func (cc *clientConn) NewStream(
 	method string,
 ) (stream.ClientStream, error) {
 	if desc != nil && (desc.ClientStreams || desc.ServerStreams) {
-		return nil, status.New(code.Code_UNIMPLEMENTED, "http protocol does not support streaming").
-			Err()
+		return nil, xerror.New(code.Code_UNIMPLEMENTED, "http protocol does not support streaming")
 	}
 
 	if method == "" {
-		return nil, status.New(code.Code_INVALID_ARGUMENT, "empty method").Err()
+		return nil, xerror.New(code.Code_INVALID_ARGUMENT, "empty method")
 	}
 	if !strings.HasPrefix(method, "/") {
 		method = "/" + method

@@ -27,6 +27,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
 	protoenc "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/proto"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/proto/codec_perf"
@@ -194,8 +195,8 @@ func TestToRPCErr(t *testing.T) {
 		// outputs
 		errOut error
 	}{
-		{transport.ErrConnClosing, status.New(code.Code_UNAVAILABLE, transport.ErrConnClosing.Desc)},
-		{io.ErrUnexpectedEOF, status.New(code.Code_INTERNAL, io.ErrUnexpectedEOF.Error())},
+		{transport.ErrConnClosing, xerror.New(code.Code_UNAVAILABLE, transport.ErrConnClosing.Desc)},
+		{io.ErrUnexpectedEOF, xerror.New(code.Code_INTERNAL, io.ErrUnexpectedEOF.Error())},
 	} {
 		err := toRPCErr(test.errIn)
 		if _, ok := status.CoverError(err); !ok {

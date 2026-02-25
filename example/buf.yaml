@@ -22,4 +22,4 @@ modules:
 
 deps:
   - buf.build/googleapis/googleapis
-  - buf.build/codesjoy/yggdrasil
+  - buf.build/codesjoy/reason

@@ -30,7 +30,7 @@ go get -u github.com/codesjoy/yggdrasil/v2
 
 ### Requirements
 
-- Go 1.24 or higher
+- Go 1.25 or higher
 - Protocol Buffers compiler (protoc)
 
 ## 🚀 Quick Start
@@ -71,7 +71,7 @@ protoc --yggdrasil-rest_out=. --yggdrasil-rest_opt=paths=source_relative \
 
 
 # Generate REASON code (optional)
-protoc --yggdrasil-reason_out=. --yggdrasil-reason_opt=paths=source_relative \
+protoc --codesjoy-reason_out=. --codesjoy-reason_opt=paths=source_relative \
   your_service.proto
 ```
 
@@ -229,11 +229,11 @@ Yggdrasil adopts a modular architecture with clearly separated concerns:
 
 ## 🛠️ Code Generation Tools
 
-Yggdrasil provides three protoc plugins:
+Yggdrasil uses two built-in protoc plugins and one shared external plugin:
 
 1. **protoc-gen-yggdrasil-rpc**: Generates RPC service code
 2. **protoc-gen-yggdrasil-rest**: Generates RESTful API handlers
-3. **protoc-gen-yggdrasil-reason**: Generates error reason codes
+3. **protoc-gen-codesjoy-reason**: Generates error reason codes (from `codesjoy/pkg`)
 
 Installation:
 
@@ -244,7 +244,11 @@ make install
 # Or install manually
 go install github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-rpc@latest
 go install github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-rest@latest
-go install github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-reason@latest
+
+# Install reason plugin from codesjoy/pkg
+git clone https://github.com/codesjoy/pkg.git
+cd pkg
+go install ./tools/protoc-gen-codesjoy-reason
 ```
 
 ## 📖 Examples

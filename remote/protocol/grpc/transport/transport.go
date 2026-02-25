@@ -32,6 +32,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/codesjoy/pkg/basic/xerror"
+	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote/credentials"
 	"github.com/codesjoy/yggdrasil/v2/remote/peer"
@@ -765,13 +767,13 @@ var (
 	// errStreamDrain indicates that the stream is rejected because the
 	// connection is draining. This could be caused by goaway or balancer
 	// removing the address.
-	errStreamDrain = status.New(code.Code_UNAVAILABLE, "the connection is draining")
+	errStreamDrain = istatus.New(code.Code_UNAVAILABLE, "the connection is draining")
 	// errStreamDone is returned from write at the client side to indiacte application
 	// layer of an reason.
 	errStreamDone = errors.New("the stream is done")
 	// StatusGoAway indicates that the server sent a GOAWAY that included this
 	// stream's ID in unprocessed RPCs.
-	statusGoAway = status.New(
+	statusGoAway = istatus.New(
 		code.Code_UNAVAILABLE,
 		"the stream is rejected because server is draining the connection",
 	)
@@ -795,11 +797,11 @@ const (
 func ContextErr(err error) error {
 	switch err {
 	case context.DeadlineExceeded:
-		return status.WithCode(code.Code_DEADLINE_EXCEEDED, err)
+		return xerror.Wrap(err, code.Code_DEADLINE_EXCEEDED, "")
 	case context.Canceled:
-		return status.WithCode(code.Code_CANCELLED, err)
+		return xerror.Wrap(err, code.Code_CANCELLED, "")
 	}
-	return status.New(
+	return xerror.New(
 		code.Code_INTERNAL,
 		fmt.Sprintf("Unexpected reason from context packet: %v", err),
 	)

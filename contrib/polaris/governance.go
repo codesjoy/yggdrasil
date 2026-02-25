@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
 	"github.com/codesjoy/yggdrasil/v2/status"
@@ -152,21 +153,28 @@ func buildPolarisRateLimitUnary(serviceName string) interceptor.UnaryClientInter
 		}
 		resp := future.GetImmediately()
 		if resp == nil {
-			return status.New(code.Code_UNKNOWN, "polaris rate limit: empty response").Err()
+			return xerror.New(code.Code_UNKNOWN, "polaris rate limit: empty response")
 		}
 		if resp.Code != model.QuotaResultOk {
 			msg := resp.Info
 			if msg == "" {
 				msg = "polaris rate limit exceeded"
 			}
-			return status.New(code.Code_RESOURCE_EXHAUSTED, msg).Err()
+			return xerror.New(code.Code_RESOURCE_EXHAUSTED, msg)
 		}
 		if resp.WaitMs > 0 {
 			t := time.NewTimer(time.Duration(resp.WaitMs) * time.Millisecond)
 			defer t.Stop()
 			select {
 			case <-ctx.Done():
-				return status.FromContextError(ctx.Err()).Err()
+				switch ctx.Err() {
+				case context.DeadlineExceeded:
+					return xerror.Wrap(ctx.Err(), code.Code_DEADLINE_EXCEEDED, "")
+				case context.Canceled:
+					return xerror.Wrap(ctx.Err(), code.Code_CANCELLED, "")
+				default:
+					return xerror.Wrap(ctx.Err(), code.Code_UNKNOWN, "")
+				}
 			case <-t.C:
 			}
 		}
@@ -219,7 +227,7 @@ func buildPolarisCircuitBreakerUnary(serviceName string) interceptor.UnaryClient
 			if cr.RuleName != "" {
 				msg = msg + ": " + cr.RuleName
 			}
-			return status.New(code.Code_UNAVAILABLE, msg).Err()
+			return xerror.New(code.Code_UNAVAILABLE, msg)
 		}
 
 		start := time.Now()

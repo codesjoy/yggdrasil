@@ -118,7 +118,7 @@ example/
 
 ### 前置条件
 
-1. Go 1.24 或更高版本
+1. Go 1.25 或更高版本
 2. Protocol Buffers 编译器 (protoc)
 3. Yggdrasil 代码生成工具
 
@@ -131,7 +131,11 @@ go get -u github.com/codesjoy/yggdrasil/v2
 # 安装代码生成工具
 go install github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rpc@latest
 go install github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rest@latest
-go install github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-reason@latest
+
+# 从 codesjoy/pkg 安装 reason 插件
+git clone https://github.com/codesjoy/pkg.git
+cd pkg
+go install ./tools/protoc-gen-codesjoy-reason
 ```
 
 ### 运行第一个示例

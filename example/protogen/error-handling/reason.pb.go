@@ -21,7 +21,6 @@
 package error_handling
 
 import (
-	_ "github.com/codesjoy/yggdrasil/v2/status/reason"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -120,7 +119,7 @@ var File_error_handling_reason_proto protoreflect.FileDescriptor
 
 const file_error_handling_reason_proto_rawDesc = "" +
 	"\n" +
-	"\x1berror-handling/reason.proto\x12.codesjoy.yggdrasil.example.proto.errorhandling\x1a&codesjoy/yggdrasil/reason/reason.proto*\xcc\x02\n" +
+	"\x1berror-handling/reason.proto\x12.codesjoy.yggdrasil.example.proto.errorhandling\x1a\x1fcodesjoy/reason/v1/reason.proto*\xcc\x02\n" +
 	"\x06Reason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x0eUSER_NOT_FOUND\x10\n" +

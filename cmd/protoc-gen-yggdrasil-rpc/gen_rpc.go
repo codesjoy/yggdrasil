@@ -25,7 +25,7 @@ import (
 
 const (
 	contextPackage     = protogen.GoImportPath("context")
-	statusPackage      = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v2/status")
+	xerrorPackage      = protogen.GoImportPath("github.com/codesjoy/pkg/basic/xerror")
 	streamPackage      = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v2/stream")
 	clientPackage      = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v2/client")
 	interceptorPackage = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v2/interceptor")
@@ -82,7 +82,7 @@ func genService(g *protogen.GeneratedFile, service *protogen.Service, file *prot
 		LowerFirstServiceType: toLowerFirstCamelCase(service.GoName),
 		Context:               g.QualifiedGoIdent(contextPackage.Ident("Context")),
 		Code:                  g.QualifiedGoIdent(codePackage.Ident("")),
-		Status:                g.QualifiedGoIdent(statusPackage.Ident("")),
+		Status:                g.QualifiedGoIdent(xerrorPackage.Ident("")),
 		Client:                g.QualifiedGoIdent(clientPackage.Ident("")),
 		Server:                g.QualifiedGoIdent(serverPackage.Ident("")),
 		Interceptor:           g.QualifiedGoIdent(interceptorPackage.Ident("")),

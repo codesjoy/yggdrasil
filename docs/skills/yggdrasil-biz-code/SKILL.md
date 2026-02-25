@@ -18,7 +18,7 @@ description: Use when implementing or modifying server-side business code with t
 
 ## Common Extensions
 - REST support: add `WithRestServiceDesc`, and optionally register custom HTTP routes via `WithRestRawHandleDesc` (see `references/service-impl.md`).
-- Structured errors: return errors with a reason via `status.FromReason` (see `references/crosscutting.md`).
+- Structured errors: return errors with a reason via `xerror.WrapWithReason` (see `references/crosscutting.md`).
 - Metadata: set response metadata via `metadata.SetHeader/SetTrailer` (see `references/crosscutting.md`).
 - Interceptors: enable logging and other interceptors in config (see `references/crosscutting.md`).
 
