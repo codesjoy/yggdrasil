@@ -22,6 +22,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/config/source/file"
@@ -128,7 +129,7 @@ func testGetUserNotFound(ctx context.Context, client errorhandlingpb.LibraryServ
 	if err != nil {
 		st := status.FromError(err)
 
-		if status.IsReason(err, errorhandlingpb.Reason_USER_NOT_FOUND) {
+		if isReason(st, errorhandlingpb.Reason_USER_NOT_FOUND) {
 			slog.Info("✓ Correctly identified USER_NOT_FOUND",
 				"grpc_code", st.Code(),
 				"http_code", st.HTTPCode(),
@@ -154,7 +155,7 @@ func testCreateUserInvalidEmail(ctx context.Context, client errorhandlingpb.Libr
 	if err != nil {
 		st := status.FromError(err)
 
-		if status.IsReason(err, errorhandlingpb.Reason_INVALID_INPUT) {
+		if isReason(st, errorhandlingpb.Reason_INVALID_INPUT) {
 			slog.Info("✓ Correctly identified INVALID_INPUT",
 				"grpc_code", st.Code(),
 				"http_code", st.HTTPCode(),
@@ -179,7 +180,7 @@ func testAuthenticateUserInvalid(ctx context.Context, client errorhandlingpb.Lib
 	if err != nil {
 		st := status.FromError(err)
 
-		if status.IsReason(err, errorhandlingpb.Reason_INVALID_CREDENTIALS) {
+		if isReason(st, errorhandlingpb.Reason_INVALID_CREDENTIALS) {
 			slog.Info("✓ Correctly identified INVALID_CREDENTIALS",
 				"grpc_code", st.Code(),
 				"http_code", st.HTTPCode(),
@@ -213,7 +214,7 @@ func testCreateUserEmailExists(ctx context.Context, client errorhandlingpb.Libra
 	if err != nil {
 		st := status.FromError(err)
 
-		if status.IsReason(err, errorhandlingpb.Reason_EMAIL_ALREADY_EXISTS) {
+		if isReason(st, errorhandlingpb.Reason_EMAIL_ALREADY_EXISTS) {
 			slog.Info("✓ Correctly identified EMAIL_ALREADY_EXISTS",
 				"grpc_code", st.Code(),
 				"http_code", st.HTTPCode(),
@@ -237,7 +238,7 @@ func testGetBookNotFound(ctx context.Context, client errorhandlingpb.LibraryServ
 	if err != nil {
 		st := status.FromError(err)
 
-		if status.IsReason(err, errorhandlingpb.Reason_BOOK_NOT_FOUND) {
+		if isReason(st, errorhandlingpb.Reason_BOOK_NOT_FOUND) {
 			slog.Info("✓ Correctly identified BOOK_NOT_FOUND",
 				"grpc_code", st.Code(),
 				"http_code", st.HTTPCode(),
@@ -284,7 +285,7 @@ func testBorrowBookAlreadyBorrowed(
 	if err != nil {
 		st := status.FromError(err)
 
-		if status.IsReason(err, errorhandlingpb.Reason_BOOK_ALREADY_BORROWED) {
+		if isReason(st, errorhandlingpb.Reason_BOOK_ALREADY_BORROWED) {
 			slog.Info("✓ Correctly identified BOOK_ALREADY_BORROWED",
 				"grpc_code", st.Code(),
 				"http_code", st.HTTPCode(),
@@ -322,7 +323,7 @@ func testAddBookToShelfFull(ctx context.Context, client errorhandlingpb.LibraryS
 	if err != nil {
 		st := status.FromError(err)
 
-		if status.IsReason(err, errorhandlingpb.Reason_SHELF_FULL) {
+		if isReason(st, errorhandlingpb.Reason_SHELF_FULL) {
 			slog.Info("✓ Correctly identified SHELF_FULL",
 				"grpc_code", st.Code(),
 				"http_code", st.HTTPCode(),
@@ -346,7 +347,7 @@ func testTriggerDatabaseError(ctx context.Context, client errorhandlingpb.Librar
 	if err != nil {
 		st := status.FromError(err)
 
-		if status.IsReason(err, errorhandlingpb.Reason_DATABASE_ERROR) {
+		if isReason(st, errorhandlingpb.Reason_DATABASE_ERROR) {
 			slog.Info("✓ Correctly identified DATABASE_ERROR",
 				"grpc_code", st.Code(),
 				"http_code", st.HTTPCode(),
@@ -370,7 +371,7 @@ func testTriggerNetworkError(ctx context.Context, client errorhandlingpb.Library
 	if err != nil {
 		st := status.FromError(err)
 
-		if status.IsReason(err, errorhandlingpb.Reason_NETWORK_ERROR) {
+		if isReason(st, errorhandlingpb.Reason_NETWORK_ERROR) {
 			slog.Info("✓ Correctly identified NETWORK_ERROR",
 				"grpc_code", st.Code(),
 				"http_code", st.HTTPCode(),
@@ -394,7 +395,7 @@ func testTriggerInternalError(ctx context.Context, client errorhandlingpb.Librar
 	if err != nil {
 		st := status.FromError(err)
 
-		if status.IsReason(err, errorhandlingpb.Reason_INTERNAL_ERROR) {
+		if isReason(st, errorhandlingpb.Reason_INTERNAL_ERROR) {
 			slog.Info("✓ Correctly identified INTERNAL_ERROR",
 				"grpc_code", st.Code(),
 				"http_code", st.HTTPCode(),
@@ -430,6 +431,17 @@ func testRetryMechanism(ctx context.Context, client errorhandlingpb.LibraryServi
 			"result", "all retries exhausted (as expected for non-retryable error)",
 		)
 	}
+}
+
+func isReason(st *status.Status, reason xerror.Reason) bool {
+	if st == nil || reason == nil {
+		return false
+	}
+	info := st.ErrorInfo()
+	if info == nil {
+		return false
+	}
+	return info.GetReason() == reason.Reason() && info.GetDomain() == reason.Domain()
 }
 
 func isRetryable(st *status.Status) bool {

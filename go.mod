@@ -1,10 +1,9 @@
 module github.com/codesjoy/yggdrasil/v2
 
-go 1.24.0
-
-toolchain go1.24.6
+go 1.25.7
 
 require (
+	github.com/codesjoy/pkg/basic/xerror v0.0.0-20260225033528-924cf61d0622
 	github.com/creasty/defaults v1.8.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-chi/chi/v5 v5.2.4

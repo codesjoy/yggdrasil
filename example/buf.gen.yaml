@@ -6,7 +6,7 @@ managed:
   disable:
     # Don't modify any files in buf.build/googleapis/googleapis
     - module: buf.build/googleapis/googleapis
-    - module: buf.build/codesjoy/yggdrasil
+    - module: buf.build/codesjoy/reason
 
   override:
     - file_option: go_package_prefix
@@ -16,7 +16,7 @@ plugins:
   - local: protoc-gen-go
     out: ./protogen
     opt: paths=source_relative
-  - local: protoc-gen-yggdrasil-reason
+  - local: protoc-gen-codesjoy-reason
     out: ./protogen
     opt: paths=source_relative
   - local: protoc-gen-yggdrasil-rpc

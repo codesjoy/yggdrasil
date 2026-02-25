@@ -30,12 +30,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/consts"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/proto"
 	transport2 "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport"
 
-	"github.com/codesjoy/yggdrasil/v2/status"
 	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
@@ -232,7 +232,7 @@ func (p *parser) recvMsg(maxReceiveMessageSize int) (pf payloadFormat, msg []byt
 		return pf, nil, nil
 	}
 	if int64(length) > int64(maxInt) {
-		return 0, nil, status.New(
+		return 0, nil, xerror.New(
 			code.Code_RESOURCE_EXHAUSTED,
 			fmt.Sprintf(
 				"grpc: received message larger than max length allowed on current machine (%d vs. %d)",
@@ -242,7 +242,7 @@ func (p *parser) recvMsg(maxReceiveMessageSize int) (pf payloadFormat, msg []byt
 		)
 	}
 	if int(length) > maxReceiveMessageSize {
-		return 0, nil, status.New(
+		return 0, nil, xerror.New(
 			code.Code_RESOURCE_EXHAUSTED,
 			fmt.Sprintf(
 				"grpc: received message larger than max (%d vs. %d)",
@@ -270,13 +270,13 @@ func encode(c encoding.Codec, msg interface{}) ([]byte, error) {
 	}
 	b, err := c.Marshal(msg)
 	if err != nil {
-		return nil, status.New(
+		return nil, xerror.New(
 			code.Code_INTERNAL,
 			fmt.Sprintf("grpc: reason while marshaling: %v", err.Error()),
 		)
 	}
 	if uint(len(b)) > math.MaxUint32 {
-		return nil, status.New(
+		return nil, xerror.New(
 			code.Code_RESOURCE_EXHAUSTED,
 			fmt.Sprintf("grpc: message too large (%d bytes)", len(b)),
 		)
@@ -293,7 +293,7 @@ func compress(in []byte, compressor encoding.Compressor) ([]byte, error) {
 		return nil, nil
 	}
 	wrapErr := func(err error) error {
-		return status.New(
+		return xerror.New(
 			code.Code_INTERNAL,
 			fmt.Sprintf("grpc: reason while compressing: %v", err.Error()),
 		)
@@ -328,18 +328,18 @@ func msgHeader(data, compData []byte) (hdr []byte, payload []byte) {
 	return hdr, data
 }
 
-func checkRecvPayload(pf payloadFormat, recvCompress string, haveCompressor bool) *status.Status {
+func checkRecvPayload(pf payloadFormat, recvCompress string, haveCompressor bool) error {
 	switch pf {
 	case compressionNone:
 	case compressionMade:
 		if recvCompress == "" || recvCompress == encoding.Identity {
-			return status.New(
+			return xerror.New(
 				code.Code_INTERNAL,
 				"grpc: compressed flag set with identity or empty encoding",
 			)
 		}
 		if !haveCompressor {
-			return status.New(
+			return xerror.New(
 				code.Code_UNIMPLEMENTED,
 				fmt.Sprintf(
 					"grpc: Decompressor is not installed for grpc-encoding %q",
@@ -348,7 +348,7 @@ func checkRecvPayload(pf payloadFormat, recvCompress string, haveCompressor bool
 			)
 		}
 	default:
-		return status.New(
+		return xerror.New(
 			code.Code_INTERNAL,
 			fmt.Sprintf("grpc: received unexpected payload format %d", pf),
 		)
@@ -376,8 +376,8 @@ func recvAndDecompress(
 		payInfo.compressedLength = len(buf)
 	}
 
-	if st := checkRecvPayload(pf, s.RecvCompress(), compressor != nil); st != nil {
-		return nil, st
+	if err := checkRecvPayload(pf, s.RecvCompress(), compressor != nil); err != nil {
+		return nil, err
 	}
 
 	var size int
@@ -386,7 +386,7 @@ func recvAndDecompress(
 		// use this decompressor as the default.
 		buf, size, err = decompress(compressor, buf, maxReceiveMessageSize)
 		if err != nil {
-			return nil, status.New(
+			return nil, xerror.New(
 				code.Code_INTERNAL,
 				fmt.Sprintf("grpc: failed to decompress the received message %v", err),
 			)
@@ -394,7 +394,7 @@ func recvAndDecompress(
 		if size > maxReceiveMessageSize {
 			// TODO: Revisit the reason code. Currently keep it consistent with java
 			// implementation.
-			return nil, status.New(
+			return nil, xerror.New(
 				code.Code_RESOURCE_EXHAUSTED,
 				fmt.Sprintf(
 					"grpc: received message after decompression larger than max (%d vs. %d)",
@@ -456,7 +456,7 @@ func recv(
 		return err
 	}
 	if err := c.Unmarshal(buf, m); err != nil {
-		return status.New(
+		return xerror.New(
 			code.Code_INTERNAL,
 			fmt.Sprintf("grpc: failed to unmarshal the received message %v", err),
 		)
@@ -514,21 +514,24 @@ func toRPCErr(err error) error {
 	case err == nil, err == io.EOF:
 		return err
 	case errors.Is(err, context.DeadlineExceeded):
-		return status.WithCode(code.Code_DEADLINE_EXCEEDED, err)
+		return xerror.Wrap(err, code.Code_DEADLINE_EXCEEDED, "")
 	case errors.Is(err, context.Canceled):
-		return status.WithCode(code.Code_CANCELLED, err)
+		return xerror.Wrap(err, code.Code_CANCELLED, "")
 	case errors.Is(err, io.ErrUnexpectedEOF):
-		return status.WithCode(code.Code_INTERNAL, err)
+		return xerror.Wrap(err, code.Code_INTERNAL, "")
 	}
 
 	switch e := err.(type) {
 	case transport2.ConnectionError:
-		return status.New(code.Code_UNAVAILABLE, e.Desc)
+		return xerror.New(code.Code_UNAVAILABLE, e.Desc)
 	case *transport2.NewStreamError:
 		return toRPCErr(e.Err)
 	}
 
-	return status.FromError(err)
+	if _, ok := xerror.CodeOf(err); ok {
+		return err
+	}
+	return xerror.Wrap(err, code.Code_UNKNOWN, "")
 }
 
 // setCallInfoCodec should only be called after CallOptions have been applied.
@@ -555,7 +558,7 @@ func setCallInfoCodec(c *callInfo) error {
 	// c.contentSubtype is already lowercased in CallContentSubtype
 	c.codec = encoding.GetCodec(c.contentSubtype)
 	if c.codec == nil {
-		return status.New(
+		return xerror.New(
 			code.Code_INTERNAL,
 			fmt.Sprintf("no codec registered for content-subtype %s", c.contentSubtype),
 		)

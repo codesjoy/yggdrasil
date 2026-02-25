@@ -12,26 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package status provides a way to handle error details.
 package status
 
 import (
-	"google.golang.org/genproto/googleapis/rpc/code"
+	"github.com/codesjoy/pkg/basic/xerror"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 )
 
-// Reason defines the reason for the error
-type Reason interface {
-	Reason() string
-	Domain() string
-	Code() code.Code
-}
-
-// NewReason returns a new reason.
-func NewReason(reason Reason, meta map[string]string) *errdetails.ErrorInfo {
-	return &errdetails.ErrorInfo{
-		Reason:   reason.Reason(),
-		Domain:   reason.Domain(),
-		Metadata: meta,
+func fromXError(err error) (*Status, bool) {
+	errorCode, ok := xerror.CodeOf(err)
+	if !ok {
+		return nil, false
 	}
+
+	st := WithCode(errorCode, err)
+	reason, domain, metadata, ok := xerror.ReasonOf(err)
+	if ok {
+		_ = st.WithDetails(&errdetails.ErrorInfo{
+			Reason:   reason,
+			Domain:   domain,
+			Metadata: metadata,
+		})
+	}
+	return st, true
 }

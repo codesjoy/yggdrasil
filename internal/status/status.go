@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -36,8 +35,7 @@ const (
 
 // Status represents a status.
 type Status struct {
-	stu    *status.Status
-	stacks []string
+	stu *status.Status
 }
 
 // New creates a new status from code and message.
@@ -58,10 +56,6 @@ func WithCode(code code.Code, err error) *Status {
 		selfErr.stu.Message = code.String()
 	} else {
 		selfErr.stu.Message = err.Error()
-		selfErr.stacks = strings.Split(strings.ReplaceAll(fmt.Sprintf("%+v", err), "\t", ""), "\n")
-		if len(selfErr.stacks) > 0 {
-			selfErr.stacks = selfErr.stacks[1:]
-		}
 	}
 	return selfErr
 }
@@ -79,22 +73,6 @@ func (e *Status) WithDetails(details ...proto.Message) *Status {
 	for _, detail := range details {
 		detail, _ := anypb.New(detail)
 		e.stu.Details = append(e.stu.Details, detail)
-	}
-	return e
-}
-
-// WithStack adds stack to the status.
-func (e *Status) WithStack() *Status {
-	if len(e.stacks) > 1 {
-		return e.WithDetails(&errdetails.DebugInfo{
-			StackEntries: e.Stacks()[1:],
-			Detail:       e.Message(),
-		})
-	} else if len(e.stacks) > 0 {
-		return e.WithDetails(&errdetails.DebugInfo{
-			StackEntries: e.Stacks(),
-			Detail:       e.Message(),
-		})
 	}
 	return e
 }
@@ -139,14 +117,6 @@ func (e *Status) Error() string {
 	return e.stu.String()
 }
 
-// Stacks returns the stacks of the status.
-func (e *Status) Stacks() []string {
-	if e == nil {
-		return nil
-	}
-	return e.stacks
-}
-
 // Message returns the message of the status.
 func (e *Status) Message() string {
 	if e == nil || e.stu == nil {
@@ -183,12 +153,6 @@ func (e *Status) Format(s fmt.State, verb rune) {
 	case 'v':
 		if s.Flag('+') {
 			_, _ = io.WriteString(s, e.Message())
-			for i := 0; i < len(e.stacks); i += 2 {
-				_, _ = io.WriteString(s, "\n")
-				_, _ = io.WriteString(s, e.stacks[i])
-				_, _ = io.WriteString(s, "\n\t")
-				_, _ = io.WriteString(s, e.stacks[i+1])
-			}
 			return
 		}
 		fallthrough
@@ -204,11 +168,18 @@ func CoverError(err error) (*Status, bool) {
 	if err == nil {
 		return nil, true
 	}
+
 	var s *Status
 	ok := errors.As(err, &s)
 	if ok {
 		return s, true
 	}
+
+	s, ok = fromXError(err)
+	if ok {
+		return s, true
+	}
+
 	return nil, false
 }
 

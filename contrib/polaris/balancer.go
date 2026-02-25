@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2/balancer"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote"
@@ -261,7 +262,7 @@ func (p *polarisPicker) Next(ri balancer.RPCInfo) (balancer.PickResult, error) {
 			if cr.RuleName != "" {
 				msg = msg + ": " + cr.RuleName
 			}
-			return nil, status.New(code.Code_UNAVAILABLE, msg).Err()
+			return nil, xerror.New(code.Code_UNAVAILABLE, msg)
 		}
 	}
 
@@ -318,21 +319,28 @@ func (p *polarisPicker) checkRateLimit(ctx context.Context, method string) error
 	}
 	resp := future.GetImmediately()
 	if resp == nil {
-		return status.New(code.Code_UNKNOWN, "polaris rate limit: empty response").Err()
+		return xerror.New(code.Code_UNKNOWN, "polaris rate limit: empty response")
 	}
 	if resp.Code != model.QuotaResultOk {
 		msg := resp.Info
 		if msg == "" {
 			msg = "polaris rate limit exceeded"
 		}
-		return status.New(code.Code_RESOURCE_EXHAUSTED, msg).Err()
+		return xerror.New(code.Code_RESOURCE_EXHAUSTED, msg)
 	}
 	if resp.WaitMs > 0 {
 		t := time.NewTimer(time.Duration(resp.WaitMs) * time.Millisecond)
 		defer t.Stop()
 		select {
 		case <-ctx.Done():
-			return status.FromContextError(ctx.Err()).Err()
+			switch {
+			case errors.Is(ctx.Err(), context.DeadlineExceeded):
+				return xerror.Wrap(ctx.Err(), code.Code_DEADLINE_EXCEEDED, "")
+			case errors.Is(ctx.Err(), context.Canceled):
+				return xerror.Wrap(ctx.Err(), code.Code_CANCELLED, "")
+			default:
+				return xerror.Wrap(ctx.Err(), code.Code_UNKNOWN, "")
+			}
 		case <-t.C:
 		}
 	}

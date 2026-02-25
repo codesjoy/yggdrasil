@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2/balancer"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
@@ -31,7 +32,6 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
 	"github.com/codesjoy/yggdrasil/v2/stats"
-	"github.com/codesjoy/yggdrasil/v2/status"
 	"github.com/codesjoy/yggdrasil/v2/stream"
 	"github.com/codesjoy/yggdrasil/v2/utils/xarray"
 	"github.com/codesjoy/yggdrasil/v2/utils/xgo"
@@ -40,7 +40,7 @@ import (
 )
 
 // ErrClientClosing is returned when the client is closing.
-var ErrClientClosing = status.New(code.Code_CANCELLED, "the client is closing")
+var ErrClientClosing = xerror.New(code.Code_CANCELLED, "the client is closing")
 
 // Client is the client interface.
 type Client interface {
@@ -319,7 +319,7 @@ func (c *client) newStream(
 					return nil, ErrClientClosing
 				case <-ctx.Done():
 					t.Stop()
-					return nil, status.New(
+					return nil, xerror.New(
 						code.Code_DEADLINE_EXCEEDED,
 						"context done while waiting for available instance",
 					)
@@ -404,7 +404,14 @@ func (c *client) waitForResolved(ctx context.Context) error {
 	case <-c.resolvedEvent.Done():
 		return nil
 	case <-ctx.Done():
-		return status.FromContextError(ctx.Err()).Err()
+		switch {
+		case errors.Is(ctx.Err(), context.DeadlineExceeded):
+			return xerror.Wrap(ctx.Err(), code.Code_DEADLINE_EXCEEDED, "")
+		case errors.Is(ctx.Err(), context.Canceled):
+			return xerror.Wrap(ctx.Err(), code.Code_CANCELLED, "")
+		default:
+			return xerror.Wrap(ctx.Err(), code.Code_UNKNOWN, "")
+		}
 	case <-c.ctx.Done():
 		return ErrClientClosing
 	}

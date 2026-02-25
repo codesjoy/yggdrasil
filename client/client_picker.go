@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2/balancer"
 	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
 	"github.com/codesjoy/yggdrasil/v2/remote"
@@ -74,9 +75,9 @@ func (c *client) pick(failFast bool, info *balancer.RPCInfo) (balancer.PickResul
 				}
 				switch err := info.Ctx.Err(); {
 				case errors.Is(err, context.DeadlineExceeded):
-					return nil, status.New(code.Code_DEADLINE_EXCEEDED, errStr)
+					return nil, xerror.New(code.Code_DEADLINE_EXCEEDED, errStr)
 				case errors.Is(err, context.Canceled):
-					return nil, status.New(code.Code_CANCELLED, errStr)
+					return nil, xerror.New(code.Code_CANCELLED, errStr)
 				}
 			case <-ch:
 			}
@@ -95,7 +96,7 @@ func (c *client) pick(failFast bool, info *balancer.RPCInfo) (balancer.PickResul
 			}
 			if st, ok := status.CoverError(err); ok {
 				if istatus.IsRestrictedControlPlaneCode(st) {
-					err = status.New(
+					err = xerror.New(
 						code.Code_INTERNAL,
 						fmt.Sprintf("received picker error with illegal status: %v", err),
 					)
@@ -109,7 +110,7 @@ func (c *client) pick(failFast bool, info *balancer.RPCInfo) (balancer.PickResul
 				ch = pg.blockingCh
 				continue
 			}
-			return nil, status.New(code.Code_UNAVAILABLE, err.Error())
+			return nil, xerror.New(code.Code_UNAVAILABLE, err.Error())
 		}
 
 		if pickResult.RemoteClient().State() != remote.Ready {

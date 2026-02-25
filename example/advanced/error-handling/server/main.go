@@ -23,13 +23,13 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/config/source/file"
 	errorhandlingpb "github.com/codesjoy/yggdrasil/v2/example/protogen/error-handling"
 	_ "github.com/codesjoy/yggdrasil/v2/interceptor/logging"
 	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
-	"github.com/codesjoy/yggdrasil/v2/status"
 	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
@@ -59,6 +59,10 @@ func NewLibraryServer() *LibraryServer {
 	}
 }
 
+func reasonErr(err error, reason xerror.Reason, metadata map[string]string) error {
+	return xerror.WrapWithReason(err, reason, "", metadata)
+}
+
 func (s *LibraryServer) CreateUser(
 	ctx context.Context,
 	req *errorhandlingpb.CreateUserRequest,
@@ -67,7 +71,7 @@ func (s *LibraryServer) CreateUser(
 
 	// Validate email format
 	if req.Email == "" || !strings.Contains(req.Email, "@") {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			errors.New("invalid email format"),
 			errorhandlingpb.Reason_INVALID_INPUT,
 			map[string]string{"field": "email", "value": req.Email},
@@ -76,7 +80,7 @@ func (s *LibraryServer) CreateUser(
 
 	// Validate password
 	if req.Password == "" || len(req.Password) < 6 {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			errors.New("password too short"),
 			errorhandlingpb.Reason_INVALID_INPUT,
 			map[string]string{"field": "password", "min_length": "6"},
@@ -88,7 +92,7 @@ func (s *LibraryServer) CreateUser(
 
 	// Check if email already exists
 	if _, exists := s.emailToID[req.Email]; exists {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			fmt.Errorf("email %s already registered", req.Email),
 			errorhandlingpb.Reason_EMAIL_ALREADY_EXISTS,
 			map[string]string{"email": req.Email},
@@ -118,7 +122,7 @@ func (s *LibraryServer) GetUser(
 	slog.Info("GetUser called", "user_id", req.UserId)
 
 	if req.UserId == "" {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			errors.New("user_id is required"),
 			errorhandlingpb.Reason_INVALID_INPUT,
 			map[string]string{"field": "user_id"},
@@ -130,7 +134,7 @@ func (s *LibraryServer) GetUser(
 
 	user, exists := s.users[req.UserId]
 	if !exists {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			fmt.Errorf("user %s not found", req.UserId),
 			errorhandlingpb.Reason_USER_NOT_FOUND,
 			map[string]string{"user_id": req.UserId},
@@ -151,7 +155,7 @@ func (s *LibraryServer) AuthenticateUser(
 
 	userID, exists := s.emailToID[req.Email]
 	if !exists {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			errors.New("invalid credentials"),
 			errorhandlingpb.Reason_INVALID_CREDENTIALS,
 			map[string]string{"email": req.Email},
@@ -162,7 +166,7 @@ func (s *LibraryServer) AuthenticateUser(
 
 	// Simple password check (in production, use bcrypt)
 	if req.Password != "password123" {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			errors.New("invalid credentials"),
 			errorhandlingpb.Reason_INVALID_CREDENTIALS,
 			map[string]string{"email": req.Email},
@@ -183,7 +187,7 @@ func (s *LibraryServer) CreateBook(
 	slog.Info("CreateBook called", "title", req.Title, "author", req.Author)
 
 	if req.Title == "" || req.Author == "" {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			errors.New("title and author are required"),
 			errorhandlingpb.Reason_INVALID_INPUT,
 			map[string]string{"missing_fields": "title, author"},
@@ -215,7 +219,7 @@ func (s *LibraryServer) GetBook(
 	slog.Info("GetBook called", "book_id", req.BookId)
 
 	if req.BookId == "" {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			errors.New("book_id is required"),
 			errorhandlingpb.Reason_INVALID_INPUT,
 			map[string]string{"field": "book_id"},
@@ -227,7 +231,7 @@ func (s *LibraryServer) GetBook(
 
 	book, exists := s.books[req.BookId]
 	if !exists {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			fmt.Errorf("book %s not found", req.BookId),
 			errorhandlingpb.Reason_BOOK_NOT_FOUND,
 			map[string]string{"book_id": req.BookId},
@@ -248,7 +252,7 @@ func (s *LibraryServer) BorrowBook(
 
 	// Check if user exists
 	if _, exists := s.users[req.UserId]; !exists {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			fmt.Errorf("user %s not found", req.UserId),
 			errorhandlingpb.Reason_USER_NOT_FOUND,
 			map[string]string{"user_id": req.UserId},
@@ -258,7 +262,7 @@ func (s *LibraryServer) BorrowBook(
 	// Check if book exists
 	book, exists := s.books[req.BookId]
 	if !exists {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			fmt.Errorf("book %s not found", req.BookId),
 			errorhandlingpb.Reason_BOOK_NOT_FOUND,
 			map[string]string{"book_id": req.BookId},
@@ -267,7 +271,7 @@ func (s *LibraryServer) BorrowBook(
 
 	// Check if book is already borrowed
 	if book.BorrowerId != "" {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			errors.New("book is already borrowed"),
 			errorhandlingpb.Reason_BOOK_ALREADY_BORROWED,
 			map[string]string{
@@ -295,7 +299,7 @@ func (s *LibraryServer) ReturnBook(
 
 	book, exists := s.books[req.BookId]
 	if !exists {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			fmt.Errorf("book %s not found", req.BookId),
 			errorhandlingpb.Reason_BOOK_NOT_FOUND,
 			map[string]string{"book_id": req.BookId},
@@ -315,7 +319,7 @@ func (s *LibraryServer) CreateShelf(
 	slog.Info("CreateShelf called", "name", req.Name, "capacity", req.Capacity)
 
 	if req.Name == "" {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			errors.New("name is required"),
 			errorhandlingpb.Reason_INVALID_INPUT,
 			map[string]string{"field": "name"},
@@ -323,7 +327,7 @@ func (s *LibraryServer) CreateShelf(
 	}
 
 	if req.Capacity <= 0 {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			errors.New("capacity must be positive"),
 			errorhandlingpb.Reason_INVALID_INPUT,
 			map[string]string{"field": "capacity", "min": "1"},
@@ -360,7 +364,7 @@ func (s *LibraryServer) AddBookToShelf(
 	// Check if shelf exists
 	shelf, exists := s.shelves[req.ShelfId]
 	if !exists {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			fmt.Errorf("shelf %s not found", req.ShelfId),
 			errorhandlingpb.Reason_SHELF_NOT_FOUND,
 			map[string]string{"shelf_id": req.ShelfId},
@@ -369,7 +373,7 @@ func (s *LibraryServer) AddBookToShelf(
 
 	// Check if book exists
 	if _, exists := s.books[req.BookId]; !exists {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			fmt.Errorf("book %s not found", req.BookId),
 			errorhandlingpb.Reason_BOOK_NOT_FOUND,
 			map[string]string{"book_id": req.BookId},
@@ -378,7 +382,7 @@ func (s *LibraryServer) AddBookToShelf(
 
 	// Check if shelf is full
 	if shelf.CurrentCount >= shelf.Capacity {
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			fmt.Errorf("shelf %s is full", req.ShelfId),
 			errorhandlingpb.Reason_SHELF_FULL,
 			map[string]string{
@@ -404,7 +408,7 @@ func (s *LibraryServer) TriggerError(
 
 	switch req.ErrorType {
 	case "database_error":
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			errors.New("database connection failed"),
 			errorhandlingpb.Reason_DATABASE_ERROR,
 			map[string]string{
@@ -413,7 +417,7 @@ func (s *LibraryServer) TriggerError(
 			},
 		)
 	case "network_error":
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			errors.New("network timeout"),
 			errorhandlingpb.Reason_NETWORK_ERROR,
 			map[string]string{
@@ -422,7 +426,7 @@ func (s *LibraryServer) TriggerError(
 			},
 		)
 	case "internal_error":
-		return nil, status.FromReason(
+		return nil, reasonErr(
 			errors.New("unexpected internal error"),
 			errorhandlingpb.Reason_INTERNAL_ERROR,
 			map[string]string{
@@ -431,7 +435,7 @@ func (s *LibraryServer) TriggerError(
 			},
 		)
 	default:
-		return nil, status.WithCode(code.Code_INVALID_ARGUMENT, errors.New("unknown error type"))
+		return nil, xerror.Wrap(errors.New("unknown error type"), code.Code_INVALID_ARGUMENT, "")
 	}
 }
 

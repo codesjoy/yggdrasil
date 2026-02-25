@@ -20,6 +20,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/config/source/file"
@@ -28,7 +29,6 @@ import (
 	_ "github.com/codesjoy/yggdrasil/v2/interceptor/logging"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
-	"github.com/codesjoy/yggdrasil/v2/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -284,9 +284,10 @@ func (s *LibraryImpl) MoveBook(
 		ctx,
 		metadata.Pairs("server", "traffic-splitting-server", "version", s.version),
 	)
-	return nil, status.FromReason(
+	return nil, xerror.WrapWithReason(
 		errors.New("book not found"),
 		librarypb.Reason_BOOK_NOT_FOUND,
+		"",
 		nil,
 	)
 }

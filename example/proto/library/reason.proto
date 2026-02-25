@@ -18,11 +18,11 @@ package codesjoy.yggdrasil.example.proto.library;
 
 option go_package = "github.com/codesjoy/yggdrasil/v2/example/protogen/library;library";
 
-import "codesjoy/yggdrasil/reason/reason.proto";
+import "codesjoy/reason/v1/reason.proto";
 
 enum Reason {
-  option (codesjoy.yggdrasil.reason.default_reason) = 500;
+  option (codesjoy.reason.v1.default_reason) = 500;
   // Do not use this default value.
   ERROR_REASON_UNSPECIFIED = 0;
-  BOOK_NOT_FOUND = 1 [(codesjoy.yggdrasil.reason.code) = NOT_FOUND];
+  BOOK_NOT_FOUND = 1 [(codesjoy.reason.v1.code) = NOT_FOUND];
 }

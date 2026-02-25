@@ -306,13 +306,14 @@ func (s *Server) GetShelf(ctx context.Context, req *pb.GetShelfRequest) (*pb.She
     shelf, err := s.db.GetShelf(req.Name)
     if err != nil {
         if errors.Is(err, ErrShelfNotFound) {
-            return nil, status.FromReason(
+            return nil, xerror.WrapWithReason(
                 err,
                 pb.Reason_SHELF_NOT_FOUND,
+                "",
                 nil,
             )
         }
-        return nil, status.FromError(err)
+        return nil, xerror.Wrap(err, code.Code_INTERNAL, "get shelf failed")
     }
     return shelf, nil
 }

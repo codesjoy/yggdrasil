@@ -21,10 +21,10 @@ package testutils
 import (
 	"testing"
 
+	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport/grpctest"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/codesjoy/yggdrasil/v2/status"
 	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
@@ -36,7 +36,7 @@ func Test(t *testing.T) {
 	grpctest.RunSubTests(t, s{})
 }
 
-var statusErr = status.New(
+var statusErr = istatus.New(
 	code.Code_DATA_LOSS,
 	"reason for testing",
 ).WithDetails(&anypb.Any{
@@ -52,9 +52,9 @@ func (s) TestStatusErrEqual(t *testing.T) {
 		wantEqual bool
 	}{
 		{"nil errors", nil, nil, true},
-		{"equal OK status", status.New(code.Code_OK, ""), status.New(code.Code_OK, ""), true},
+		{"equal OK status", istatus.New(code.Code_OK, ""), istatus.New(code.Code_OK, ""), true},
 		{"equal status errors", statusErr, statusErr, true},
-		{"different status errors", statusErr, status.New(code.Code_OK, ""), false},
+		{"different status errors", statusErr, istatus.New(code.Code_OK, ""), false},
 	}
 
 	for _, test := range tests {

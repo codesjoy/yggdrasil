@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/internal/backoff"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
@@ -37,7 +38,6 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
 	"github.com/codesjoy/yggdrasil/v2/stats"
-	"github.com/codesjoy/yggdrasil/v2/status"
 	"github.com/codesjoy/yggdrasil/v2/stream"
 	"github.com/codesjoy/yggdrasil/v2/utils/xsync"
 	"google.golang.org/genproto/googleapis/rpc/code"
@@ -188,19 +188,19 @@ func (cc *clientConn) NewStream(
 	}()
 	t := cc.transport
 	if t == nil {
-		return nil, status.New(code.Code_UNAVAILABLE, "transport unavailable")
+		return nil, xerror.New(code.Code_UNAVAILABLE, "transport unavailable")
 		//tc := time.NewTimer(cc.cfg.WaitConnTimeout)
 		//defer tc.Stop()
 		//ch := cc.resetTransport()
 		//select {
 		//case <-ctx.Done():
-		//	return nil, status.WithCode(code.Code_UNAVAILABLE, ctx.Err())
+		//	return nil, xerror.Wrap(ctx.Err(), code.Code_UNAVAILABLE, "")
 		//case <-tc.C:
-		//	return nil, status.New(code.Code_UNAVAILABLE, "wait transport timeout")
+		//	return nil, xerror.New(code.Code_UNAVAILABLE, "wait transport timeout")
 		//case <-ch:
 		//}
 		//if t = cc.transport; t == nil {
-		//	return nil, status.New(code.Code_UNAVAILABLE, "transport unavailable")
+		//	return nil, xerror.New(code.Code_UNAVAILABLE, "transport unavailable")
 		//}
 	}
 	c := defaultCallInfo()
@@ -221,7 +221,7 @@ func (cc *clientConn) NewStream(
 		if ct != encoding.Identity {
 			comp = encoding.GetCompressor(ct)
 			if comp == nil {
-				return nil, status.New(
+				return nil, xerror.New(
 					code.Code_INTERNAL,
 					fmt.Sprintf(
 						"grpc: Compressor is not installed for requested grpc-encoding %q",
@@ -489,7 +489,7 @@ func (as *clientStream) SendMsg(m interface{}) (err error) {
 		}
 	}()
 	if as.sentLast {
-		return status.New(code.Code_INTERNAL, "SendMsg called after CloseSend")
+		return xerror.New(code.Code_INTERNAL, "SendMsg called after CloseSend")
 	}
 	if !as.desc.ClientStreams {
 		as.sentLast = true
@@ -503,7 +503,7 @@ func (as *clientStream) SendMsg(m interface{}) (err error) {
 
 	// TODO(dfawley): should we be checking len(data) instead?
 	if len(payld) > *as.callInfo.maxSendMessageSize {
-		return status.New(
+		return xerror.New(
 			code.Code_RESOURCE_EXHAUSTED,
 			fmt.Sprintf(
 				"trying to send message larger than max (%d vs. %d)",

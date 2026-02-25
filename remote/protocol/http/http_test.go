@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote"
@@ -133,7 +134,7 @@ func TestHTTPUnaryJSONPbGeneric(t *testing.T) {
 func TestHTTPUnaryErrorMapping(t *testing.T) {
 	addr, stop := startHTTPTestServer(t, func(ss remote.ServerStream) {
 		require.NoError(t, ss.Start(false, false))
-		ss.Finish(nil, status.New(code.Code_INVALID_ARGUMENT, "bad"))
+		ss.Finish(nil, xerror.New(code.Code_INVALID_ARGUMENT, "bad"))
 	})
 	t.Cleanup(stop)
 
@@ -148,7 +149,7 @@ func TestHTTPUnaryErrorMapping(t *testing.T) {
 	require.NoError(t, cs.SendMsg(req))
 	err = cs.RecvMsg(resp)
 	require.Error(t, err)
-	require.True(t, status.IsCode(err, code.Code_INVALID_ARGUMENT))
+	require.Equal(t, code.Code_INVALID_ARGUMENT, status.FromError(err).Code())
 
 	h, _ := cs.Header()
 	_, ok := h["content-type"]

@@ -35,11 +35,11 @@ func local_handler_{{$.ServiceType}}_{{ .Name }}_{{.Num}}(w {{$.HTTPPkg}}Respons
 			{{end}}
 			inbound := {{$.MarshalerPkg}}InboundFromContext(r.Context())
 			if err := inbound.NewDecoder(r.Body).Decode(protoReq{{$method.Body}}); err != nil && err != {{$.IoPkg}}EOF {
-				return nil, {{$.StatusPkg}}WithCode({{$.CodePkg}}Code_INVALID_ARGUMENT, err)
+				return nil, {{$.StatusPkg}}Wrap(err, {{$.CodePkg}}Code_INVALID_ARGUMENT, "")
 			}
 		{{else -}}
 			if err := {{$.RestPkg}}PopulateQueryParameters(protoReq, r.URL.Query()); err != nil {
-				return nil,  {{$.StatusPkg}}WithCode({{$.CodePkg}}Code_INVALID_ARGUMENT, err)
+				return nil,  {{$.StatusPkg}}Wrap(err, {{$.CodePkg}}Code_INVALID_ARGUMENT, "")
 			}
 		{{end -}}
 
@@ -47,7 +47,7 @@ func local_handler_{{$.ServiceType}}_{{ .Name }}_{{.Num}}(w {{$.HTTPPkg}}Respons
 			if val := {{parsePathValues $value }}; len(val) == 0 {
 				return nil, {{$.StatusPkg}}New({{$.CodePkg}}Code_INVALID_ARGUMENT, "not found {{$key}}")
 			} else if err := {{$.RestPkg}}PopulateFieldFromPath(protoReq, {{$key | printf "%q"}}, val); err != nil {
-				return nil, {{$.StatusPkg}}WithCode({{$.CodePkg}}Code_INVALID_ARGUMENT, err)
+				return nil, {{$.StatusPkg}}Wrap(err, {{$.CodePkg}}Code_INVALID_ARGUMENT, "")
 			}
 		{{- end}}
 	

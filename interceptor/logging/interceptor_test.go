@@ -21,9 +21,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
-	"github.com/codesjoy/yggdrasil/v2/status"
 	"github.com/codesjoy/yggdrasil/v2/stream"
 	"github.com/stretchr/testify/assert"
 
@@ -233,7 +233,7 @@ func TestLogging_UnaryServerInterceptor(t *testing.T) {
 		}
 
 		handler := func(_ context.Context, _ interface{}) (interface{}, error) {
-			return nil, status.New(code.Code_INTERNAL, "internal error")
+			return nil, xerror.New(code.Code_INTERNAL, "internal error")
 		}
 
 		resp, err := l.UnaryServerInterceptor(context.Background(), "request", info, handler)
@@ -539,7 +539,7 @@ func TestLogging_ErrorLevel(t *testing.T) {
 		}
 
 		handler := func(_ context.Context, _ interface{}) (interface{}, error) {
-			return nil, status.New(code.Code_INTERNAL, "internal server error")
+			return nil, xerror.New(code.Code_INTERNAL, "internal server error")
 		}
 
 		resp, err := l.UnaryServerInterceptor(context.Background(), "request", info, handler)
@@ -557,7 +557,7 @@ func TestLogging_ErrorLevel(t *testing.T) {
 		}
 
 		handler := func(_ context.Context, _ interface{}) (interface{}, error) {
-			return nil, status.New(code.Code_NOT_FOUND, "not found")
+			return nil, xerror.New(code.Code_NOT_FOUND, "not found")
 		}
 
 		resp, err := l.UnaryServerInterceptor(context.Background(), "request", info, handler)
@@ -672,7 +672,7 @@ func TestLogging_StatusCodeConversion(t *testing.T) {
 				}
 
 				handler := func(_ context.Context, _ interface{}) (interface{}, error) {
-					return nil, status.New(tc.code, "test error")
+					return nil, xerror.New(tc.code, "test error")
 				}
 
 				resp, err := l.UnaryServerInterceptor(

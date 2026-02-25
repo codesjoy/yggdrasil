@@ -19,8 +19,8 @@
 package grpc
 
 import (
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport"
-	"github.com/codesjoy/yggdrasil/v2/status"
 	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
@@ -42,15 +42,15 @@ func (p *PreparedMsg) Encode(s *transport.Stream, msg interface{}) error {
 	ctx := s.Context()
 	rpcInfo, ok := rpcInfoFromContext(ctx)
 	if !ok {
-		return status.New(code.Code_INTERNAL, "grpc: unable to get rpcInfo")
+		return xerror.New(code.Code_INTERNAL, "grpc: unable to get rpcInfo")
 	}
 
 	// check if the context has the relevant information to prepareMsg
 	if rpcInfo.preloaderInfo == nil {
-		return status.New(code.Code_INTERNAL, "grpc: rpcInfo.preloaderInfo is nil")
+		return xerror.New(code.Code_INTERNAL, "grpc: rpcInfo.preloaderInfo is nil")
 	}
 	if rpcInfo.preloaderInfo.codec == nil {
-		return status.New(code.Code_INTERNAL, "grpc: rpcInfo.preloaderInfo.codec is nil")
+		return xerror.New(code.Code_INTERNAL, "grpc: rpcInfo.preloaderInfo.codec is nil")
 	}
 
 	// prepare the msg

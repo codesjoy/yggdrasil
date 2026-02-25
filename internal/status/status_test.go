@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -252,22 +253,6 @@ func TestStatus_Error(t *testing.T) {
 	})
 }
 
-// TestStatus_Stacks tests Stacks method
-func TestStatus_Stacks(t *testing.T) {
-	t.Run("Stacks returns nil for nil status", func(t *testing.T) {
-		var st *Status
-		assert.Nil(t, st.Stacks())
-	})
-
-	t.Run("Stacks returns stacks from error", func(t *testing.T) {
-		err := errors.New("test error")
-		st := WithCode(code.Code_UNKNOWN, err)
-		stacks := st.Stacks()
-		assert.NotNil(t, stacks)
-		// Stacks should contain the error trace
-	})
-}
-
 // TestStatus_WithDetails tests WithDetails method
 func TestStatus_WithDetails(t *testing.T) {
 	t.Run("add detail to status", func(t *testing.T) {
@@ -292,34 +277,6 @@ func TestStatus_WithDetails(t *testing.T) {
 		_ = st.WithDetails(&errdetails.ErrorInfo{})
 		// Should not panic
 		assert.Nil(t, st)
-	})
-}
-
-// TestStatus_WithStack tests WithStack method
-func TestStatus_WithStack(t *testing.T) {
-	t.Run("add stack to status", func(t *testing.T) {
-		err := errors.New("test error")
-		st := WithCode(code.Code_UNKNOWN, err)
-		initialDetailCount := len(st.stu.Details)
-
-		// WithStack only adds detail if len(e.stacks) > 0
-		// For simple errors from errors.New(), stacks may be empty
-		_ = st.WithStack()
-
-		// Check if stacks were added
-		if len(st.stacks) > 0 {
-			assert.Equal(t, initialDetailCount+1, len(st.stu.Details))
-		} else {
-			// No stacks available, WithStack doesn't add detail
-			assert.Equal(t, initialDetailCount, len(st.stu.Details))
-		}
-	})
-
-	t.Run("WithStack with no stacks", func(t *testing.T) {
-		st := WithCode(code.Code_OK, nil)
-		_ = st.WithStack()
-		// Should not add detail when no stacks
-		assert.Equal(t, 0, len(st.stu.Details))
 	})
 }
 
@@ -362,6 +319,95 @@ func TestStatus_Format(t *testing.T) {
 		str := fmt.Sprintf("%v", st)
 		assert.Contains(t, str, "not found")
 	})
+
+	t.Run("format with %+v", func(t *testing.T) {
+		st := WithCode(code.Code_NOT_FOUND, errors.New("not found"))
+		str := fmt.Sprintf("%+v", st)
+		assert.Equal(t, "not found", str)
+	})
+}
+
+// TestCoverError tests CoverError function.
+func TestCoverError(t *testing.T) {
+	t.Run("cover nil error", func(t *testing.T) {
+		st, ok := CoverError(nil)
+		assert.Nil(t, st)
+		assert.True(t, ok)
+	})
+
+	t.Run("cover status error", func(t *testing.T) {
+		originalSt := WithCode(code.Code_NOT_FOUND, errors.New("not found"))
+		wrappedErr := fmt.Errorf("wrapped: %w", originalSt)
+		st, ok := CoverError(wrappedErr)
+		assert.True(t, ok)
+		assert.NotNil(t, st)
+		assert.Equal(t, code.Code_NOT_FOUND, st.Code())
+	})
+
+	t.Run("cover xerror", func(t *testing.T) {
+		xerr := xerror.Wrap(errors.New("db timeout"), code.Code_UNAVAILABLE, "")
+		st, ok := CoverError(xerr)
+		assert.True(t, ok)
+		assert.NotNil(t, st)
+		assert.Equal(t, code.Code_UNAVAILABLE, st.Code())
+		assert.Equal(t, "db timeout", st.Message())
+	})
+
+	t.Run("cover wrapped xerror", func(t *testing.T) {
+		xerr := xerror.Wrap(errors.New("db timeout"), code.Code_UNAVAILABLE, "")
+		wrappedErr := fmt.Errorf("wrapped: %w", xerr)
+		st, ok := CoverError(wrappedErr)
+		assert.True(t, ok)
+		assert.NotNil(t, st)
+		assert.Equal(t, code.Code_UNAVAILABLE, st.Code())
+		assert.Equal(t, "wrapped: db timeout", st.Message())
+	})
+
+	t.Run("cover xerror with reason details", func(t *testing.T) {
+		reason := &errdetails.ErrorInfo{
+			Reason: "VALIDATION_ERROR",
+			Domain: "test.domain",
+		}
+		xerr := xerror.WrapWithReason(
+			errors.New("validation failed"),
+			reasonPayload{info: reason, code: code.Code_INVALID_ARGUMENT},
+			"",
+			map[string]string{"field": "email"},
+		)
+
+		st, ok := CoverError(xerr)
+		assert.True(t, ok)
+		assert.NotNil(t, st)
+		assert.Equal(t, code.Code_INVALID_ARGUMENT, st.Code())
+		errorInfo := st.ErrorInfo()
+		assert.NotNil(t, errorInfo)
+		assert.Equal(t, "VALIDATION_ERROR", errorInfo.Reason)
+		assert.Equal(t, "test.domain", errorInfo.Domain)
+		assert.Equal(t, "email", errorInfo.Metadata["field"])
+	})
+
+	t.Run("cover standard error", func(t *testing.T) {
+		st, ok := CoverError(errors.New("standard error"))
+		assert.Nil(t, st)
+		assert.False(t, ok)
+	})
+}
+
+type reasonPayload struct {
+	info *errdetails.ErrorInfo
+	code code.Code
+}
+
+func (r reasonPayload) Reason() string {
+	return r.info.GetReason()
+}
+
+func (r reasonPayload) Domain() string {
+	return r.info.GetDomain()
+}
+
+func (r reasonPayload) Code() code.Code {
+	return r.code
 }
 
 // TestStuCodeToHTTPCode tests StuCodeToHTTPCode function

@@ -33,7 +33,7 @@ const (
 	ctxPkg         = protogen.GoImportPath("context")
 	ioPkg          = protogen.GoImportPath("io")
 	marshalerPkg   = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v2/remote/marshaler")
-	statusPkg      = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v2/status")
+	statusPkg      = protogen.GoImportPath("github.com/codesjoy/pkg/basic/xerror")
 	interceptorPkg = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v2/interceptor")
 	restPkg        = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v2/remote/rest")
 	svrPkg         = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v2/server")

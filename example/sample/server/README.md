@@ -269,12 +269,13 @@ _ = metadata.SetTrailer(ctx, metadata.Pairs("trailer", "test"))
 
 ### 5. 错误处理
 
-使用 `status.FromReason()` 创建带错误 reason 的错误：
+使用 `xerror.WrapWithReason()` 创建带错误 reason 的错误：
 
 ```go
-return nil, status.FromReason(
-    errors.New("test reason"), 
-    librarypb.Reason_BOOK_NOT_FOUND, 
+return nil, xerror.WrapWithReason(
+    errors.New("test reason"),
+    librarypb.Reason_BOOK_NOT_FOUND,
+    "",
     nil,
 )
 ```
@@ -325,7 +326,7 @@ yggdrasil.Serve(
 
 1. **使用配置文件**: 避免硬编码，使用配置文件管理配置
 2. **添加日志**: 使用拦截器记录请求和响应，便于调试
-3. **错误处理**: 使用 `status.FromReason()` 创建结构化错误
+3. **错误处理**: 使用 `xerror.WrapWithReason()` 创建结构化错误
 4. **元数据传递**: 使用 metadata 传递跨服务上下文
 5. **REST 规范**: 遵循 RESTful API 设计规范
 6. **版本控制**: 在 API 路径中包含版本号（如 `/v1/`）

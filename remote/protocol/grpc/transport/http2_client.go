@@ -32,6 +32,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
 	stats2 "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/stats"
 	grpcutil2 "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport/grpcutil"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport/keepalive"
@@ -657,7 +658,7 @@ func (t *http2Client) NewStream(ctx context.Context, callHdr *CallHdr) (_ *Strea
 		var sz int64
 		for _, f := range hdrFrame.hf {
 			if sz += int64(f.Size()); sz > int64(*t.maxSendHeaderListSize) {
-				hdrListSizeErr = status.New(
+				hdrListSizeErr = istatus.New(
 					code.Code_INTERNAL,
 					fmt.Sprintf(
 						"header list size to send violates the maximum size (%d bytes) set by server",
@@ -830,7 +831,7 @@ func (t *http2Client) Close(err error) {
 
 	var st *status.Status
 	if len(goAwayDebugMessage) > 0 {
-		st = status.New(
+		st = istatus.New(
 			code.Code_UNAVAILABLE,
 			fmt.Sprintf(
 				"closing transport due to: %v, received prior goaway: %v",
@@ -840,7 +841,7 @@ func (t *http2Client) Close(err error) {
 		)
 		err = st
 	} else {
-		st = status.WithCode(code.Code_UNAVAILABLE, err)
+		st = istatus.WithCode(code.Code_UNAVAILABLE, err)
 	}
 
 	// Notify all active streams.
@@ -996,7 +997,7 @@ func (t *http2Client) handleData(f *http2.DataFrame) {
 				io.EOF,
 				true,
 				http2.ErrCodeFlowControl,
-				status.WithCode(code.Code_INTERNAL, err),
+				istatus.WithCode(code.Code_INTERNAL, err),
 				nil,
 				false,
 			)
@@ -1025,7 +1026,7 @@ func (t *http2Client) handleData(f *http2.DataFrame) {
 			io.EOF,
 			false,
 			http2.ErrCodeNo,
-			status.New(code.Code_INTERNAL, "server closed the stream without sending trailers"),
+			istatus.New(code.Code_INTERNAL, "server closed the stream without sending trailers"),
 			nil,
 			true,
 		)
@@ -1059,7 +1060,7 @@ func (t *http2Client) handleRSTStream(f *http2.RSTStreamFrame) {
 		io.EOF,
 		false,
 		http2.ErrCodeNo,
-		status.New(
+		istatus.New(
 			statusCode,
 			fmt.Sprintf("stream terminated by RST_STREAM with reason code: %v", f.ErrCode),
 		),
@@ -1253,7 +1254,7 @@ func (t *http2Client) operateHeaders(frame *http2.MetaHeadersFrame) {
 
 	if !initialHeader && !endStream {
 		// As specified by gRPC over HTTP2, a HEADERS frame (and associated CONTINUATION frames) can only appear at the start or end of a stream. Therefore, second HEADERS frame must have EOS bit set.
-		st := status.New(
+		st := istatus.New(
 			code.Code_INTERNAL,
 			"a HEADERS frame cannot appear in the middle of a stream",
 		)
@@ -1264,7 +1265,7 @@ func (t *http2Client) operateHeaders(frame *http2.MetaHeadersFrame) {
 	// frame.Truncated is set to true when framer detects that the current header
 	// list size hits MaxHeaderListSize limit.
 	if frame.Truncated {
-		se := status.New(code.Code_INTERNAL, "peer header list size exceeded limit")
+		se := istatus.New(code.Code_INTERNAL, "peer header list size exceeded limit")
 		t.closeStream(s, se, true, http2.ErrCodeFrameSize, se, nil, endStream)
 		return
 	}
@@ -1307,7 +1308,7 @@ func (t *http2Client) operateHeaders(frame *http2.MetaHeadersFrame) {
 		case "grpc-status":
 			cd, err := strconv.ParseInt(hf.Value, 10, 32)
 			if err != nil {
-				se := status.New(
+				se := istatus.New(
 					code.Code_INTERNAL,
 					fmt.Sprintf("transport: malformed grpc-status: %v", err),
 				)
@@ -1333,7 +1334,7 @@ func (t *http2Client) operateHeaders(frame *http2.MetaHeadersFrame) {
 
 			c, err := strconv.ParseInt(hf.Value, 10, 32)
 			if err != nil {
-				se := status.New(
+				se := istatus.New(
 					code.Code_INTERNAL,
 					fmt.Sprintf("transport: malformed http-status: %v", err),
 				)
@@ -1380,13 +1381,13 @@ func (t *http2Client) operateHeaders(frame *http2.MetaHeadersFrame) {
 			errs = append(errs, contentTypeErr)
 		}
 		// Verify the HTTP response is a 200.
-		se := status.New(cd, strings.Join(errs, "; "))
+		se := istatus.New(cd, strings.Join(errs, "; "))
 		t.closeStream(s, se, true, http2.ErrCodeProtocol, se, nil, endStream)
 		return
 	}
 
 	if headerError != "" {
-		se := status.New(code.Code_INTERNAL, headerError)
+		se := istatus.New(code.Code_INTERNAL, headerError)
 		t.closeStream(s, se, true, http2.ErrCodeProtocol, se, nil, endStream)
 		return
 	}
@@ -1431,7 +1432,7 @@ func (t *http2Client) operateHeaders(frame *http2.MetaHeadersFrame) {
 	}
 
 	if statusGen == nil {
-		statusGen = status.New(rawStatusCode, grpcMessage)
+		statusGen = istatus.New(rawStatusCode, grpcMessage)
 	}
 
 	// if client received END_STREAM from server while stream was still active, send RST_STREAM
@@ -1503,10 +1504,10 @@ func (t *http2Client) reader() {
 					}
 					t.closeStream(
 						s,
-						status.New(code, msg),
+						istatus.New(code, msg),
 						true,
 						http2.ErrCodeProtocol,
-						status.New(code, msg),
+						istatus.New(code, msg),
 						nil,
 						false,
 					)

@@ -4,11 +4,11 @@ package helloworld
 
 import (
 	context "context"
+	xerror "github.com/codesjoy/pkg/basic/xerror"
 	client "github.com/codesjoy/yggdrasil/v2/client"
 	interceptor "github.com/codesjoy/yggdrasil/v2/interceptor"
 	metadata "github.com/codesjoy/yggdrasil/v2/metadata"
 	server "github.com/codesjoy/yggdrasil/v2/server"
-	status "github.com/codesjoy/yggdrasil/v2/status"
 	stream "github.com/codesjoy/yggdrasil/v2/stream"
 	code "google.golang.org/genproto/googleapis/rpc/code"
 )
@@ -362,23 +362,23 @@ type UnimplementedGreeterServiceServer struct {
 }
 
 func (UnimplementedGreeterServiceServer) SayHello(context.Context, *SayHelloRequest) (*SayHelloResponse, error) {
-	return nil, status.New(code.Code_UNIMPLEMENTED, "method SayHello not implemented")
+	return nil, xerror.New(code.Code_UNIMPLEMENTED, "method SayHello not implemented")
 }
 
 func (UnimplementedGreeterServiceServer) SayError(context.Context, *SayErrorRequest) (*SayErrorResponse, error) {
-	return nil, status.New(code.Code_UNIMPLEMENTED, "method SayError not implemented")
+	return nil, xerror.New(code.Code_UNIMPLEMENTED, "method SayError not implemented")
 }
 
 func (UnimplementedGreeterServiceServer) SayHelloStream(GreeterServiceSayHelloStreamServer) error {
-	return status.New(code.Code_UNIMPLEMENTED, "method SayHelloStream not implemented")
+	return xerror.New(code.Code_UNIMPLEMENTED, "method SayHelloStream not implemented")
 }
 
 func (UnimplementedGreeterServiceServer) SayHelloClientStream(GreeterServiceSayHelloClientStreamServer) error {
-	return status.New(code.Code_UNIMPLEMENTED, "method SayHelloClientStream not implemented")
+	return xerror.New(code.Code_UNIMPLEMENTED, "method SayHelloClientStream not implemented")
 }
 
 func (UnimplementedGreeterServiceServer) SayHelloServerStream(*SayHelloServerStreamRequest, GreeterServiceSayHelloServerStreamServer) error {
-	return status.New(code.Code_UNIMPLEMENTED, "method SayHelloServerStream not implemented")
+	return xerror.New(code.Code_UNIMPLEMENTED, "method SayHelloServerStream not implemented")
 }
 
 func (UnimplementedGreeterServiceServer) mustEmbedUnimplementedGreeterServiceServer() {}
