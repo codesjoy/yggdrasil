@@ -14,14 +14,22 @@
 # limitations under the License.
 
 set -o errexit
-set +o nounset
+set -o nounset
 set -o pipefail
 
-# Unset CDPATH so that path interpolation can work correctly
-unset CDPATH
+local_branch="$(git rev-parse --abbrev-ref HEAD)"
+valid_branch_regex="^(main|master|develop)$|(feature|release|hotfix|codex)\/[a-z0-9._-]+$|^HEAD$"
 
-# The root of the project
-ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
-
-source "${ROOT_DIR}/scripts/lib/logger.sh"
-source "${ROOT_DIR}/scripts/lib/util.sh"
+if [[ ! "${local_branch}" =~ ${valid_branch_regex} ]]; then
+	cat >&2 <<'EOF'
+Error: invalid branch name.
+Expected one of:
+  - main | master | develop
+  - feature/<name>
+  - release/<name>
+  - hotfix/<name>
+  - codex/<name>
+Where <name> matches [a-z0-9._-]+
+EOF
+	exit 1
+fi

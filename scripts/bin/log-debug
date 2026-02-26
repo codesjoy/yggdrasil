@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Logging wrapper for debug messages (sources logger.sh once)
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/logger.sh"
+log::debug "$@"

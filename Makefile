@@ -1,107 +1,170 @@
-.PHONY: all
-all:
-
 # ==============================================================================
-# Constant definition
+# yggdrasil Makefile
 
-# ==============================================================================
+.DEFAULT_GOAL := help
 
-# ==============================================================================
-# Includes
+# Include common.mk first (convention)
+include scripts/make-rules/common.mk
 
-include scripts/make-rules/common.mk # make sure include common.mk at the first include line
-include scripts/make-rules/copyright.mk
+# Include modular make-rules
+include scripts/make-rules/deps.mk
 include scripts/make-rules/golang.mk
+include scripts/make-rules/copyright.mk
+include scripts/make-rules/precommit.mk
 include scripts/make-rules/tools.mk
+include scripts/make-rules/scripts.mk
+include scripts/make-rules/devx.mk
+include scripts/make-rules/changelog.mk
+
 
 # ==============================================================================
+# User-facing targets (forward to make-rule targets)
 
-define USAGE_OPTIONS
+# ==============================================================================
+# PHONY Targets
+# ==============================================================================
+.PHONY: all build install tidy download \
+        fmt fmt.check lint fix \
+        test test.race test.bench coverage \
+        clean copyright tools sync help help.targets \
+        hooks.install hooks.verify hooks.run hooks.run-all hooks.clean \
+        doctor modules.print scripts.lint check.fast check check.strict \
+        changelog changelog.preview changelog.verify \
+        changelog.state.print changelog.state.reset
 
-Options:
-  DEBUG            Whether to generate debug symbols. Default is 0.
-  BINS             The binaries to build. Default is all of cmd.
-                   This option is available when using: make build/build.multiarch
-                   Example: make build BINS="cmd-one cmd-two"
-  PLATFORMS        The multiple platforms to build. Default is linux_amd64 and linux_arm64.
-                   This option is available when using: make build.multiarch/image.multiarch/push.multiarch
-                   Example: make image.multiarch IMAGES="iam-apiserver iam-pump" PLATFORMS="linux_amd64 linux_arm64"
-  V                Set to 1 enable verbose build. Default is 0.
-endef
-export USAGE_OPTIONS
+## all: Run format, lint, and test
+all: fmt lint test
+	@$(LOG_SUCCESS) "All checks passed"
 
-## help: Show help information.
-.PHONY: help
-help: Makefile
-	@printf "\nUsage: make <TARGETS> <OPTIONS> ...\n\nTargets:\n"
-	@sed -n 's/^##//p' $< | column -t -s ':' | sed -e 's/^/ /'
-	@echo "$$USAGE_OPTIONS"
+## build: Build (disabled for library package)
+build: go.build
 
-.PHONY: fix-permissions
-fix-permissions:
-	@find $(ROOT_DIR)/scripts -type f -name "*.sh" -exec chmod +x {} +
-	@find $(ROOT_DIR)/scripts -type f -name "*.sh" -exec dos2unix {} +
+## install: Install (disabled for library package)
+install: go.install
 
-## tools: Install the relevant tools.
-.PHONY: tools
-tools:
-	@$(LOG_INFO) "install tools"
-	@$(MAKE) tools.install -j$(nproc)
+## tidy: Tidy go.mod for all modules
+tidy: go.tidy
 
-.PHONY: clean
-clean:
-	@$(LOG_INFO) "Cleaning output"
-	@-rm -rf $(OUTPUT_DIR)
+## download: Download dependencies
+download: go.mod.download
 
-## copyright: add copyright header.
-.PHONY: copyright
-copyright:
-	@$(LOG_INFO) "add copyright header"
-	@$(MAKE) copyright.add -j$(nproc)
+## fmt: Format code using all formatters
+fmt: go.fmt
 
-## build: Build the binaries.
-.PHONY: build
-build:
-	@$(MAKE) go.build -j$(nproc)
+## fmt.check: Check if code is formatted (CI gate)
+fmt.check: go.fmt.check
 
-## build: Install the binaries.
-.PHONY: install
-install:
-	@$(MAKE) go.install -j$(nproc)
+## lint: Run linters
+lint: go.lint
 
-## lint: Lint the code.
-.PHONY: lint
-lint:
-	@$(MAKE) go.lint
+## fix: Run linters with auto-fix
+fix: go.fix
 
-## fix: Fix the code.
-.PHONY: fix
-fix:
-	@$(MAKE) go.fix
+## test: Run tests for all modules
+test: go.test
 
-## test: Run the tests.
-.PHONY: test
-test:
-	@$(MAKE) go.test -j$(nproc)
+## test.race: Run tests with race detector
+test.race: go.test.race
 
-## coverage: Generate the coverage report.
-.PHONY: coverage
-coverage:
-	@$(MAKE) go.test.coverage -j$(nproc)
+## test.bench: Run benchmarks
+test.bench: go.test.bench
 
-## sync: Sync the code.
-.PHONY: sync
-sync:
-	@$(MAKE) go.work.sync
+## coverage: Run tests with coverage quality gate
+coverage: go.test.coverage
 
-## tidy: Tidy the code.
-.PHONY: tidy
-tidy:
-	@$(MAKE) go.tidy -j$(nproc)
+## clean: Clean build artifacts
+clean: go.clean
 
-## download: Download the dependencies.
-.PHONY: download
-download:
-	@$(MAKE) go.download -j$(nproc)
+## copyright: Add copyright headers
+copyright: copyright.add
 
+## tools: Install all required tools
+tools: tools.install
 
+## sync: Sync go workspace
+sync: go.work.sync
+
+## help: Show this help message
+help:
+	@echo ""
+	@echo "codesjoy/yggdrasil Makefile"
+	@echo ""
+	@echo "Usage: make [target] [options]"
+	@echo ""
+	@echo "Options:"
+	@echo "  LOG_LEVEL=0       Show all messages (debug, info, warn, error)"
+	@echo "  LOG_LEVEL=1       Show info, warn, error (default)"
+	@echo "  LOG_LEVEL=2       Show warn, error only"
+	@echo "  LOG_LEVEL=3       Show error only"
+	@echo "  COVERAGE=60       Set coverage threshold (default: 60%)"
+	@echo "  EXCLUDE_TESTS=    Pattern to exclude from tests (e.g., \"vendor|test\")"
+	@echo "  INCLUDE_EXAMPLES=1 Include example/examples modules in lint/fix/test/coverage"
+	@echo "  MODULES=...       Explicit module list (e.g., \"cmd/protoc-gen-yggdrasil-rest cmd/protoc-gen-yggdrasil-rpc\"); explicit MODULES are never filtered by INCLUDE_EXAMPLES"
+	@echo "  MODULE_INCLUDE=... Filter modules to include (space-separated)"
+	@echo "  MODULE_EXCLUDE=... Filter modules to exclude (space-separated)"
+	@echo "  MODULES_DIR=cmd   Legacy shorthand base for go.*.<module> targets"
+	@echo "  SHELLCHECK_REQUIRED=1 Fail doctor/scripts.lint when shellcheck is missing"
+	@echo "  SHFMT_VERSION=...    Override shfmt tool install version"
+	@echo "  GIT_CHGLOG_VERSION=... Override git-chglog install version"
+	@echo "  CHANGELOG_QUERY=...  Explicit changelog query (tag/SHA range, e.g., v0.1.0..v0.2.0)"
+	@echo "  CHANGELOG_FROM=...   Changelog range start ref (tag/SHA, pairs with CHANGELOG_TO)"
+	@echo "  CHANGELOG_TO=...     Changelog range end ref (tag/SHA, pairs with CHANGELOG_FROM)"
+	@echo "  CHANGELOG_PATHS=...  Space-separated path filters for changelog commits"
+	@echo "  CHANGELOG_NEXT_TAG=... Fallback version label when no git tags (default: unreleased)"
+	@echo "  CHANGELOG_PROFILE=... simple|balanced|high-frequency (default: balanced)"
+	@echo "  CHANGELOG_CADENCE=... monthly|weekly|none (explicitly overrides profile)"
+	@echo "  CHANGELOG_USE_BASELINE=1 Use BASE_SHA incremental range in managed mode"
+	@echo "  CHANGELOG_ARCHIVE_ENABLE=1 Enable archive bucket rollover in managed mode"
+	@echo "  CHANGELOG_STATE_FILE=... Changelog state file path (default: .chglog/state.env)"
+	@echo "  CHANGELOG_ARCHIVE_DIR=... Archive section directory (default: .chglog/archive)"
+	@echo "  CHANGELOG_NOW=... Test-only time override (e.g., 2026-03-01)"
+	@echo "  CHANGELOG_STRICT_STATE=1 Fail when state file is malformed"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make help                     Show this help message"
+	@echo "  make tidy                     Tidy dependencies"
+	@echo "  make fmt                      Format code"
+	@echo "  make lint                     Run linters"
+	@echo "  make test                     Run tests"
+	@echo "  make coverage                 Run tests with coverage"
+	@echo "  make check.fast               Run fmt.check + lint + test"
+	@echo "  make check                    Run full checks (check.fast + coverage + go.work.drift + go.mod.tidy.check)"
+	@echo "  make check.strict             Run strict checks (check + race + examples + strict lint)"
+	@echo "  make test INCLUDE_EXAMPLES=1  Run tests including example modules"
+	@echo "  make coverage INCLUDE_EXAMPLES=1 Run coverage including example modules"
+	@echo "  make tools                    Install all required tools and pre-commit hooks"
+	@echo "  make scripts.lint             Lint shell scripts (bash -n + shfmt + optional shellcheck)"
+	@echo "  make doctor                   Run environment/tooling/hooks/workspace diagnostics"
+	@echo "  make modules.print            Print module discovery/selection context"
+	@echo "  make changelog                Generate CHANGELOG.md"
+	@echo "  make changelog.preview        Preview changelog in stdout"
+	@echo "  make changelog.verify         Verify CHANGELOG.md is up to date"
+	@echo "  make changelog.state.print    Print changelog profile/state/query context"
+	@echo "  make changelog.state.reset    Reset changelog baseline state to HEAD"
+	@echo "  make hooks.install            Install pre-commit hooks manually"
+	@echo "  make hooks.run                Run hooks on staged files"
+	@echo "  make hooks.run-all            Run hooks on all files"
+	@echo "  make copyright                Add copyright headers"
+	@echo "  make sync                     Sync go workspace"
+	@echo "  make go.work.drift            Check whether go.work is in sync with discovered modules"
+	@echo "  make go.mod.tidy.check        Check whether go.mod/go.sum need tidy updates"
+	@echo "  make MODULES=\"cmd/protoc-gen-yggdrasil-rest\" lint"
+	@echo "  make MODULE_EXCLUDE=\"example example/protogen\" test"
+	@echo "  make changelog CHANGELOG_FROM=v0.1.0 CHANGELOG_TO=v0.2.0"
+	@echo "  make changelog.preview CHANGELOG_PATHS=\"basic/xkafka\""
+	@echo "  make changelog CHANGELOG_PROFILE=high-frequency"
+	@echo "  make changelog.preview CHANGELOG_NOW=2026-03-01"
+	@echo ""
+	@echo "Module-specific targets:"
+	@echo "  make go.test.cmd/protoc-gen-yggdrasil-rest  Test a specific module"
+	@echo "  make MODULES=\"cmd/protoc-gen-yggdrasil-rest\" test"
+	@echo "  make go.lint.cmd/protoc-gen-yggdrasil-rpc   Lint a specific module"
+	@echo ""
+	@echo "Available targets:"
+	@$(MAKE) help.targets
+	@echo ""
+
+## help.targets: Show all targets with descriptions
+help.targets:
+	@grep -E '^## ' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  %-30s %s\n", $$2, $$3}'

@@ -1,0 +1,37 @@
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  - repo: local
+    hooks:
+      - id: branch-name-policy
+        name: enforce branch naming policy
+        entry: scripts/hooks/check-branch-name.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-commit]
+
+  - repo: https://github.com/jorisroovers/gitlint
+    rev: v0.19.1
+    hooks:
+      - id: gitlint
+        stages: [commit-msg]
+
+  - repo: local
+    hooks:
+      - id: breaking-change-footer
+        name: require BREAKING CHANGE footer for bang commits
+        entry: scripts/hooks/check-breaking-change.sh
+        language: script
+        stages: [commit-msg]
