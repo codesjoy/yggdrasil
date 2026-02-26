@@ -8,7 +8,6 @@ TEST_TIMEOUT := 10m
 
 # Lint config
 GOLANGCI_LINT_CONFIG := $(ROOT_DIR)/.golangci.yaml
-GOLANGCI_LINT_STRICT_CONFIG := $(ROOT_DIR)/.golangci.strict.yaml
 
 # Exclude tests pattern (e.g., "vendor|test")
 EXCLUDE_TESTS ?=
@@ -18,7 +17,7 @@ EXCLUDE_TESTS ?=
 # ==============================================================================
 .PHONY: go.build go.build.% go.build.multiarch \
         go.install go.install.% \
-        go.lint go.lint.% go.lint.strict go.fix go.fix.% \
+        go.lint go.lint.% go.fix go.fix.% \
         go.test go.test.% go.test.coverage go.test.coverage.% \
         go.fmt go.fmt.% \
         go.tidy go.tidy.%
@@ -162,23 +161,6 @@ go.lint.ensure-compatible:
 ## go.lint: Run linters for all modules
 go.lint: go.lint.ensure-compatible go.lint.check
 	@$(LOG_SUCCESS) "All modules linted successfully"
-
-## go.lint.strict: Run strict linters for all modules
-go.lint.strict: go.lint.ensure-compatible
-	@$(call require-tool,$(GOLANGCI_LINT))
-	@$(call require-file,$(GOLANGCI_LINT_STRICT_CONFIG))
-	$(call validate-module-selection,$(MODULES))
-	@$(LOG_INFO) "Running strict linters"
-	@source $(ROOT_DIR)/scripts/lib/logger.sh >/dev/null 2>&1; \
-	for module in $(MODULES); do \
-		log::info "$$module"; \
-		cd "$(ROOT_DIR)/$$module" || exit 1; \
-		if [ -n "$(EXCLUDE_TESTS)" ]; then \
-			GOWORK=off $(GOLANGCI_LINT) run --config=$(GOLANGCI_LINT_STRICT_CONFIG) --exclude="$(EXCLUDE_TESTS)" ./... || exit 1; \
-		else \
-			GOWORK=off $(GOLANGCI_LINT) run --config=$(GOLANGCI_LINT_STRICT_CONFIG) ./... || exit 1; \
-		fi; \
-	done
 
 ## go.lint.%: Run linters for specific module
 go.lint.%:

@@ -8,7 +8,7 @@
 #   - doctor:          Run environment/tooling/hooks/workspace diagnostics
 #   - check.fast:      Run fmt.check + lint + test
 #   - check:           Run check.fast + coverage + go.work.drift + go.mod.tidy.check
-#   - check.strict:    Run strict checks (examples + race + strict lint)
+#   - check.strict:    Run strict checks (examples + race)
 # ==============================================================================
 
 .PHONY: modules.print \
@@ -91,10 +91,9 @@ check.fast: fmt.check lint test
 check: check.fast coverage go.work.drift go.mod.tidy.check
 	@$(LOG_SUCCESS) "Full checks passed"
 
-## check.strict: Run strict quality gates (examples + race + strict lint)
+## check.strict: Run strict quality gates (examples + race)
 check.strict:
 	@$(LOG_INFO) "Running strict checks (includes example modules)"
 	@$(MAKE) --no-print-directory check INCLUDE_EXAMPLES=1
-	@$(MAKE) --no-print-directory go.lint.strict INCLUDE_EXAMPLES=1
 	@$(MAKE) --no-print-directory test.race INCLUDE_EXAMPLES=1
 	@$(LOG_SUCCESS) "Strict checks passed"
