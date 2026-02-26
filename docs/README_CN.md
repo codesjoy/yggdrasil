@@ -43,8 +43,8 @@ make generate
 
 ## Contrib 模块
 
-- etcd：[../contrib/etcd/readme.md](../contrib/etcd/readme.md)
-- Kubernetes：[../contrib/k8s/readme.md](../contrib/k8s/readme.md)
-- OpenTelemetry 导出器：[../contrib/otlp/README.md](../contrib/otlp/README.md)、[../contrib/otlp/QUICKSTART.md](../contrib/otlp/QUICKSTART.md)
-- xDS：[../contrib/xds/README.md](../contrib/xds/README.md)
-- Polaris：[../contrib/polaris/README.md](../contrib/polaris/README.md)
+- etcd：[yggdrasil-ecosystem/integrations/etcd](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations/etcd/README.md)
+- Kubernetes：[yggdrasil-ecosystem/integrations/k8s](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations/k8s/README.md)
+- OpenTelemetry 导出器：[yggdrasil-ecosystem/integrations/otlp](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations/otlp/README.md)、[OTLP Quickstart](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations/otlp/QUICKSTART.md)
+- xDS：[yggdrasil-ecosystem/integrations/xds](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations/xds/README.md)
+- Polaris：[yggdrasil-ecosystem/integrations/polaris](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations/polaris/README.md)

@@ -428,9 +428,9 @@ app:
 ## 相关文档
 
 - [Yggdrasil 主文档](../../../README.md)
-- [Kubernetes ConfigMap 示例](../../../contrib/k8s/example/config-source/)
-- [etcd 配置源示例](../../../contrib/etcd/example/config-source/)
-- [Polaris 配置源示例](../../../contrib/polaris/example/scenarios/config-source/)
+- [Kubernetes ConfigMap 示例](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations/k8s/example/config-source)
+- [etcd 配置源示例](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations/etcd/example/config-source)
+- [Polaris 配置源示例](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations/polaris/example/scenarios/config-source)
 
 ## 退出
 

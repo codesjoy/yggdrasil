@@ -212,7 +212,7 @@ Yggdrasil adopts a modular architecture with clearly separated concerns:
 - Docs index: [docs/README.md](docs/README.md)
 - Docs index (ZH-CN): [docs/README_CN.md](docs/README_CN.md)
 - Examples: [example/README.md](example/README.md)
-- Contrib modules: [contrib/](contrib/)
+- Contrib modules: [yggdrasil-ecosystem/integrations](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations)
 
 ### Core Concepts
 

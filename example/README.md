@@ -78,11 +78,11 @@ example/
 ### 📚 完整路径（深入掌握）
 
 1. 完成**初学者路径**或**进阶路径**
-2. **[Contrib 集成示例](../contrib/)** ⏱️ 2-3小时
-   - [etcd 集成](../contrib/etcd/example/): 配置中心、服务注册与发现
-   - [Kubernetes 集成](../contrib/k8s/example/): ConfigMap、Secret、服务发现
-   - [Polaris 集成](../contrib/polaris/example/): 配置中心、服务治理
-   - [xDS 集成](../contrib/xds/example/): 动态配置、流量管理
+2. **[Contrib 集成示例](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations)** ⏱️ 2-3小时
+   - [etcd 集成](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations/etcd/example): 配置中心、服务注册与发现
+   - [Kubernetes 集成](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations/k8s/example): ConfigMap、Secret、服务发现
+   - [Polaris 集成](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations/polaris/example): 配置中心、服务治理
+   - [xDS 集成](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations/xds/example): 动态配置、流量管理
 
 **预计总时间**: 4-5小时
 
@@ -109,10 +109,10 @@ example/
 
 | 示例 | 说明 | 难度 | 时间 |
 |------|------|--------|------|
-| [etcd](../contrib/etcd/example/) | 配置中心、服务注册与发现 | ⭐⭐ | 30分钟 |
-| [Kubernetes](../contrib/k8s/example/) | ConfigMap、Secret、服务发现 | ⭐⭐⭐ | 45分钟 |
-| [Polaris](../contrib/polaris/example/) | 配置中心、服务治理 | ⭐⭐⭐ | 45分钟 |
-| [xDS](../contrib/xds/example/) | 动态配置、流量管理 | ⭐⭐⭐⭐ | 60分钟 |
+| [etcd](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations/etcd/example) | 配置中心、服务注册与发现 | ⭐⭐ | 30分钟 |
+| [Kubernetes](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations/k8s/example) | ConfigMap、Secret、服务发现 | ⭐⭐⭐ | 45分钟 |
+| [Polaris](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations/polaris/example) | 配置中心、服务治理 | ⭐⭐⭐ | 45分钟 |
+| [xDS](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations/xds/example) | 动态配置、流量管理 | ⭐⭐⭐⭐ | 60分钟 |
 
 ## 快速开始
 
