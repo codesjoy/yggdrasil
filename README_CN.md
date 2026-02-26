@@ -249,9 +249,9 @@ go install ./tools/protoc-gen-codesjoy-reason
 ## ✅ 开发质量门禁
 
 - 稳定测试：`make test`
-- 稳定 lint：`make lint`
+- 统一严格 lint：`make lint`
 - 稳定 CI 门禁：`make check`
-- 严格门禁（含 examples/race/严格 lint）：`make check.strict`
+- 扩展严格门禁（含 examples/race）：`make check.strict`
 - 依赖 tidy 漂移检查：`make go.mod.tidy.check`
 
 默认会排除 `example/` 模块的 lint/test/coverage；如需纳入请加 `INCLUDE_EXAMPLES=1`。

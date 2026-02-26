@@ -254,9 +254,9 @@ go install ./tools/protoc-gen-codesjoy-reason
 ## ✅ Development Quality Gates
 
 - Stable local test: `make test`
-- Stable lint: `make lint`
+- Unified lint profile: `make lint`
 - Stable CI gate: `make check`
-- Strict gate (examples + race + strict lint): `make check.strict`
+- Extended strict gate (examples + race): `make check.strict`
 - Dependency tidy drift check: `make go.mod.tidy.check`
 
 By default, `example/` modules are excluded from lint/test/coverage. Add `INCLUDE_EXAMPLES=1` to include them.

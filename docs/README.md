@@ -14,9 +14,9 @@ This directory is the entry point for Yggdrasil documentation.
 - Install repo binaries (including protoc plugins): `make install`
 - Run stable tests (no default race): `make test`
 - Run race tests: `make test.race`
-- Lint (stable profile): `make lint`
+- Lint (unified strict profile): `make lint`
 - Full stable gate (CI default): `make check`
-- Strict gate (examples + race + strict lint): `make check.strict`
+- Extended strict gate (examples + race): `make check.strict`
 - Check dependency tidy drift: `make go.mod.tidy.check`
 
 By default, `example/` modules are excluded from lint/test/coverage. Add `INCLUDE_EXAMPLES=1` to include them.
