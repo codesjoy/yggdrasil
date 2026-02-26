@@ -52,16 +52,10 @@ type RPCBegin interface {
 	// GetBeginTime returns the time when the RPC attempt begins.
 	GetBeginTime() time.Time
 
-	//// IsFailFast returns true if this RPC is failfast.
-	//IsFailFast() bool
-
 	// IsClientStream returns true if the RPC is a client streaming RPC.
 	IsClientStream() bool
 	// IsServerStream returns true if the RPC is a server streaming RPC.
 	IsServerStream() bool
-
-	//// IsTransparentRetryAttempt returns true if this attempt was initiated due to transparently retrying a previous attempt.
-	//IsTransparentRetryAttempt() bool
 
 	// GetProtocol returns the protocol used for the RPC.
 	GetProtocol() string

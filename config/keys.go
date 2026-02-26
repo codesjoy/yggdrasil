@@ -28,7 +28,7 @@ func Join(s ...string) string {
 	return strings.Join(s, keyDelimiter)
 }
 
-var regx, _ = regexp.Compile(`{([\w.-]+)}`)
+var regx = regexp.MustCompile(`{([\w.-]+)}`)
 
 func genPath(key, delimiter string) []string {
 	matches := make([]string, 0)

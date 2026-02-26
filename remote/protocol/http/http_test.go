@@ -83,7 +83,7 @@ func TestHTTPUnaryProto(t *testing.T) {
 		require.NoError(t, ss.RecvMsg(&in))
 		require.NoError(t, ss.SetHeader(metadata.Pairs("h1", "v1")))
 		ss.SetTrailer(metadata.Pairs("t1", "v2"))
-		in.Message = in.Message + ":ok"
+		in.Message += ":ok"
 		ss.Finish(&in, nil)
 	})
 	t.Cleanup(stop)
@@ -112,7 +112,7 @@ func TestHTTPUnaryJSONPbGeneric(t *testing.T) {
 		require.NoError(t, ss.Start(false, false))
 		var in stpb.Status
 		require.NoError(t, ss.RecvMsg(&in))
-		in.Message = in.Message + ":json"
+		in.Message += ":json"
 		ss.Finish(&in, nil)
 	})
 	t.Cleanup(stop)

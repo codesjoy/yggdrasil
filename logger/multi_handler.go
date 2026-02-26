@@ -44,8 +44,7 @@ type ErrorHandle func(key string, err error, enc ObjectEncoder)
 func DefaultErrorHandle(key string, err error, enc ObjectEncoder) {
 	basic := err.Error()
 	enc.AddString(key, basic)
-	switch e := err.(type) {
-	case fmt.Formatter:
+	if e, ok := err.(fmt.Formatter); ok {
 		verbose := fmt.Sprintf("%+v", e)
 		if verbose != basic {
 			enc.AddString(key+"Verbose", verbose)

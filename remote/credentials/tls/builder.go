@@ -179,17 +179,18 @@ func applyServerConfig(tlsCfg *tls.Config, cfg sideCfg) {
 		}
 	}
 
-	if cfg.ClientAuth != nil {
+	switch {
+	case cfg.ClientAuth != nil:
 		if ca, ok := parseClientAuth(*cfg.ClientAuth); ok {
 			tlsCfg.ClientAuth = ca
 		}
-	} else if cfg.RequireClientCert != nil && *cfg.RequireClientCert {
+	case cfg.RequireClientCert != nil && *cfg.RequireClientCert:
 		if tlsCfg.ClientCAs != nil {
 			tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
 		} else {
 			tlsCfg.ClientAuth = tls.RequireAnyClientCert
 		}
-	} else if tlsCfg.ClientCAs != nil {
+	case tlsCfg.ClientCAs != nil:
 		tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
 	}
 	applySPIFFEVerify(tlsCfg, cfg)

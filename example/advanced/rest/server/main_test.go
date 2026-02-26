@@ -15,43 +15,108 @@
 package main
 
 import (
-	"context"
+	"bytes"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"syscall"
 	"testing"
 	"time"
 )
 
-// TestServerGracefulShutdown tests that the server can shut down gracefully when receiving SIGINT
-func TestServerGracefulShutdown(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
+const (
+	serverReadyURL       = "http://127.0.0.1:55887/v1/shelves"
+	serverReadyTimeout   = 10 * time.Second
+	serverShutdownTimout = 15 * time.Second
+	serverBinaryPath     = "./.tmp_rest_server_test_bin"
+)
+
+func buildServerBinary(t *testing.T) {
+	t.Helper()
+
+	buildCmd := exec.Command("go", "build", "-o", serverBinaryPath, ".")
+	buildCmd.Dir = "."
+
+	output, err := buildCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("failed to build server binary: %v\n%s", err, string(output))
 	}
 
-	// Start the server as a subprocess
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Cleanup(func() {
+		_ = os.Remove(serverBinaryPath)
+	})
+}
 
-	cmd := exec.CommandContext(ctx, "go", "run", "main.go")
+func startServerProcess(t *testing.T) (*exec.Cmd, *bytes.Buffer) {
+	t.Helper()
+
+	buildServerBinary(t)
+	cmd := exec.Command(serverBinaryPath)
 	cmd.Dir = "."
-	cmd.Stdout = nil
-	cmd.Stderr = nil
+
+	var logs bytes.Buffer
+	cmd.Stdout = &logs
+	cmd.Stderr = &logs
 
 	if err := cmd.Start(); err != nil {
-		t.Fatalf("Failed to start server: %v", err)
+		t.Fatalf("failed to start server: %v", err)
 	}
 
-	// Wait for server to start
-	time.Sleep(3 * time.Second)
+	t.Cleanup(func() {
+		if cmd.ProcessState == nil || !cmd.ProcessState.Exited() {
+			_ = cmd.Process.Kill()
+			_, _ = cmd.Process.Wait()
+		}
+	})
 
-	// Send SIGINT (Ctrl+C)
+	return cmd, &logs
+}
+
+func waitHTTPReady(t *testing.T, url string, timeout time.Duration) {
+	t.Helper()
+
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+
+	for time.Now().Before(deadline) {
+		resp, err := client.Get(url)
+		if err != nil {
+			lastErr = err
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
+		body, readErr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		if resp.StatusCode == http.StatusOK {
+			return
+		}
+		lastErr = fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	t.Fatalf("server was not ready within %s: %v", timeout, lastErr)
+}
+
+func signalServerInterrupt(t *testing.T, cmd *exec.Cmd, logs *bytes.Buffer) {
+	t.Helper()
+
 	if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
-		t.Fatalf("Failed to send SIGINT: %v", err)
+		t.Fatalf("failed to send SIGINT: %v\nlogs:\n%s", err, logs.String())
 	}
+}
 
-	// Server should exit within shutdown timeout + grace period
+func waitProcessExit(t *testing.T, cmd *exec.Cmd, logs *bytes.Buffer, timeout time.Duration) {
+	t.Helper()
+
 	done := make(chan error, 1)
 	go func() {
 		done <- cmd.Wait()
@@ -60,71 +125,53 @@ func TestServerGracefulShutdown(t *testing.T) {
 	select {
 	case err := <-done:
 		if err != nil {
-			t.Errorf("Server exited with error: %v", err)
+			t.Fatalf("server exited with error: %v\nlogs:\n%s", err, logs.String())
 		}
-		t.Log("Server exited gracefully")
-	case <-time.After(15 * time.Second):
-		cmd.Process.Kill()
-		t.Fatal("Server did not exit gracefully within timeout")
+	case <-time.After(timeout):
+		_ = cmd.Process.Kill()
+		<-done
+		t.Fatalf("server did not exit within %s\nlogs:\n%s", timeout, logs.String())
 	}
 }
 
-// TestServerWithRequestDuringShutdown tests that active requests are handled during shutdown
+// TestServerGracefulShutdown tests that the server can shut down gracefully when receiving SIGINT.
+func TestServerGracefulShutdown(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	cmd, logs := startServerProcess(t)
+	waitHTTPReady(t, serverReadyURL, serverReadyTimeout)
+	signalServerInterrupt(t, cmd, logs)
+	waitProcessExit(t, cmd, logs, serverShutdownTimout)
+}
+
+// TestServerWithRequestDuringShutdown tests that active requests are handled during shutdown.
 func TestServerWithRequestDuringShutdown(t *testing.T) {
 	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
+		t.Skip("skipping integration test in short mode")
 	}
 
-	// Start the server as a subprocess
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cmd, logs := startServerProcess(t)
+	waitHTTPReady(t, serverReadyURL, serverReadyTimeout)
 
-	cmd := exec.CommandContext(ctx, "go", "run", "main.go")
-	cmd.Dir = "."
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("Failed to start server: %v", err)
-	}
-
-	// Wait for server to be ready
-	time.Sleep(3 * time.Second)
-
-	// Make a test request
-	resp, err := http.Get("http://127.0.0.1:55887/v1/shelves")
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(serverReadyURL)
 	if err != nil {
-		cmd.Process.Kill()
-		t.Fatalf("Failed to make request: %v", err)
+		t.Fatalf("failed to make request: %v\nlogs:\n%s", err, logs.String())
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		cmd.Process.Kill()
-		t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, string(body))
+		t.Fatalf(
+			"expected status 200, got %d: %s\nlogs:\n%s",
+			resp.StatusCode,
+			string(body),
+			logs.String(),
+		)
 	}
 
-	// Send SIGINT (Ctrl+C)
-	if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
-		cmd.Process.Kill()
-		t.Fatalf("Failed to send SIGINT: %v", err)
-	}
-
-	// Server should exit within shutdown timeout + grace period
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Wait()
-	}()
-
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Errorf("Server exited with error: %v", err)
-		}
-		t.Log("Server exited gracefully after handling request")
-	case <-time.After(15 * time.Second):
-		cmd.Process.Kill()
-		t.Fatal("Server did not exit gracefully within timeout")
-	}
+	signalServerInterrupt(t, cmd, logs)
+	waitProcessExit(t, cmd, logs, serverShutdownTimout)
 }

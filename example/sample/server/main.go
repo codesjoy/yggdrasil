@@ -60,7 +60,12 @@ func (s *LibraryImpl) MoveBook(
 	_ context.Context,
 	_ *librarypb2.MoveBookRequest,
 ) (*librarypb2.Book, error) {
-	return nil, xerror.WrapWithReason(errors.New("test reason"), librarypb.Reason_BOOK_NOT_FOUND, "", nil)
+	return nil, xerror.WrapWithReason(
+		errors.New("test reason"),
+		librarypb.Reason_BOOK_NOT_FOUND,
+		"",
+		nil,
+	)
 }
 
 func (s *LibraryImpl) GetBook(

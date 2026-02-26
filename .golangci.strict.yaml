@@ -13,6 +13,7 @@ linters:
     # 风格
     - revive
     - unconvert
+    - gocritic
 
     # 安全
     - gosec

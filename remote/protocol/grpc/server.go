@@ -451,7 +451,7 @@ func (s *server) handleStream(t transport2.ServerTransport, stream *transport2.S
 
 	stream.SetContext(ctx)
 
-	//statsFunc := func(clientStream, serverStream bool) (func(), func(err error)) {
+	// statsFunc := func(clientStream, serverStream bool) (func(), func(err error)) {
 	//	beginTime := time.Now()
 	//	bf := func() {
 	//		begin := &stats.RPCBeginBase{
@@ -475,7 +475,7 @@ func (s *server) handleStream(t transport2.ServerTransport, stream *transport2.S
 	s.handle(ss)
 }
 
-//func (s *server) Serve() (<-chan remote.AcceptResult, error) {
+// func (s *server) Serve() (<-chan remote.AcceptResult, error) {
 //	s.mu.Lock()
 //	defer s.mu.Unlock()
 //	if s.stopped {
@@ -547,7 +547,7 @@ func (s *server) handleStream(t transport2.ServerTransport, stream *transport2.S
 
 // handleRawConn forks a goroutine to handle a just-accepted connection that
 // has not had any I/O performed on it yet.
-//func (s *server) handleRawConn(rawConn net.Conn) *remoteChannel {
+// func (s *server) handleRawConn(rawConn net.Conn) *remoteChannel {
 //	_ = rawConn.SetDeadline(time.Now().Add(s.opts.ConnectionTimeout))
 //	// Finish handshaking (HTTP2)
 //	st := s.newTransport(rawConn)
@@ -721,8 +721,6 @@ func (ss *serverStream) Start(isClientStream, isServerStream bool) error {
 				code.Code_UNIMPLEMENTED,
 				fmt.Sprintf("grpc: Decompressor is not installed for grpc-encoding %q", rc),
 			)
-			//st := xerror.New(code.Code_UNIMPLEMENTED, fmt.Sprintf("grpc: Decompressor is not installed for grpc-encoding %q", rc))
-			//_ = ss.t.WriteStatus(ss.s, st)
 		}
 	}
 
