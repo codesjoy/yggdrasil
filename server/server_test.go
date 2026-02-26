@@ -363,6 +363,54 @@ func TestInitInterceptor(t *testing.T) {
 	// Should not panic
 }
 
+func TestRegisterServiceErrorIsReturnedByServe(t *testing.T) {
+	s := &server{
+		services:     map[string]*ServiceInfo{},
+		servicesDesc: map[string][]methodInfo{},
+	}
+	desc := &ServiceDesc{
+		ServiceName: "test.service",
+		HandlerType: (*TestService)(nil),
+	}
+	s.RegisterService(desc, nil)
+
+	startFlag := make(chan struct{}, 1)
+	err := s.Serve(startFlag)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "registration failed")
+	select {
+	case _, ok := <-startFlag:
+		assert.False(t, ok)
+	case <-time.After(time.Second):
+		t.Fatal("startFlag should be closed when registration failed")
+	}
+}
+
+func TestDuplicateRegisterServiceErrorIsReturnedByServe(t *testing.T) {
+	s := &server{
+		services:     map[string]*ServiceInfo{},
+		servicesDesc: map[string][]methodInfo{},
+	}
+	desc := &ServiceDesc{
+		ServiceName: "test.service",
+		HandlerType: (*TestService)(nil),
+	}
+	impl := &TestServiceImpl{}
+	s.RegisterService(desc, impl)
+	s.RegisterService(desc, impl)
+
+	startFlag := make(chan struct{}, 1)
+	err := s.Serve(startFlag)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate service registration")
+	select {
+	case _, ok := <-startFlag:
+		assert.False(t, ok)
+	case <-time.After(time.Second):
+		t.Fatal("startFlag should be closed when registration failed")
+	}
+}
+
 // Mock rest server for testing
 type mockRestServer struct {
 	address string

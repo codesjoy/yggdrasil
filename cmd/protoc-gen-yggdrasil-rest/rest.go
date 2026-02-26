@@ -215,7 +215,6 @@ func buildHTTPRule(
 	}
 
 	if body == "*" {
-		body = ""
 		md.HasBody = true
 	} else if body != "" {
 		md.HasBody = true

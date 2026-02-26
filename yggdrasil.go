@@ -20,6 +20,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 
 	"github.com/codesjoy/yggdrasil/v2/application"
@@ -40,6 +41,7 @@ var (
 	app, _      = application.New()
 	appRunning  atomic.Bool
 	initialized atomic.Bool
+	initMu      sync.Mutex
 	opts        = &options{
 		serviceDesc:     map[*server.ServiceDesc]interface{}{},
 		restServiceDesc: map[*server.RestServiceDesc]restServiceDesc{},
@@ -57,58 +59,67 @@ func NewClient(name string) (client.Client, error) {
 }
 
 // Init initialize application.
-func Init(appName string, ops ...Option) error {
-	if !initialized.CompareAndSwap(false, true) {
+func Init(appName string, ops ...Option) (err error) {
+	initMu.Lock()
+	defer initMu.Unlock()
+
+	if initialized.Load() {
 		return nil
 	}
-	if err := initLogger(); err != nil {
+	if err = initLogger(); err != nil {
 		slog.Error("fault to initialize logger", slog.Any("error", err))
 		return err
 	}
 
 	initInstanceInfo(appName)
-	if err := applyOpt(opts, ops...); err != nil {
+	if err = applyOpt(opts, ops...); err != nil {
 		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
 		return err
 	}
-	if err := validateStartup(opts); err != nil {
+	if err = validateStartup(opts); err != nil {
 		slog.Error("startup validation failed", slog.Any("error", err))
 		return err
 	}
-	if err := initGovernor(opts); err != nil {
+	if err = initGovernor(opts); err != nil {
 		slog.Error("fault to initialize governor", slog.Any("error", err))
 		return err
 	}
 	initRegistry(opts)
 	initTracer(opts)
 	initMeter(opts)
+	initialized.Store(true)
 	return nil
 }
 
 // Serve serves the application.
-func Serve(ops ...Option) error {
+func Serve(ops ...Option) (err error) {
 	if !appRunning.CompareAndSwap(false, true) {
 		return errors.New("application had already running")
 	}
+	defer func() {
+		if err != nil {
+			appRunning.Store(false)
+		}
+	}()
 	if !initialized.Load() {
 		return errors.New("please initialize the yggdrasil before serve")
 	}
-	if err := applyOpt(opts, ops...); err != nil {
+	if err = applyOpt(opts, ops...); err != nil {
 		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
 		return err
 	}
-	if err := validateStartup(opts); err != nil {
+	if err = validateStartup(opts); err != nil {
 		slog.Error("startup validation failed", slog.Any("error", err))
 		return err
 	}
-	if err := initServer(opts); err != nil {
+	if err = initServer(opts); err != nil {
 		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
 		return err
 	}
-	if err := app.Init(opts.getAppOpts()...); err != nil {
+	if err = app.Init(opts.getAppOpts()...); err != nil {
 		return err
 	}
-	if err := app.Run(); err != nil {
+	if err = app.Run(); err != nil {
 		slog.Error("the application was ended forcefully", slog.Any("error", err))
 		return err
 	}
@@ -116,21 +127,26 @@ func Serve(ops ...Option) error {
 }
 
 // Run runs the application.
-func Run(appName string, ops ...Option) error {
+func Run(appName string, ops ...Option) (err error) {
 	if !appRunning.CompareAndSwap(false, true) {
 		return errors.New("application had already running")
 	}
-	if err := Init(appName, ops...); err != nil {
+	defer func() {
+		if err != nil {
+			appRunning.Store(false)
+		}
+	}()
+	if err = Init(appName, ops...); err != nil {
 		return err
 	}
-	if err := initServer(opts); err != nil {
+	if err = initServer(opts); err != nil {
 		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
 		return err
 	}
-	if err := app.Init(opts.getAppOpts()...); err != nil {
+	if err = app.Init(opts.getAppOpts()...); err != nil {
 		return err
 	}
-	if err := app.Run(); err != nil {
+	if err = app.Run(); err != nil {
 		slog.Error("fault to run yggdrasil application", slog.Any("error", err))
 		return err
 	}

@@ -84,8 +84,6 @@ func (c *client) pick(failFast bool, info *balancer.RPCInfo) (balancer.PickResul
 			continue
 		}
 
-		//nolint:staticcheck // SA4006: ch is used in the next iteration of the loop
-		ch = pg.blockingCh
 		p := pg.picker
 
 		pickResult, err := p.Next(*info)

@@ -21,6 +21,7 @@ import (
 	"maps"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/creasty/defaults"
@@ -190,6 +191,14 @@ func (m *value) StringSlice(def ...[]string) []string {
 			tmp[i] = fmt.Sprintf("%v", item)
 		}
 		return tmp
+	case string:
+		parts := strings.FieldsFunc(sl, func(r rune) bool {
+			return r == ',' || r == ' ' || r == '\t' || r == '\n' || r == '\r'
+		})
+		if len(parts) > 0 {
+			return parts
+		}
+		return []string{}
 	default:
 
 	}

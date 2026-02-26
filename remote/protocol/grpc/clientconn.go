@@ -189,19 +189,6 @@ func (cc *clientConn) NewStream(
 	t := cc.transport
 	if t == nil {
 		return nil, xerror.New(code.Code_UNAVAILABLE, "transport unavailable")
-		//tc := time.NewTimer(cc.cfg.WaitConnTimeout)
-		//defer tc.Stop()
-		//ch := cc.resetTransport()
-		//select {
-		//case <-ctx.Done():
-		//	return nil, xerror.Wrap(ctx.Err(), code.Code_UNAVAILABLE, "")
-		//case <-tc.C:
-		//	return nil, xerror.New(code.Code_UNAVAILABLE, "wait transport timeout")
-		//case <-ch:
-		//}
-		//if t = cc.transport; t == nil {
-		//	return nil, xerror.New(code.Code_UNAVAILABLE, "transport unavailable")
-		//}
 	}
 	c := defaultCallInfo()
 	c.maxSendMessageSize = &cc.cfg.MaxSendMsgSize
@@ -356,7 +343,7 @@ func (cc *clientConn) connect(opts transport.ConnectOptions, connectDeadline tim
 	case <-connectCtx.Done():
 		t.Close(transport.ErrConnClosing)
 		if errors.Is(connectCtx.Err(), context.DeadlineExceeded) {
-			return err
+			return connectCtx.Err()
 		}
 		return nil
 	}
@@ -409,14 +396,17 @@ func (cc *clientConn) resetTransport() {
 func (cc *clientConn) onClose() {
 	cc.mu.Lock()
 	cc.transport = nil
-	cc.changeStateUnlock(remote.Shutdown)
+	if cc.state == remote.Shutdown {
+		cc.mu.Unlock()
+		return
+	}
+	cc.changeStateUnlock(remote.Idle)
 	cc.mu.Unlock()
 	cc.resetTransport()
 }
 
 func (cc *clientConn) onGoAway(r transport.GoAwayReason) {
-	switch r {
-	case transport.GoAwayTooManyPings:
+	if r == transport.GoAwayTooManyPings {
 		cc.mu.Lock()
 		v := 2 * cc.cfg.Transport.KeepaliveParams.Time
 		if v > cc.cfg.Transport.KeepaliveParams.Time {

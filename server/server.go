@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -86,6 +85,8 @@ type server struct {
 
 	restSvr    rest.Server
 	restEnable bool
+
+	registerErr error
 }
 
 // NewServer creates a new server.
@@ -143,7 +144,13 @@ func NewServer() (Server, error) {
 func (s *server) RegisterService(sd *ServiceDesc, ss interface{}) {
 	if ss == nil {
 		slog.Error("fault to register service: Server.RegisterService handler is nil")
-		os.Exit(1)
+		s.mu.Lock()
+		s.registerErr = errors.Join(
+			s.registerErr,
+			errors.New("server register service: handler is nil"),
+		)
+		s.mu.Unlock()
+		return
 	}
 	ht := reflect.TypeOf(sd.HandlerType).Elem()
 	st := reflect.TypeOf(ss)
@@ -153,7 +160,16 @@ func (s *server) RegisterService(sd *ServiceDesc, ss interface{}) {
 			slog.Any("handlerType", st),
 			slog.Any("interfaceType", ht),
 		)
-		os.Exit(1)
+		s.mu.Lock()
+		s.registerErr = errors.Join(
+			s.registerErr,
+			fmt.Errorf(
+				"server register service %q: handler does not satisfy interface",
+				sd.ServiceName,
+			),
+		)
+		s.mu.Unlock()
+		return
 	}
 	s.register(sd, ss)
 }
@@ -164,7 +180,13 @@ func (s *server) RegisterRestService(sd *RestServiceDesc, ss interface{}, prefix
 	}
 	if ss == nil {
 		slog.Error("fault to register rest service: Server.RegisterService handler is nil")
-		os.Exit(1)
+		s.mu.Lock()
+		s.registerErr = errors.Join(
+			s.registerErr,
+			errors.New("server register rest service: handler is nil"),
+		)
+		s.mu.Unlock()
+		return
 	}
 	ht := reflect.TypeOf(sd.HandlerType).Elem()
 	st := reflect.TypeOf(ss)
@@ -174,7 +196,13 @@ func (s *server) RegisterRestService(sd *RestServiceDesc, ss interface{}, prefix
 			slog.Any("handlerType", st),
 			slog.Any("interfaceType", ht),
 		)
-		os.Exit(1)
+		s.mu.Lock()
+		s.registerErr = errors.Join(
+			s.registerErr,
+			errors.New("server register rest service: handler does not satisfy interface"),
+		)
+		s.mu.Unlock()
+		return
 	}
 	s.registerRest(sd, ss, prefix...)
 }
@@ -247,7 +275,16 @@ func (s *server) Stop() error {
 	return errs
 }
 
-func (s *server) Serve(startFlag chan<- struct{}) error {
+func (s *server) Serve(startFlag chan<- struct{}) (err error) {
+	defer func() {
+		if err != nil {
+			_ = s.Stop()
+		}
+		if startFlag != nil {
+			close(startFlag)
+		}
+	}()
+
 	s.mu.Lock()
 	if s.state == serverStateClosing {
 		s.mu.Unlock()
@@ -257,19 +294,13 @@ func (s *server) Serve(startFlag chan<- struct{}) error {
 		s.mu.Unlock()
 		return errors.New("server already serve")
 	}
+	if s.registerErr != nil {
+		err := s.registerErr
+		s.mu.Unlock()
+		return fmt.Errorf("server registration failed: %w", err)
+	}
 	s.state = serverStateRunning
 	s.mu.Unlock()
-
-	var err error
-	defer func() {
-		// Always close startFlag to signal completion
-		// This ensures the channel is closed even if there's an error
-		if err != nil {
-			_ = s.Stop()
-		}
-		// Close the channel in all cases
-		close(startFlag)
-	}()
 
 	for _, svr := range s.servers {
 		if err = s.serve(svr); err != nil {
@@ -282,7 +313,9 @@ func (s *server) Serve(startFlag chan<- struct{}) error {
 	}
 
 	// Signal that servers have started
-	startFlag <- struct{}{}
+	if startFlag != nil {
+		startFlag <- struct{}{}
+	}
 
 	// Wait for all server goroutines to complete
 	// This will unblock when Stop() is called and all servers finish
@@ -314,16 +347,38 @@ func (s *server) Endpoints() []Endpoint {
 }
 
 func (s *server) initInterceptor() {
-	unaryNames := config.Get(config.Join(config.KeyBase, "interceptor", "unary_server")).
-		StringSlice()
+	unaryNames := loadInterceptorNames(config.Join(config.KeyBase, "interceptor", "unary_server"))
 	s.unaryInterceptor = interceptor.ChainUnaryServerInterceptors(
 		xarray.DelDupStable(unaryNames),
 	)
-	streamNames := config.Get(config.Join(config.KeyBase, "interceptor", "stream_server")).
-		StringSlice()
+	streamNames := loadInterceptorNames(config.Join(config.KeyBase, "interceptor", "stream_server"))
 	s.streamInterceptor = interceptor.ChainStreamServerInterceptors(
 		xarray.DelDupStable(streamNames),
 	)
+}
+
+func loadInterceptorNames(key string) []string {
+	val := config.Get(key)
+	names := val.StringSlice()
+
+	var raw any
+	_ = val.Scan(&raw)
+	switch v := raw.(type) {
+	case nil, []string, []interface{}:
+		return names
+	case string:
+		if len(v) > 0 {
+			slog.Warn("interceptor config value is string, fallback parser is applied", slog.String("key", key))
+		}
+		return names
+	default:
+		slog.Warn(
+			"interceptor config value is not list-like, fallback to empty list",
+			slog.String("key", key),
+			slog.String("type", fmt.Sprintf("%T", v)),
+		)
+		return names
+	}
 }
 
 func (s *server) initRemoteServer() error {
@@ -349,13 +404,13 @@ func (s *server) register(sd *ServiceDesc, ss interface{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.services[sd.ServiceName]; ok {
-		slog.Error(
-			fmt.Sprintf(
-				"fault to register service: Server.RegisterService found duplicate service registration for %q",
-				sd.ServiceName,
-			),
+		err := fmt.Errorf(
+			"fault to register service: Server.RegisterService found duplicate service registration for %q",
+			sd.ServiceName,
 		)
-		os.Exit(1)
+		slog.Error(err.Error())
+		s.registerErr = errors.Join(s.registerErr, err)
+		return
 	}
 	s.registerServiceDesc(sd)
 	s.registerServiceInfo(sd, ss)
