@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"slices"
 	"sync/atomic"
 	"time"
@@ -374,22 +375,50 @@ func (c *client) initInterceptor() {
 	serviceNameKey := fmt.Sprintf("{%s}", c.appName)
 
 	unaryNames := append(
-		config.Get(config.Join(config.KeyBase, "client", "interceptor", "unary")).StringSlice(),
-		config.Get(config.Join(config.KeyBase, "client", serviceNameKey, "interceptor", "unary")).
-			StringSlice()...)
+		loadInterceptorNames(config.Join(config.KeyBase, "client", "interceptor", "unary")),
+		loadInterceptorNames(
+			config.Join(config.KeyBase, "client", serviceNameKey, "interceptor", "unary"),
+		)...,
+	)
 	unaryNames = xarray.DelDupStable(
 		slices.DeleteFunc(unaryNames, func(s string) bool { return s == "" }),
 	)
 	c.unaryInterceptor = interceptor.ChainUnaryClientInterceptors(c.appName, unaryNames)
 
 	steamNames := append(
-		config.Get(config.Join(config.KeyBase, "client", "interceptor", "stream")).StringSlice(),
-		config.Get(config.Join(config.KeyBase, "client", serviceNameKey, "interceptor", "stream")).
-			StringSlice()...)
+		loadInterceptorNames(config.Join(config.KeyBase, "client", "interceptor", "stream")),
+		loadInterceptorNames(
+			config.Join(config.KeyBase, "client", serviceNameKey, "interceptor", "stream"),
+		)...,
+	)
 	steamNames = xarray.DelDupStable(
 		slices.DeleteFunc(steamNames, func(s string) bool { return s == "" }),
 	)
 	c.streamInterceptor = interceptor.ChainStreamClientInterceptors(c.appName, steamNames)
+}
+
+func loadInterceptorNames(key string) []string {
+	val := config.Get(key)
+	names := val.StringSlice()
+
+	var raw any
+	_ = val.Scan(&raw)
+	switch v := raw.(type) {
+	case nil, []string, []interface{}:
+		return names
+	case string:
+		if len(v) > 0 {
+			slog.Warn("interceptor config value is string, fallback parser is applied", slog.String("key", key))
+		}
+		return names
+	default:
+		slog.Warn(
+			"interceptor config value is not list-like, fallback to empty list",
+			slog.String("key", key),
+			slog.String("type", fmt.Sprintf("%T", v)),
+		)
+		return names
+	}
 }
 
 // waitForResolved blocks until the resolver provides addresses or the

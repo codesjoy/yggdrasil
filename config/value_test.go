@@ -411,6 +411,21 @@ func TestValue_StringSlice(t *testing.T) {
 			expected: nil,
 		},
 		{
+			name:     "comma separated string",
+			input:    "a,b,c",
+			expected: []string{"a", "b", "c"},
+		},
+		{
+			name:     "whitespace separated string",
+			input:    "a b\tc\nd",
+			expected: []string{"a", "b", "c", "d"},
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: []string{},
+		},
+		{
 			name:     "nil with default",
 			input:    nil,
 			expected: []string{"default"},

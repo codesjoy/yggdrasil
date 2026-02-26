@@ -172,10 +172,20 @@ func (c *config) DelWatcher(key string, w func(WatchEvent)) error {
 	if !ok {
 		return nil
 	}
-	for i, item := range watchers {
-		if &item == &w {
+
+	target := reflect.ValueOf(w)
+	if !target.IsValid() {
+		return nil
+	}
+	targetPtr := target.Pointer()
+
+	for i := 0; i < len(watchers); {
+		current := reflect.ValueOf(watchers[i])
+		if current.IsValid() && current.Pointer() == targetPtr {
 			watchers = append(watchers[:i], watchers[i+1:]...)
+			continue
 		}
+		i++
 	}
 	c.watchers[key] = watchers
 	return nil

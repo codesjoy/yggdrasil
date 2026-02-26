@@ -212,6 +212,14 @@ func TestDefaultWatchers(t *testing.T) {
 	// Test DelWatcher
 	err = DelWatcher("test_watch", eventHandler)
 	require.NoError(t, err)
+
+	err = Set("test_watch", "after-delete")
+	require.NoError(t, err)
+	select {
+	case <-eventCh:
+		t.Fatal("watcher should not receive events after DelWatcher")
+	case <-time.After(200 * time.Millisecond):
+	}
 }
 
 func TestDefaultValueConversionFunctions(t *testing.T) {
