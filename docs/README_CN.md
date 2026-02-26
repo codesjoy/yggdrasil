@@ -12,8 +12,14 @@
 
 - 安装开发工具（buf、golangci-lint、go-junit-report）：`make tools`
 - 安装仓库内的二进制（含 protoc 插件）：`make install`
-- 运行测试：`make test`
-- 运行 lint：`make lint`
+- 运行稳定测试（默认不带 race）：`make test`
+- 运行 race 测试：`make test.race`
+- 运行 lint（稳定档）：`make lint`
+- 运行完整稳定门禁（CI 默认）：`make check`
+- 运行严格门禁（含 examples/race/严格 lint）：`make check.strict`
+- 检查依赖 tidy 漂移：`make go.mod.tidy.check`
+
+默认会排除 `example/` 模块的 lint/test/coverage；如需纳入请加 `INCLUDE_EXAMPLES=1`。
 
 Go 版本要求以 `../go.mod` 为准。
 
