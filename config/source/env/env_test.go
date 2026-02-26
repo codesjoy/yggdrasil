@@ -16,7 +16,6 @@ package env
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -184,12 +183,8 @@ func TestEnv_ParseArray(t *testing.T) {
 	actualDB := actual["database"].(map[string]interface{})
 
 	for k, v := range expected["database"] {
-		fmt.Println(v)
 		a := actualDB[k]
 		assert.EqualValues(t, v, a)
-		//if a != v {
-		//	t.Errorf("expected %v got %v", v, a)
-		//}
 	}
 }
 

@@ -42,7 +42,10 @@ func setupBenchmarkProtoCodecInputs(payloadBaseSize uint32) []proto.Message {
 
 	for _, p := range payloadSuffixes {
 		ps := &codec_perf.Buffer{}
-		ps.Body = append(payloadBase, p...)
+		body := make([]byte, len(payloadBase), len(payloadBase)+len(p))
+		copy(body, payloadBase)
+		body = append(body, p...)
+		ps.Body = body
 		protoStructs = append(protoStructs, ps)
 	}
 

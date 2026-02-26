@@ -2230,30 +2230,7 @@ func (s) TestHeaderTblSize(t *testing.T) {
 // TestClientHandshakeInfo adds attributes to the resolver.Address passes to
 // NewClientTransport and verifies that these attributes are received by the
 // transport credential handshaker.
-func (s) TestClientHandshakeInfo(t *testing.T) {
-	//server := setUpServerOnly(t, 0, &ServerConfig{}, pingpong)
-	//defer server.stop()
-	//
-	//const (
-	//	testAttrKey = "foo"
-	//	testAttrVal = "bar"
-	//)
-	//addr, _ := NewNetAddr("tcp", "localhost:"+server.port)
-	//ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(2*time.Second))
-	//defer cancel()
-	//creds := &attrTransportCreds{}
-	//
-	//tr, err := NewClientTransport(ctx, context.Background(), addr, ConnectOptions{TransportCredentials: creds}, func() {}, func(GoAwayReason) {}, func() {})
-	//if err != nil {
-	//	t.Fatalf("NewClientTransport(): %v", err)
-	//}
-	//defer tr.Close(fmt.Errorf("closed manually by test"))
-	//
-	//wantAttr := map[string]interface{}{testAttrKey: testAttrVal}
-	//if gotAttr := creds.attr; !cmp.Equal(gotAttr, wantAttr) {
-	//	t.Fatalf("received attributes %v in creds, want %v", gotAttr, wantAttr)
-	//}
-}
+func (s) TestClientHandshakeInfo(_ *testing.T) {}
 
 func (s) TestClientDecodeHeaderStatusErr(t *testing.T) {
 	testStream := func() *Stream {

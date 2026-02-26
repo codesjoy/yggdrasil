@@ -128,8 +128,7 @@ func (h *commonHandler) addTrace(ctx context.Context, enc ObjectEncoder) {
 func (h *commonHandler) handleErrorWithVerbose(key string, err error, enc ObjectEncoder) {
 	basic := err.Error()
 	enc.AddString(key, basic)
-	switch e := err.(type) {
-	case fmt.Formatter:
+	if e, ok := err.(fmt.Formatter); ok {
 		verbose := fmt.Sprintf("%+v", e)
 		if verbose != basic {
 			enc.AddString(key+"Verbose", verbose)

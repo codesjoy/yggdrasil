@@ -243,11 +243,11 @@ func newHTTP2Client(
 	)
 	transportCreds := opts.TransportCredentials
 	if transportCreds != nil {
-		//// gRPC, resolver, balancer etc. can specify arbitrary data in the
-		//// Attributes field of resolver.Address, which is shoved into connectCtx
-		//// and passed to the credential handshaker. This makes it possible for
-		//// address specific arbitrary data to reach the credential handshaker.
-		//connectCtx = credentials.NewClientHandshakeInfoContext(connectCtx, credentials.ClientHandshakeInfo{Attributes: addr.Attributes})
+		// gRPC, resolver, balancer etc. can specify arbitrary data in the
+		// Attributes field of resolver.Address, which is shoved into connectCtx
+		// and passed to the credential handshaker. This makes it possible for
+		// address specific arbitrary data to reach the credential handshaker.
+		// connectCtx = credentials.NewClientHandshakeInfoContext(connectCtx, credentials.ClientHandshakeInfo{Attributes: addr.Attributes})
 		rawConn := conn
 		// Pull the deadline from the connectCtx, which will be used for
 		// timeouts in the authentication protocol handshake. Can ignore the
@@ -1216,11 +1216,8 @@ func (t *http2Client) handleGoAway(f *http2.GoAwayFrame) {
 // the caller.
 func (t *http2Client) setGoAwayReason(f *http2.GoAwayFrame) {
 	t.goAwayReason = GoAwayNoReason
-	switch f.ErrCode {
-	case http2.ErrCodeEnhanceYourCalm:
-		if string(f.DebugData()) == "too_many_pings" {
-			t.goAwayReason = GoAwayTooManyPings
-		}
+	if f.ErrCode == http2.ErrCodeEnhanceYourCalm && string(f.DebugData()) == "too_many_pings" {
+		t.goAwayReason = GoAwayTooManyPings
 	}
 	if len(f.DebugData()) == 0 {
 		t.goAwayDebugMessage = fmt.Sprintf("code: %s", f.ErrCode)

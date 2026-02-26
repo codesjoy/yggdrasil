@@ -39,11 +39,12 @@ func (l *logEntry) Write(status, _ int, _ http.Header, elapsed time.Duration, _ 
 		slog.Float64("cost", float64(elapsed)/float64(time.Millisecond)),
 	}
 	var lv slog.Level
-	if status < 400 {
+	switch {
+	case status < 400:
 		lv = slog.LevelInfo
-	} else if status < 500 {
+	case status < 500:
 		lv = slog.LevelWarn
-	} else {
+	default:
 		lv = slog.LevelError
 	}
 	slog.LogAttrs(l.r.Context(), lv, "http access", fields...)
