@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-source "$(dirname "${BASH_SOURCE[0]}")/color.sh"
+# Get the absolute path to the directory containing this script
+_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${_LIB_DIR}/color.sh"
 
 # 0=DEBUG, 1=INFO, 2=WARN, 3=ERROR
 LOG_LEVEL=${LOG_LEVEL:-0}
@@ -23,21 +24,22 @@ if [[ -t 1 ]]; then LOG_USE_COLOR=true; else LOG_USE_COLOR=false; fi
 
 # --- Internal Interfaces ---
 _log_render() {
-    local level_str=$1
-    local color=$2
-    shift 2
-    local msg="$*"
-    local ts
-    ts=$(date '+%Y-%m-%d %H:%M:%S')
-    if [[ "$LOG_USE_COLOR" == "true" ]]; then
-        printf "${color}%s  %-5s  %s${COLOR_NORMAL}\n" "$ts" "$level_str" "$msg"
-    else
-        printf "%s  %-5s  %s\n" "$ts" "$level_str" "$msg"
-    fi
+	local level_str=$1
+	local color=$2
+	shift 2
+	local msg="$*"
+	local ts
+	ts=$(date '+%Y-%m-%d %H:%M:%S')
+	if [[ "$LOG_USE_COLOR" == "true" ]]; then
+		printf "${color}%s  %-5s  %s${COLOR_NORMAL}\n" "$ts" "$level_str" "$msg"
+	else
+		printf "%s  %-5s  %s\n" "$ts" "$level_str" "$msg"
+	fi
 }
 
 # --- External Interfaces ---
-log::debug() { [[ $LOG_LEVEL -le 0 ]] && _log_render "DEBUG" "$COLOR_CYAN" "$@"; }
-log::info()  { [[ $LOG_LEVEL -le 1 ]] && _log_render "INFO"  "$COLOR_GREEN" "$@"; }
-log::warn()  { [[ $LOG_LEVEL -le 2 ]] && _log_render "WARN"  "$COLOR_YELLOW" "$@"; }
-log::error() { [[ $LOG_LEVEL -le 3 ]] && _log_render "ERROR" "$COLOR_RED" "$@"; }
+log::debug() { [[ $LOG_LEVEL -le 0 ]] && _log_render "DEBUG" "$COLOR_CYAN" "$@" || return 0; }
+log::info() { [[ $LOG_LEVEL -le 1 ]] && _log_render "INFO" "$COLOR_GREEN" "$@" || return 0; }
+log::warn() { [[ $LOG_LEVEL -le 2 ]] && _log_render "WARN" "$COLOR_YELLOW" "$@" || return 0; }
+log::error() { [[ $LOG_LEVEL -le 3 ]] && _log_render "ERROR" "$COLOR_RED" "$@" || return 0; }
+log::success() { [[ $LOG_LEVEL -le 1 ]] && _log_render "SUCCESS" "${COLOR_GREEN}${COLOR_BOLD}" "$@" || return 0; }

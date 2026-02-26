@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 # This is a common util functions shell script
 
 # arguments: target, item1, item2, item3, ...
@@ -30,7 +29,6 @@ function util::array_contains() {
 	done
 	return 1
 }
-
 
 function util::parse_params() {
 	local params="$1"
