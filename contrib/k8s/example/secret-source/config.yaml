@@ -1,5 +1,0 @@
-yggdrasil:
-  config:
-    sources:
-      - type: file
-        path: ./config.yaml

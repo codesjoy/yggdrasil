@@ -207,7 +207,7 @@ Yggdrasil 采用模块化架构，关注点清晰分离：
 - 文档索引（英文）：[docs/README.md](docs/README.md)
 - 文档索引（中文）：[docs/README_CN.md](docs/README_CN.md)
 - 示例总览：[example/README.md](example/README.md)
-- Contrib 模块：[contrib/](contrib/)
+- Contrib 模块：[yggdrasil-ecosystem/integrations](https://github.com/codesjoy/yggdrasil-ecosystem/tree/main/integrations)
 
 ### 核心概念
 
