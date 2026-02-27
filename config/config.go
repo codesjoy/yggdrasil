@@ -28,8 +28,8 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/config/internal"
 	"github.com/codesjoy/yggdrasil/v2/config/source"
 
-	"github.com/codesjoy/yggdrasil/v2/utils/xgo"
-	"github.com/codesjoy/yggdrasil/v2/utils/xmap"
+	"github.com/codesjoy/pkg/utils/xgo"
+	"github.com/codesjoy/pkg/utils/xmap"
 )
 
 type versionValues struct {

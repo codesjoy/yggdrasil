@@ -26,9 +26,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/codesjoy/pkg/utils/xgo"
 	"github.com/codesjoy/yggdrasil/v2/config/source"
 	"github.com/codesjoy/yggdrasil/v2/internal/backoff"
-	"github.com/codesjoy/yggdrasil/v2/utils/xgo"
 	"github.com/fsnotify/fsnotify"
 	"gopkg.in/yaml.v3"
 )

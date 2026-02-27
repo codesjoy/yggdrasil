@@ -22,7 +22,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/codesjoy/yggdrasil/v2/utils/xmap"
+	"github.com/codesjoy/pkg/utils/xmap"
 	"github.com/creasty/defaults"
 	"github.com/mitchellh/mapstructure"
 )

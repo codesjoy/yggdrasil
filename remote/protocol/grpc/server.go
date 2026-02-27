@@ -28,6 +28,7 @@ import (
 	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
+	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/remote/credentials"
@@ -41,7 +42,6 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport/keepalive"
 	"github.com/codesjoy/yggdrasil/v2/stats"
 	"github.com/codesjoy/yggdrasil/v2/status"
-	"github.com/codesjoy/yggdrasil/v2/utils/xnet"
 	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
@@ -86,23 +86,19 @@ func (opts *serverOptions) SetDefault() error {
 	if opts.Network == "" {
 		opts.Network = "tcp"
 	}
-	if opts.Address == "" {
-		opts.Address, err = xnet.Extract(opts.Address)
+	host, port := "", "0"
+	if opts.Address != "" {
+		host, port, err = net.SplitHostPort(opts.Address)
 		if err != nil {
 			return err
 		}
-		opts.Address = fmt.Sprintf("%s:0", opts.Address)
-	} else {
-		host, port, err := net.SplitHostPort(opts.Address)
-		if err != nil {
-			return err
-		}
-		host, err = xnet.Extract(host)
-		if err != nil {
-			return err
-		}
-		opts.Address = fmt.Sprintf("%s:%s", host, port)
 	}
+	host, err = internalutils.NormalizeListenHost(host)
+	if err != nil {
+		return err
+	}
+	opts.Address = net.JoinHostPort(host, port)
+
 	if opts.Attr == nil {
 		opts.Attr = make(map[string]string)
 	}

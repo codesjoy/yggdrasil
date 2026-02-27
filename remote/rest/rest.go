@@ -29,13 +29,12 @@ import (
 	"time"
 
 	"github.com/codesjoy/yggdrasil/v2/config"
+	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
 	"github.com/codesjoy/yggdrasil/v2/remote/peer"
 	"github.com/codesjoy/yggdrasil/v2/remote/rest/middleware"
 	"github.com/codesjoy/yggdrasil/v2/status"
-	"github.com/codesjoy/yggdrasil/v2/utils/xarray"
-	"github.com/codesjoy/yggdrasil/v2/utils/xnet"
 	"github.com/go-chi/chi/v5"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/protobuf/proto"
@@ -113,8 +112,11 @@ func NewServer(opts ...Option) (Server, error) {
 		return nil, err
 	}
 
-	ip, _ := xnet.Extract(cfg.Host)
-	address := fmt.Sprintf("%s:%d", ip, cfg.Port)
+	host, err := internalutils.NormalizeListenHost(cfg.Host)
+	if err != nil {
+		return nil, err
+	}
+	address := fmt.Sprintf("%s:%d", host, cfg.Port)
 
 	s := &ServeMux{
 		cfg: cfg,
@@ -132,22 +134,20 @@ func NewServer(opts ...Option) (Server, error) {
 	}
 
 	r := chi.NewMux()
-	r.Use(middleware.GetMiddlewares(xarray.DelDupStable(cfg.Middleware.All)...)...)
+	r.Use(middleware.GetMiddlewares(internalutils.DedupStableStrings(cfg.Middleware.All)...)...)
 
 	rpcRouter := r.Group(func(r chi.Router) {
-		var rpcMiddlewares []string
+		rpcMiddlewaresRaw := cfg.Middleware.RPC
 		if s.marshalerRegistry != nil {
 			r.Use(middleware.NewMarshalerMiddleware(s.marshalerRegistry))
-			// Only use configured middlewares, excluding marshaler if it's there (though unlikely in config)
-			rpcMiddlewares = xarray.DelDupStable(cfg.Middleware.RPC)
 		} else {
-			// Default behavior: add marshaler string middleware
-			rpcMiddlewares = xarray.DelDupStable(append([]string{"marshaler"}, cfg.Middleware.RPC...))
+			rpcMiddlewaresRaw = append([]string{"marshaler"}, rpcMiddlewaresRaw...)
 		}
+		rpcMiddlewares := internalutils.DedupStableStrings(rpcMiddlewaresRaw)
 		r.Use(middleware.GetMiddlewares(rpcMiddlewares...)...)
 	})
 
-	webMiddlewares := xarray.DelDupStable(cfg.Middleware.Web)
+	webMiddlewares := internalutils.DedupStableStrings(cfg.Middleware.Web)
 	webRouter := r.Group(func(r chi.Router) {
 		r.Use(middleware.GetMiddlewares(webMiddlewares...)...)
 	})

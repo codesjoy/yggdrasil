@@ -31,12 +31,12 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
 	"github.com/codesjoy/yggdrasil/v2/internal/constant"
 	"github.com/codesjoy/yggdrasil/v2/internal/instance"
+	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/remote/rest"
 	"github.com/codesjoy/yggdrasil/v2/stats"
 	"github.com/codesjoy/yggdrasil/v2/stream"
-	"github.com/codesjoy/yggdrasil/v2/utils/xarray"
 	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
@@ -349,11 +349,11 @@ func (s *server) Endpoints() []Endpoint {
 func (s *server) initInterceptor() {
 	unaryNames := loadInterceptorNames(config.Join(config.KeyBase, "interceptor", "unary_server"))
 	s.unaryInterceptor = interceptor.ChainUnaryServerInterceptors(
-		xarray.DelDupStable(unaryNames),
+		internalutils.DedupStableStrings(unaryNames),
 	)
 	streamNames := loadInterceptorNames(config.Join(config.KeyBase, "interceptor", "stream_server"))
 	s.streamInterceptor = interceptor.ChainStreamServerInterceptors(
-		xarray.DelDupStable(streamNames),
+		internalutils.DedupStableStrings(streamNames),
 	)
 }
 
