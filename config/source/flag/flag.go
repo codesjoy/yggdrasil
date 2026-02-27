@@ -20,8 +20,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/codesjoy/pkg/utils/xmap"
 	"github.com/codesjoy/yggdrasil/v2/config/source"
-	"github.com/codesjoy/yggdrasil/v2/utils/xmap"
 )
 
 type flag struct {

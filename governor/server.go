@@ -21,10 +21,11 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/utils/xnet"
+	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
 )
 
 // Config governor config
@@ -44,7 +45,7 @@ func (c *Config) Address() string {
 
 // SetDefault sets default values
 func (c *Config) SetDefault() (err error) {
-	c.Host, err = xnet.Extract(c.Host)
+	c.Host, err = internalutils.NormalizeListenHost(c.Host)
 	return
 }
 
@@ -78,7 +79,17 @@ func NewServer() (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg.Host, cfg.Port = xnet.GetHostAndPortByAddr(listener.Addr())
+	host, portStr, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		_ = listener.Close()
+		return nil, err
+	}
+	port, err := strconv.ParseUint(portStr, 10, 64)
+	if err != nil {
+		_ = listener.Close()
+		return nil, err
+	}
+	cfg.Host, cfg.Port = host, port
 	s := &Server{
 		Server: &http.Server{
 			Addr:              cfg.Address(),

@@ -19,15 +19,15 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/codesjoy/pkg/utils/xsync"
 	"github.com/codesjoy/yggdrasil/v2/balancer"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
-	"github.com/codesjoy/yggdrasil/v2/utils/xsync"
 )
 
 type balancerClient struct {
 	cli        *client
-	serializer *xsync.CallbackSerializer
+	serializer *xsync.Serializer
 }
 
 // UpdateState updates the state of the client
@@ -52,10 +52,10 @@ func (bc *balancerClient) NewRemoteClient(
 
 func (bc *balancerClient) createStateListener(f func(remote.ClientState)) func(remote.ClientState) {
 	return func(state remote.ClientState) {
-		bc.serializer.ScheduleOr(func(_ context.Context) {
+		if err := bc.serializer.Submit(func(_ context.Context) {
 			f(state)
-		}, func() {
-			slog.Error("createStateListener failed")
-		})
+		}); err != nil {
+			slog.Error("createStateListener failed", slog.Any("error", err))
+		}
 	}
 }

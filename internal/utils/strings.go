@@ -12,23 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package xarray provides array functionality.
-package xarray
+package utils
 
-// DelDupStable removes duplicate elements from a slice while preserving the original order.
-func DelDupStable[T comparable](slc []T) []T {
-	if len(slc) < 2 {
-		return slc
+// DedupStableStrings removes duplicate elements from a slice while preserving order.
+// It preserves nil input as nil, and empty slices remain empty slices.
+func DedupStableStrings(values []string) []string {
+	if len(values) < 2 {
+		return values
 	}
-	seen := make(map[T]bool)
+	seen := make(map[string]struct{}, len(values))
 	i := 0
-	for _, value := range slc {
-		if _, ok := seen[value]; !ok {
-			seen[value] = true
-			slc[i] = value
-			i++
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
 		}
+		seen[value] = struct{}{}
+		values[i] = value
+		i++
 	}
-
-	return slc[:i]
+	return values[:i]
 }

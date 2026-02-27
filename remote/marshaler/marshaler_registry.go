@@ -20,13 +20,13 @@ import (
 	"mime"
 	"net/http"
 
-	"github.com/codesjoy/yggdrasil/v2/utils/xarray"
+	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // BuildMarshalerRegistry builds a marshaler registry from a list of MIME types.
 func BuildMarshalerRegistry(scheme ...string) Registry {
-	scheme = xarray.DelDupStable(scheme)
+	scheme = internalutils.DedupStableStrings(scheme)
 	mr := NewRegistry()
 	for _, item := range scheme {
 		marshaler, err := BuildMarshaller(item)

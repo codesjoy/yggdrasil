@@ -26,17 +26,17 @@ import (
 	"time"
 
 	"github.com/codesjoy/pkg/basic/xerror"
+	"github.com/codesjoy/pkg/utils/xgo"
+	"github.com/codesjoy/pkg/utils/xsync"
 	"github.com/codesjoy/yggdrasil/v2/balancer"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
 	"github.com/codesjoy/yggdrasil/v2/internal/backoff"
+	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
 	"github.com/codesjoy/yggdrasil/v2/stats"
 	"github.com/codesjoy/yggdrasil/v2/stream"
-	"github.com/codesjoy/yggdrasil/v2/utils/xarray"
-	"github.com/codesjoy/yggdrasil/v2/utils/xgo"
-	"github.com/codesjoy/yggdrasil/v2/utils/xsync"
 	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
@@ -274,7 +274,7 @@ func (c *client) initResolverAndBalancer(cfg config.Values) error {
 	b, err := balancer.New(
 		c.appName,
 		balancerName,
-		&balancerClient{cli: c, serializer: xsync.NewCallbackSerializer(c.ctx)},
+		&balancerClient{cli: c, serializer: xsync.NewSerializer(c.ctx)},
 	)
 	if err != nil {
 		return err
@@ -380,21 +380,21 @@ func (c *client) initInterceptor() {
 			config.Join(config.KeyBase, "client", serviceNameKey, "interceptor", "unary"),
 		)...,
 	)
-	unaryNames = xarray.DelDupStable(
+	unaryNames = internalutils.DedupStableStrings(
 		slices.DeleteFunc(unaryNames, func(s string) bool { return s == "" }),
 	)
 	c.unaryInterceptor = interceptor.ChainUnaryClientInterceptors(c.appName, unaryNames)
 
-	steamNames := append(
+	streamNames := append(
 		loadInterceptorNames(config.Join(config.KeyBase, "client", "interceptor", "stream")),
 		loadInterceptorNames(
 			config.Join(config.KeyBase, "client", serviceNameKey, "interceptor", "stream"),
 		)...,
 	)
-	steamNames = xarray.DelDupStable(
-		slices.DeleteFunc(steamNames, func(s string) bool { return s == "" }),
+	streamNames = internalutils.DedupStableStrings(
+		slices.DeleteFunc(streamNames, func(s string) bool { return s == "" }),
 	)
-	c.streamInterceptor = interceptor.ChainStreamClientInterceptors(c.appName, steamNames)
+	c.streamInterceptor = interceptor.ChainStreamClientInterceptors(c.appName, streamNames)
 }
 
 func loadInterceptorNames(key string) []string {
