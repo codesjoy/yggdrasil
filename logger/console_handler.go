@@ -104,26 +104,35 @@ func NewConsoleHandler(cfg *ConsoleHandlerConfig) (slog.Handler, error) {
 
 func (h *consoleHandler) Handle(ctx context.Context, r slog.Record) error {
 	buf := buffer.Get()
+	defer buf.Free()
 	h.timeHandle(r.Time, buf)
 	buf.AppendString("  ")
-	buf.AppendString(consoleLevelMsg[r.Level])
+	levelMsg, ok := consoleLevelMsg[r.Level]
+	if !ok {
+		levelMsg = r.Level.String()
+	}
+	buf.AppendString(levelMsg)
 	h.sourceHandle(&r, buf)
 	buf.AppendString("  ")
 	buf.AppendString(r.Message)
 
-	if r.NumAttrs() > 0 {
+	writeAttrsBlock := r.NumAttrs() > 0 || len(h.preformattedAttrs) > 0 || len(h.groups) > 0 ||
+		h.hasValidTrace(ctx)
+	if writeAttrsBlock {
 		buf.AppendString("  ")
 		buf.AppendByte('{')
 		objEnc := h.objEnc.Get()
+		defer objEnc.Free()
 		objEnc.SetBuffer(buf)
 
 		h.traceHandle(ctx, objEnc)
-		h.openGroups(objEnc)
+		h.appendPreformattedAttrs(objEnc, buf)
+		h.openGroupsFrom(objEnc, h.nOpenGroups)
 		r.Attrs(func(attr slog.Attr) bool {
 			h.encodeSlogAttr(attr, objEnc)
 			return true
 		})
-		objEnc.CloseNamespace(h.nOpenGroups)
+		objEnc.CloseNamespace(len(h.groups))
 		buf.AppendByte('}')
 	}
 

@@ -16,6 +16,7 @@ package logger
 
 import (
 	"encoding/json"
+	"errors"
 	"math"
 	"strings"
 	"testing"
@@ -314,6 +315,11 @@ func TestJsonEncoderGetAndFree(t *testing.T) {
 	if childEnc == nil {
 		t.Error("Get() returned nil")
 	}
+	parentJSONEnc := parentEnc.(*jsonEncoder)
+	childJSONEnc := childEnc.(*jsonEncoder)
+	if parentJSONEnc == childJSONEnc {
+		t.Error("Get() should return a distinct encoder instance")
+	}
 
 	childEnc.Free()
 	// If Free() panics, the test will fail
@@ -403,6 +409,12 @@ func (t testJSONMarshaler) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.Value)
 }
 
+type failedJSONMarshaler struct{}
+
+func (failedJSONMarshaler) MarshalJSON() ([]byte, error) {
+	return nil, errors.New("marshal failed")
+}
+
 func TestJsonEncoderAppendAnyWithMarshaler(t *testing.T) {
 	cfg := &JSONEncoderConfig{}
 	enc, _ := NewJSONEncoder(cfg)
@@ -413,6 +425,29 @@ func TestJsonEncoderAppendAnyWithMarshaler(t *testing.T) {
 	err := enc.(*jsonEncoder).appendAny(marshaler)
 	if err != nil {
 		t.Errorf("appendAny() with JSONMarshaler error = %v", err)
+	}
+}
+
+func TestJsonEncoderAddAnyRollbackOnError(t *testing.T) {
+	cfg := &JSONEncoderConfig{}
+	enc, _ := NewJSONEncoder(cfg)
+	buf := buffer.Get()
+	enc.SetBuffer(buf)
+
+	enc.AddString("before", "ok")
+	enc.AddAny("bad", failedJSONMarshaler{})
+	enc.AddString("after", "ok")
+
+	result := "{" + buf.String() + "}"
+	var got map[string]string
+	if err := json.Unmarshal([]byte(result), &got); err != nil {
+		t.Fatalf("AddAny() produced invalid JSON: %v, result: %s", err, result)
+	}
+	if _, ok := got["bad"]; ok {
+		t.Fatalf("AddAny() should rollback failed key, got bad field in result: %s", result)
+	}
+	if !strings.Contains(got["badError"], "marshal failed") {
+		t.Fatalf("AddAny() should add badError fallback, got: %q", got["badError"])
 	}
 }
 

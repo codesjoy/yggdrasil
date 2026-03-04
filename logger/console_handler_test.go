@@ -16,7 +16,9 @@ package logger
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -504,4 +506,149 @@ func TestConsoleHandlerWithEmptyAttrs(t *testing.T) {
 	if newHandler == nil {
 		t.Error("WithAttrs(empty) returned nil")
 	}
+}
+
+func TestConsoleHandlerWithAttrsAffectsOutput(t *testing.T) {
+	mw := newMockWriter()
+	cfg := &ConsoleHandlerConfig{
+		CommonHandlerConfig: CommonHandlerConfig{
+			Level:         slog.LevelInfo,
+			AddTrace:      false,
+			AddErrVerbose: false,
+		},
+		TimeHandler: "RFC3339",
+		AddSource:   false,
+		Writer:      mw,
+	}
+
+	h, err := NewConsoleHandler(cfg)
+	if err != nil {
+		t.Fatalf("NewConsoleHandler() error = %v", err)
+	}
+	h = h.WithAttrs([]slog.Attr{slog.String("service", "yggdrasil")})
+
+	record := slog.NewRecord(time.Now(), slog.LevelInfo, "test message", 0)
+	if err := h.Handle(context.Background(), record); err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+
+	attrs := parseConsoleAttrsBlock(t, mw.String())
+	if attrs["service"] != "yggdrasil" {
+		t.Fatalf("WithAttrs field missing from console output, got service=%v", attrs["service"])
+	}
+}
+
+func TestConsoleHandlerWithAttrsAndWithGroupOrder(t *testing.T) {
+	newRecord := func() slog.Record {
+		record := slog.NewRecord(time.Now(), slog.LevelInfo, "test message", 0)
+		record.AddAttrs(slog.String("dynamic", "d"))
+		return record
+	}
+
+	buildHandler := func(writer *mockWriter) slog.Handler {
+		cfg := &ConsoleHandlerConfig{
+			CommonHandlerConfig: CommonHandlerConfig{
+				Level:         slog.LevelInfo,
+				AddTrace:      false,
+				AddErrVerbose: false,
+			},
+			TimeHandler: "RFC3339",
+			AddSource:   false,
+			Writer:      writer,
+		}
+		h, err := NewConsoleHandler(cfg)
+		if err != nil {
+			t.Fatalf("NewConsoleHandler() error = %v", err)
+		}
+		return h
+	}
+
+	mw1 := newMockWriter()
+	h1 := buildHandler(mw1).WithAttrs([]slog.Attr{slog.String("static", "s")}).WithGroup("scope")
+	record1 := newRecord()
+	if err := h1.Handle(context.Background(), record1); err != nil {
+		t.Fatalf("Handle() error for attrs->group order = %v", err)
+	}
+	attrs1 := parseConsoleAttrsBlock(t, mw1.String())
+	if attrs1["static"] != "s" {
+		t.Fatalf("attrs->group should keep static attr at root, got static=%v", attrs1["static"])
+	}
+	scope1, ok := attrs1["scope"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("attrs->group should contain scope object, got %T", attrs1["scope"])
+	}
+	if scope1["dynamic"] != "d" {
+		t.Fatalf(
+			"attrs->group should place record attrs in scope, got dynamic=%v",
+			scope1["dynamic"],
+		)
+	}
+
+	mw2 := newMockWriter()
+	h2 := buildHandler(mw2).WithGroup("scope").WithAttrs([]slog.Attr{slog.String("static", "s")})
+	record2 := newRecord()
+	if err := h2.Handle(context.Background(), record2); err != nil {
+		t.Fatalf("Handle() error for group->attrs order = %v", err)
+	}
+	attrs2 := parseConsoleAttrsBlock(t, mw2.String())
+	if _, ok := attrs2["static"]; ok {
+		t.Fatalf(
+			"group->attrs should nest static attr in scope, got root static=%v",
+			attrs2["static"],
+		)
+	}
+	scope2, ok := attrs2["scope"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("group->attrs should contain scope object, got %T", attrs2["scope"])
+	}
+	if scope2["static"] != "s" || scope2["dynamic"] != "d" {
+		t.Fatalf("group->attrs should keep both attrs in scope, got scope=%v", scope2)
+	}
+}
+
+func TestConsoleHandlerUnknownLevelFallback(t *testing.T) {
+	mw := newMockWriter()
+	cfg := &ConsoleHandlerConfig{
+		CommonHandlerConfig: CommonHandlerConfig{
+			Level:         slog.LevelDebug,
+			AddTrace:      false,
+			AddErrVerbose: false,
+		},
+		TimeHandler: "RFC3339",
+		AddSource:   false,
+		Writer:      mw,
+	}
+
+	h, err := NewConsoleHandler(cfg)
+	if err != nil {
+		t.Fatalf("NewConsoleHandler() error = %v", err)
+	}
+
+	level := slog.Level(10)
+	record := slog.NewRecord(time.Now(), level, "test message", 0)
+	if err := h.Handle(context.Background(), record); err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+
+	output := mw.String()
+	if !strings.Contains(output, level.String()) {
+		t.Fatalf("output should contain fallback level string %q, got %q", level.String(), output)
+	}
+}
+
+func parseConsoleAttrsBlock(t *testing.T, output string) map[string]interface{} {
+	t.Helper()
+
+	start := strings.IndexByte(output, '{')
+	end := strings.LastIndexByte(output, '}')
+	if start < 0 || end < start {
+		t.Fatalf("console output missing attrs block: %q", output)
+	}
+
+	raw := output[start : end+1]
+	var attrs map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &attrs); err != nil {
+		t.Fatalf("console attrs block is not valid JSON: %v, raw=%q", err, raw)
+	}
+	return attrs
 }
