@@ -19,12 +19,37 @@ import (
 	"encoding/json"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/codesjoy/yggdrasil/v2/logger/buffer"
 	"go.opentelemetry.io/otel/trace"
 )
+
+type syncLinesWriter struct {
+	mu    sync.Mutex
+	lines []string
+}
+
+func (w *syncLinesWriter) Write(p []byte) (n int, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	clone := make([]byte, len(p))
+	copy(clone, p)
+	w.lines = append(w.lines, string(clone))
+	return len(p), nil
+}
+
+func (w *syncLinesWriter) Lines() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	out := make([]string, len(w.lines))
+	copy(out, w.lines)
+	return out
+}
 
 func TestNewJsonHandler(t *testing.T) {
 	tests := []struct {
@@ -624,5 +649,179 @@ func TestJsonHandlerHandleError(t *testing.T) {
 	err = json.Unmarshal([]byte(output), &result)
 	if err != nil {
 		t.Errorf("Handle() with error produced invalid JSON: %v", err)
+	}
+}
+
+func TestJsonHandlerWithAttrsAffectsOutput(t *testing.T) {
+	mw := newMockWriter()
+	cfg := &JSONHandlerConfig{
+		CommonHandlerConfig: CommonHandlerConfig{
+			Level:         slog.LevelInfo,
+			AddTrace:      false,
+			AddErrVerbose: false,
+		},
+		AddSource: false,
+		Writer:    mw,
+	}
+
+	h, err := NewJSONHandler(cfg)
+	if err != nil {
+		t.Fatalf("NewJSONHandler() error = %v", err)
+	}
+	h = h.WithAttrs([]slog.Attr{slog.String("service", "yggdrasil")})
+
+	record := slog.NewRecord(time.Now(), slog.LevelInfo, "test message", 0)
+	if err := h.Handle(context.Background(), record); err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(mw.String()), &result); err != nil {
+		t.Fatalf("Handle() produced invalid JSON: %v", err)
+	}
+	if result["service"] != "yggdrasil" {
+		t.Fatalf("WithAttrs field missing from output, got service=%v", result["service"])
+	}
+}
+
+func TestJsonHandlerWithAttrsAndWithGroupOrder(t *testing.T) {
+	newRecord := func() slog.Record {
+		record := slog.NewRecord(time.Now(), slog.LevelInfo, "test message", 0)
+		record.AddAttrs(slog.String("dynamic", "d"))
+		return record
+	}
+
+	buildHandler := func(writer *mockWriter) slog.Handler {
+		cfg := &JSONHandlerConfig{
+			CommonHandlerConfig: CommonHandlerConfig{
+				Level:         slog.LevelInfo,
+				AddTrace:      false,
+				AddErrVerbose: false,
+			},
+			AddSource: false,
+			Writer:    writer,
+		}
+		h, err := NewJSONHandler(cfg)
+		if err != nil {
+			t.Fatalf("NewJSONHandler() error = %v", err)
+		}
+		return h
+	}
+
+	mw1 := newMockWriter()
+	h1 := buildHandler(mw1).WithAttrs([]slog.Attr{slog.String("static", "s")}).WithGroup("scope")
+	record1 := newRecord()
+	if err := h1.Handle(context.Background(), record1); err != nil {
+		t.Fatalf("Handle() error for attrs->group order = %v", err)
+	}
+	var result1 map[string]interface{}
+	if err := json.Unmarshal([]byte(mw1.String()), &result1); err != nil {
+		t.Fatalf("invalid JSON for attrs->group order: %v", err)
+	}
+	if result1["static"] != "s" {
+		t.Fatalf("attrs->group should keep static attr at root, got static=%v", result1["static"])
+	}
+	scope1, ok := result1["scope"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("attrs->group should contain scope object, got %T", result1["scope"])
+	}
+	if scope1["dynamic"] != "d" {
+		t.Fatalf(
+			"attrs->group should place record attrs in scope, got dynamic=%v",
+			scope1["dynamic"],
+		)
+	}
+
+	mw2 := newMockWriter()
+	h2 := buildHandler(mw2).WithGroup("scope").WithAttrs([]slog.Attr{slog.String("static", "s")})
+	record2 := newRecord()
+	if err := h2.Handle(context.Background(), record2); err != nil {
+		t.Fatalf("Handle() error for group->attrs order = %v", err)
+	}
+	var result2 map[string]interface{}
+	if err := json.Unmarshal([]byte(mw2.String()), &result2); err != nil {
+		t.Fatalf("invalid JSON for group->attrs order: %v", err)
+	}
+	if _, ok := result2["static"]; ok {
+		t.Fatalf(
+			"group->attrs should nest static attr in scope, got root static=%v",
+			result2["static"],
+		)
+	}
+	scope2, ok := result2["scope"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("group->attrs should contain scope object, got %T", result2["scope"])
+	}
+	if scope2["static"] != "s" || scope2["dynamic"] != "d" {
+		t.Fatalf("group->attrs should keep both attrs in scope, got scope=%v", scope2)
+	}
+}
+
+func TestJsonHandlerConcurrentHandleNoContamination(t *testing.T) {
+	writer := &syncLinesWriter{}
+	cfg := &JSONHandlerConfig{
+		CommonHandlerConfig: CommonHandlerConfig{
+			Level:         slog.LevelInfo,
+			AddTrace:      false,
+			AddErrVerbose: false,
+		},
+		AddSource: false,
+		Writer:    writer,
+	}
+
+	h, err := NewJSONHandler(cfg)
+	if err != nil {
+		t.Fatalf("NewJSONHandler() error = %v", err)
+	}
+
+	const total = 200
+	var wg sync.WaitGroup
+	errCh := make(chan error, total)
+	for i := 0; i < total; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			record := slog.NewRecord(time.Now(), slog.LevelInfo, "test message", 0)
+			record.AddAttrs(slog.Int("id", id))
+			if err := h.Handle(context.Background(), record); err != nil {
+				errCh <- err
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Fatalf("Handle() returned error during concurrent run: %v", err)
+	}
+
+	lines := writer.Lines()
+	if len(lines) != total {
+		t.Fatalf("expected %d log lines, got %d", total, len(lines))
+	}
+
+	seen := make(map[int]struct{}, total)
+	for _, line := range lines {
+		var m map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &m); err != nil {
+			t.Fatalf("invalid JSON line during concurrent run: %v, line=%q", err, line)
+		}
+		rawID, ok := m["id"]
+		if !ok {
+			t.Fatalf("missing id field in concurrent output: %v", m)
+		}
+		idFloat, ok := rawID.(float64)
+		if !ok {
+			t.Fatalf("id field should be numeric, got %T (%v)", rawID, rawID)
+		}
+		id := int(idFloat)
+		if id < 0 || id >= total {
+			t.Fatalf("id out of range: %d", id)
+		}
+		seen[id] = struct{}{}
+	}
+
+	if len(seen) != total {
+		t.Fatalf("expected %d unique ids, got %d", total, len(seen))
 	}
 }

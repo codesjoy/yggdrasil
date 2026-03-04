@@ -73,7 +73,7 @@ func (enc *jsonEncoder) Get() ObjectEncoder {
 	newEnc.encodeTime = enc.encodeTime
 	newEnc.encodeDuration = enc.encodeDuration
 	newEnc.spaced = enc.spaced
-	return enc
+	return newEnc
 }
 
 func (enc *jsonEncoder) Free() {
@@ -128,8 +128,10 @@ func (enc *jsonEncoder) AddUint64(key string, val uint64) {
 }
 
 func (enc *jsonEncoder) AddAny(key string, val any) {
+	cur := enc.buf.Len()
 	enc.addKey(key)
 	if err := enc.appendAny(val); err != nil {
+		enc.buf.SetLen(cur)
 		enc.AddString(fmt.Sprintf("%sError", key), err.Error())
 	}
 }

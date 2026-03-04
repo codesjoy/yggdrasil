@@ -45,16 +45,18 @@ type commonHandler struct {
 	objEnc ObjectEncoder
 	writer io.Writer
 
-	errorHandle func(key string, err error, enc ObjectEncoder)
-	traceHandle func(ctx context.Context, enc ObjectEncoder)
+	errorHandle  func(key string, err error, enc ObjectEncoder)
+	traceHandle  func(ctx context.Context, enc ObjectEncoder)
+	traceEnabled bool
 }
 
 func newCommonHandler(cfg *CommonHandlerConfig) (*commonHandler, error) {
 	h := &commonHandler{
-		lv:          cfg.Level,
-		traceHandle: func(context.Context, ObjectEncoder) {},
-		writer:      cfg.writer,
-		objEnc:      cfg.objEnc,
+		lv:           cfg.Level,
+		traceHandle:  func(context.Context, ObjectEncoder) {},
+		writer:       cfg.writer,
+		objEnc:       cfg.objEnc,
+		traceEnabled: cfg.AddTrace,
 	}
 
 	if h.writer == nil {
@@ -88,11 +90,12 @@ func (h *commonHandler) WithAttrs(attrs []slog.Attr) *commonHandler {
 
 	// Pre-format the attributes
 	buf := (*buffer.Buffer)(&newNec.preformattedAttrs)
-	objEnc := h.objEnc.Get()
+	objEnc := newNec.objEnc.Get()
+	defer objEnc.Free()
 	objEnc.SetBuffer(buf)
-	h.openGroups(objEnc)
+	newNec.openGroups(objEnc)
 	for _, attr := range attrs {
-		h.encodeSlogAttr(attr, objEnc)
+		newNec.encodeSlogAttr(attr, objEnc)
 	}
 	return newNec
 }
@@ -111,10 +114,53 @@ func (h *commonHandler) clone() *commonHandler {
 }
 
 func (h *commonHandler) openGroups(objEnc ObjectEncoder) {
-	for _, n := range h.groups[h.nOpenGroups:] {
+	h.openGroupsFrom(objEnc, h.nOpenGroups)
+	h.nOpenGroups = len(h.groups)
+}
+
+func (h *commonHandler) openGroupsFrom(objEnc ObjectEncoder, start int) {
+	if start < 0 {
+		start = 0
+	}
+	if start > len(h.groups) {
+		start = len(h.groups)
+	}
+	for _, n := range h.groups[start:] {
 		objEnc.OpenNamespace(n)
 	}
-	h.nOpenGroups = len(h.groups)
+}
+
+func (h *commonHandler) appendPreformattedAttrs(objEnc ObjectEncoder, buf *buffer.Buffer) {
+	if len(h.preformattedAttrs) == 0 {
+		return
+	}
+
+	if enc, ok := objEnc.(*jsonEncoder); ok {
+		enc.addElementSeparator()
+	} else {
+		addBufferElementSeparator(buf)
+	}
+	buf.AppendBytes(h.preformattedAttrs)
+}
+
+func (h *commonHandler) hasValidTrace(ctx context.Context) bool {
+	if !h.traceEnabled {
+		return false
+	}
+	return trace.SpanFromContext(ctx).SpanContext().IsValid()
+}
+
+func addBufferElementSeparator(buf *buffer.Buffer) {
+	last := buf.Len() - 1
+	if last < 0 {
+		return
+	}
+	switch buf.Bytes()[last] {
+	case '{', '[', ':', ',', ' ':
+		return
+	default:
+		buf.AppendByte(',')
+	}
 }
 
 func (h *commonHandler) addTrace(ctx context.Context, enc ObjectEncoder) {

@@ -77,7 +77,9 @@ func (h *jsonHandler) WithGroup(group string) slog.Handler {
 
 func (h *jsonHandler) Handle(ctx context.Context, r slog.Record) error {
 	objEnc := h.objEnc.Get()
+	defer objEnc.Free()
 	buf := buffer.Get()
+	defer buf.Free()
 	buf.AppendByte('{')
 	objEnc.SetBuffer(buf)
 	objEnc.AddTime(slog.TimeKey, r.Time)
@@ -85,12 +87,13 @@ func (h *jsonHandler) Handle(ctx context.Context, r slog.Record) error {
 	h.sourceHandle(&r, objEnc)
 	objEnc.AddString(slog.MessageKey, r.Message)
 	h.traceHandle(ctx, objEnc)
-	h.openGroups(objEnc)
+	h.appendPreformattedAttrs(objEnc, buf)
+	h.openGroupsFrom(objEnc, h.nOpenGroups)
 	r.Attrs(func(attr slog.Attr) bool {
 		h.encodeSlogAttr(attr, objEnc)
 		return true
 	})
-	objEnc.CloseNamespace(h.nOpenGroups)
+	objEnc.CloseNamespace(len(h.groups))
 	buf.AppendByte('}')
 	buf.AppendByte('\n')
 	_, err := h.writer.Write(buf.Bytes())
