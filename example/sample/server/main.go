@@ -18,14 +18,11 @@ package main
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net/http"
 	"os"
 
 	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/yggdrasil/v2"
-	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/config/source/file"
 	librarypb "github.com/codesjoy/yggdrasil/v2/example/protogen/library"
 	librarypb2 "github.com/codesjoy/yggdrasil/v2/example/protogen/library/v1"
 	_ "github.com/codesjoy/yggdrasil/v2/interceptor/logging"
@@ -81,11 +78,6 @@ func WebHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 func main() {
-	if err := config.LoadSource(file.NewSource("./config.yaml", false)); err != nil {
-		slog.Error("failed to load config file", slog.Any("error", err))
-		os.Exit(1)
-	}
-
 	if err := yggdrasil.Init("github.com.codesjoy.yggdrasil.example.sample"); err != nil {
 		os.Exit(1)
 	}

@@ -22,8 +22,6 @@ import (
 	"os"
 
 	"github.com/codesjoy/yggdrasil/v2"
-	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/config/source/file"
 	librarypb "github.com/codesjoy/yggdrasil/v2/example/protogen/library/v1"
 	_ "github.com/codesjoy/yggdrasil/v2/interceptor/logging"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
@@ -32,10 +30,6 @@ import (
 )
 
 func main() {
-	if err := config.LoadSource(file.NewSource("./config.yaml", false)); err != nil {
-		slog.Error("failed to load config file", slog.Any("error", err))
-		os.Exit(1)
-	}
 	if err := yggdrasil.Init("github.com.codesjoy.yggdrasil.example.sample.client"); err != nil {
 		os.Exit(1)
 	}

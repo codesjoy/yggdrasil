@@ -17,8 +17,10 @@ yggdrasil:
     logger_level: debug
 
   interceptor:
-    unary_server: "logging"
-    stream_server: "logging"
+    unary_server:
+      - "logging"
+    stream_server:
+      - "logging"
     config:
       logging:
         print_req_and_res: true
