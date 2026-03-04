@@ -1,4 +1,0 @@
-interface:
-  display_name: "Yggdrasil Business Dev"
-  short_description: "Server impl, config, and proto integration"
-  default_prompt: "Use $yggdrasil-biz-code to implement Yggdrasil server-side business logic."

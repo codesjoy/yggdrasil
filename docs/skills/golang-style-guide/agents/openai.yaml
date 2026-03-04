@@ -1,4 +1,0 @@
-interface:
-  display_name: "Golang Style Guide"
-  short_description: "Go standards: monorepo, DDD, TDD"
-  default_prompt: "Use $golang-style-guide to apply Go coding standards, monorepo layout, DDD, and TDD."
