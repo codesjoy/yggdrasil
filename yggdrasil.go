@@ -66,16 +66,20 @@ func Init(appName string, ops ...Option) (err error) {
 	if initialized.Load() {
 		return nil
 	}
+	if err = applyOpt(opts, ops...); err != nil {
+		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
+		return err
+	}
+	if err = initConfigChain(opts); err != nil {
+		slog.Error("fault to load startup config", slog.Any("error", err))
+		return err
+	}
 	if err = initLogger(); err != nil {
 		slog.Error("fault to initialize logger", slog.Any("error", err))
 		return err
 	}
 
 	initInstanceInfo(appName)
-	if err = applyOpt(opts, ops...); err != nil {
-		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
-		return err
-	}
 	if err = validateStartup(opts); err != nil {
 		slog.Error("startup validation failed", slog.Any("error", err))
 		return err
@@ -108,6 +112,7 @@ func Serve(ops ...Option) (err error) {
 		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
 		return err
 	}
+	dropServeStageConfigSources(opts)
 	if err = validateStartup(opts); err != nil {
 		slog.Error("startup validation failed", slog.Any("error", err))
 		return err
@@ -155,11 +160,16 @@ func Run(appName string, ops ...Option) (err error) {
 
 // Stop stops the application.
 func Stop() error {
-	if err := app.Stop(); err != nil {
+	var err error
+	if stopErr := app.Stop(); stopErr != nil {
+		err = errors.Join(err, stopErr)
 		slog.Error("fault to stop yggdrasil application", slog.Any("error", err))
-		return err
 	}
-	return nil
+	if closeErr := closeManagedConfigSources(opts); closeErr != nil {
+		err = errors.Join(err, closeErr)
+		slog.Error("fault to close config sources", slog.Any("error", closeErr))
+	}
+	return err
 }
 
 func initRegistry(opts *options) {

@@ -20,6 +20,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
+	"sync"
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/pelletier/go-toml/v2"
@@ -61,6 +63,50 @@ type Source interface {
 	Changeable() bool
 	Watch() (<-chan Data, error)
 	io.Closer
+}
+
+// Builder creates a source from configuration.
+type Builder func(cfg map[string]any) (Source, error)
+
+var (
+	builders  = map[string]Builder{}
+	builderMu sync.RWMutex
+)
+
+func normalizeTypeName(typeName string) string {
+	return strings.ToLower(strings.TrimSpace(typeName))
+}
+
+// RegisterBuilder registers a source builder by type.
+func RegisterBuilder(typeName string, builder Builder) {
+	typeName = normalizeTypeName(typeName)
+	if typeName == "" || builder == nil {
+		return
+	}
+	builderMu.Lock()
+	builders[typeName] = builder
+	builderMu.Unlock()
+}
+
+// GetBuilder returns a source builder by type.
+func GetBuilder(typeName string) Builder {
+	typeName = normalizeTypeName(typeName)
+	builderMu.RLock()
+	builder := builders[typeName]
+	builderMu.RUnlock()
+	return builder
+}
+
+// New creates a source from a registered builder.
+func New(typeName string, cfg map[string]any) (Source, error) {
+	builder := GetBuilder(typeName)
+	if builder == nil {
+		return nil, fmt.Errorf("source builder for type %q not found", typeName)
+	}
+	if cfg == nil {
+		cfg = map[string]any{}
+	}
+	return builder(cfg)
 }
 
 type bytesSourceData struct {

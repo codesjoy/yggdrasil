@@ -24,6 +24,7 @@ import (
 	"github.com/codesjoy/pkg/utils/xmap"
 	"github.com/codesjoy/yggdrasil/v2/config/internal"
 	"github.com/codesjoy/yggdrasil/v2/config/source"
+	"github.com/mitchellh/mapstructure"
 )
 
 type env struct {
@@ -33,6 +34,35 @@ type env struct {
 	parseArray       bool
 	arraySep         string
 	delimiter        string
+}
+
+type builderConfig struct {
+	Prefixes         []string `mapstructure:"prefixes"`
+	StrippedPrefixes []string `mapstructure:"stripped_prefixes"`
+	Delimiter        string   `mapstructure:"delimiter"`
+	ParseArray       bool     `mapstructure:"parse_array"`
+	ArraySep         string   `mapstructure:"array_sep"`
+	Name             string   `mapstructure:"name"`
+}
+
+func init() {
+	source.RegisterBuilder("env", func(cfg map[string]any) (source.Source, error) {
+		buildCfg := &builderConfig{}
+		if err := mapstructure.Decode(cfg, buildCfg); err != nil {
+			return nil, err
+		}
+		opts := make([]Option, 0, 3)
+		if buildCfg.Delimiter != "" {
+			opts = append(opts, SetKeyDelimiter(buildCfg.Delimiter))
+		}
+		if buildCfg.ParseArray {
+			opts = append(opts, WithParseArray(buildCfg.ArraySep))
+		}
+		if buildCfg.Name != "" {
+			opts = append(opts, WithName(buildCfg.Name))
+		}
+		return NewSource(buildCfg.Prefixes, buildCfg.StrippedPrefixes, opts...), nil
+	})
 }
 
 func (e *env) parseValue(value string) interface{} {

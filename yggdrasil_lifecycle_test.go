@@ -18,6 +18,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/codesjoy/yggdrasil/v2/application"
 	"github.com/codesjoy/yggdrasil/v2/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,8 +31,10 @@ func resetLifecycleStateForTest(t *testing.T) {
 	oldInitialized := initialized.Load()
 	oldAppRunning := appRunning.Load()
 	oldOpts := opts
+	oldApp := app
 	initialized.Store(false)
 	appRunning.Store(false)
+	app, _ = application.New()
 	opts = &options{
 		serviceDesc:     map[*server.ServiceDesc]interface{}{},
 		restServiceDesc: map[*server.RestServiceDesc]restServiceDesc{},
@@ -42,6 +45,7 @@ func resetLifecycleStateForTest(t *testing.T) {
 		initMu.Lock()
 		initialized.Store(oldInitialized)
 		appRunning.Store(oldAppRunning)
+		app = oldApp
 		opts = oldOpts
 		initMu.Unlock()
 	})
