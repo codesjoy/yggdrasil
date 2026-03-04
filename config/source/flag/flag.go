@@ -28,6 +28,12 @@ type flag struct {
 	fs *flag2.FlagSet
 }
 
+func init() {
+	source.RegisterBuilder("flag", func(map[string]any) (source.Source, error) {
+		return NewSource(), nil
+	})
+}
+
 func (fs *flag) Read() (source.Data, error) {
 	if !fs.fs.Parsed() {
 		_ = fs.fs.Parse(os.Args[1:])

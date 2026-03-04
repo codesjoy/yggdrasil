@@ -19,6 +19,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/codesjoy/yggdrasil/v2/config/source"
 	"github.com/codesjoy/yggdrasil/v2/governor"
 	"github.com/codesjoy/yggdrasil/v2/registry"
 	"github.com/codesjoy/yggdrasil/v2/server"
@@ -44,6 +45,15 @@ type options struct {
 	stopBeforeHook    []func(context.Context) error
 	stopAfterHook     []func(context.Context) error
 	appOpts           []application.Option
+	configSources     []source.Source
+
+	initConfigSourceCount   int
+	loadedConfigSourceCount int
+
+	managedConfigSources          []source.Source
+	configSourceCleanupRegistered bool
+	bootstrapConfigLoaded         bool
+	managedConfigSourcesClosed    bool
 }
 
 func (opts *options) getAppOpts() []application.Option {
@@ -139,4 +149,30 @@ func WithCleanup(name string, fn func(context.Context) error) Option {
 		opts.appOpts = append(opts.appOpts, application.WithCleanup(name, fn))
 		return nil
 	}
+}
+
+// WithConfigSource registers configuration sources.
+// Sources are only loaded during Init/Run and are ignored in Serve.
+func WithConfigSource(sources ...source.Source) Option {
+	return func(opts *options) error {
+		for _, item := range sources {
+			if item == nil {
+				continue
+			}
+			if hasSource(opts.configSources, item) {
+				continue
+			}
+			opts.configSources = append(opts.configSources, item)
+		}
+		return nil
+	}
+}
+
+func hasSource(sources []source.Source, target source.Source) bool {
+	for _, item := range sources {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }

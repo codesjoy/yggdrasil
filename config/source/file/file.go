@@ -30,6 +30,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/config/source"
 	"github.com/codesjoy/yggdrasil/v2/internal/backoff"
 	"github.com/fsnotify/fsnotify"
+	"github.com/mitchellh/mapstructure"
 	"gopkg.in/yaml.v3"
 )
 
@@ -45,6 +46,32 @@ type file struct {
 	stopped bool
 	watched bool
 	fw      *fsnotify.Watcher
+}
+
+type builderConfig struct {
+	Path   string `mapstructure:"path"`
+	Watch  bool   `mapstructure:"watch"`
+	Parser string `mapstructure:"parser"`
+}
+
+func init() {
+	source.RegisterBuilder("file", func(cfg map[string]any) (source.Source, error) {
+		buildCfg := &builderConfig{}
+		if err := mapstructure.Decode(cfg, buildCfg); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(buildCfg.Path) == "" {
+			return nil, errors.New("file source path is required")
+		}
+		if strings.TrimSpace(buildCfg.Parser) == "" {
+			return NewSource(buildCfg.Path, buildCfg.Watch), nil
+		}
+		parser, err := source.ParseParser(buildCfg.Parser)
+		if err != nil {
+			return nil, err
+		}
+		return NewSource(buildCfg.Path, buildCfg.Watch, parser), nil
+	})
 }
 
 func (f *file) Read() (source.Data, error) {
