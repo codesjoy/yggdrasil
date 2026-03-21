@@ -36,6 +36,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/remote/peer"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/consts"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
+	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/jsonraw"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/proto"
 	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/raw"
 	stats2 "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/stats"

@@ -18,6 +18,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
+	jsonrawenc "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/jsonraw"
 	rawenc "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/raw"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,6 +50,17 @@ func TestCallContentSubtypeSelectsRegisteredCodec(t *testing.T) {
 	require.NotNil(t, info.codec)
 	assert.Equal(t, rawenc.Name, info.contentSubtype)
 	assert.Equal(t, rawenc.Name, info.codec.Name())
+}
+
+func TestCallContentSubtypeSelectsJSONRawCodec(t *testing.T) {
+	ctx := WithCallOptions(context.Background(), CallContentSubtype(jsonrawenc.Name))
+	info := defaultCallInfo()
+
+	require.NoError(t, applyCallOptions(info, callOptionsFromContext(ctx)))
+	require.NoError(t, setCallInfoCodec(info))
+	require.NotNil(t, info.codec)
+	assert.Equal(t, jsonrawenc.Name, info.contentSubtype)
+	assert.Equal(t, jsonrawenc.Name, info.codec.Name())
 }
 
 func TestForceCodecUsesCodecNameAsContentSubtype(t *testing.T) {
@@ -85,4 +98,23 @@ func TestForceCodecRejectsEmptyEffectiveSubtype(t *testing.T) {
 	err := setCallInfoCodec(info)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "non-empty content-subtype")
+}
+
+func TestForceJSONRawCodecUsesCodecNameAsContentSubtype(t *testing.T) {
+	ctx := WithCallOptions(context.Background(), ForceCodec(getCodecOrPanic(jsonrawenc.Name)))
+	info := defaultCallInfo()
+
+	require.NoError(t, applyCallOptions(info, callOptionsFromContext(ctx)))
+	require.NoError(t, setCallInfoCodec(info))
+	require.NotNil(t, info.codec)
+	assert.Equal(t, jsonrawenc.Name, info.contentSubtype)
+	assert.Equal(t, jsonrawenc.Name, info.codec.Name())
+}
+
+func getCodecOrPanic(name string) encoding.Codec {
+	c := encoding.GetCodec(name)
+	if c == nil {
+		panic("codec not registered: " + name)
+	}
+	return c
 }

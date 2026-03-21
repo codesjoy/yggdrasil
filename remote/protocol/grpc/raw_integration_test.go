@@ -27,6 +27,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/gzip"
+	jsonrawenc "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/jsonraw"
 	rawenc "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/raw"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
 	"github.com/codesjoy/yggdrasil/v2/stats"
@@ -42,6 +43,10 @@ const (
 	rawServerStreamMethod = "/raw.Test/ServerStream"
 	rawClientStreamMethod = "/raw.Test/ClientStream"
 	rawBidiStreamMethod   = "/raw.Test/Bidi"
+
+	jsonRawUnaryMethod      = "/jsonraw.Test/Unary"
+	jsonRawClientStreamMode = "/jsonraw.Test/ClientStream"
+	jsonRawBidiStreamMethod = "/jsonraw.Test/Bidi"
 )
 
 func TestRawUnaryCall(t *testing.T) {
@@ -145,6 +150,79 @@ func TestRawUnaryCallWithGzip(t *testing.T) {
 	var reply []byte
 	require.NoError(t, cs.RecvMsg(&reply))
 	assert.Equal(t, []byte("unary:ping"), reply)
+}
+
+func TestJSONRawUnaryCall(t *testing.T) {
+	cc := newRawTestClientConn(t, "", jsonRawTestMethodHandle)
+
+	cs, err := cc.NewStream(
+		WithCallOptions(context.Background(), CallContentSubtype(jsonrawenc.Name)),
+		&stream.Desc{},
+		jsonRawUnaryMethod,
+	)
+	require.NoError(t, err)
+	require.NoError(t, cs.SendMsg([]byte(`{"message":"ping"}`)))
+
+	var reply []byte
+	require.NoError(t, cs.RecvMsg(&reply))
+	assert.JSONEq(t, `{"message":"pong"}`, string(reply))
+}
+
+func TestJSONRawClientStreamCall(t *testing.T) {
+	cc := newRawTestClientConn(t, "", jsonRawTestMethodHandle)
+
+	cs, err := cc.NewStream(
+		WithCallOptions(context.Background(), CallContentSubtype(jsonrawenc.Name)),
+		&stream.Desc{ClientStreams: true},
+		jsonRawClientStreamMode,
+	)
+	require.NoError(t, err)
+	require.NoError(t, cs.SendMsg([]byte(`{"message":"a"}`)))
+	require.NoError(t, cs.SendMsg([]byte(`{"message":"b"}`)))
+	require.NoError(t, cs.CloseSend())
+
+	var reply []byte
+	require.NoError(t, cs.RecvMsg(&reply))
+	assert.JSONEq(t, `{"messages":["a","b"]}`, string(reply))
+}
+
+func TestJSONRawBidiStreamCall(t *testing.T) {
+	cc := newRawTestClientConn(t, "", jsonRawTestMethodHandle)
+
+	cs, err := cc.NewStream(
+		WithCallOptions(context.Background(), CallContentSubtype(jsonrawenc.Name)),
+		&stream.Desc{ClientStreams: true, ServerStreams: true},
+		jsonRawBidiStreamMethod,
+	)
+	require.NoError(t, err)
+
+	require.NoError(t, cs.SendMsg([]byte(`{"message":"a"}`)))
+	var reply []byte
+	require.NoError(t, cs.RecvMsg(&reply))
+	assert.JSONEq(t, `{"message":"echo:a"}`, string(reply))
+
+	require.NoError(t, cs.SendMsg([]byte(`{"message":"b"}`)))
+	require.NoError(t, cs.RecvMsg(&reply))
+	assert.JSONEq(t, `{"message":"echo:b"}`, string(reply))
+
+	require.NoError(t, cs.CloseSend())
+	assert.True(t, isSuccessfulStreamEnd(cs.RecvMsg(&reply)))
+}
+
+func TestJSONRawUnaryCallWithGzip(t *testing.T) {
+	cc := newRawTestClientConn(t, "gzip", jsonRawTestMethodHandle)
+
+	cs, err := cc.NewStream(
+		WithCallOptions(context.Background(), CallContentSubtype(jsonrawenc.Name)),
+		&stream.Desc{},
+		jsonRawUnaryMethod,
+	)
+	require.NoError(t, err)
+	require.NoError(t, cs.SendMsg([]byte(`{"message":"ping"}`)))
+
+	var reply []byte
+	require.NoError(t, cs.RecvMsg(&reply))
+	assert.JSONEq(t, `{"message":"pong"}`, string(reply))
 }
 
 func newRawTestClientConn(
@@ -318,4 +396,78 @@ func rawTestMethodHandle(ss remote.ServerStream) {
 	default:
 		err = xerror.New(code.Code_UNIMPLEMENTED, "unknown method")
 	}
+}
+
+func jsonRawTestMethodHandle(ss remote.ServerStream) {
+	var (
+		reply any
+		err   error
+	)
+	defer func() {
+		ss.Finish(reply, err)
+	}()
+
+	switch ss.Method() {
+	case jsonRawUnaryMethod:
+		err = ss.Start(false, false)
+		if err != nil {
+			return
+		}
+		var req []byte
+		if err = ss.RecvMsg(&req); err != nil {
+			return
+		}
+		reply = []byte(`{"message":"pong"}`)
+	case jsonRawClientStreamMode:
+		err = ss.Start(true, false)
+		if err != nil {
+			return
+		}
+		var messages []string
+		for {
+			var req []byte
+			err = ss.RecvMsg(&req)
+			if err == io.EOF {
+				err = nil
+				break
+			}
+			if err != nil {
+				return
+			}
+			messages = append(messages, extractJSONMessage(req))
+		}
+		err = ss.SendMsg([]byte(fmt.Sprintf(`{"messages":["%s"]}`, strings.Join(messages, `","`))))
+	case jsonRawBidiStreamMethod:
+		err = ss.Start(true, true)
+		if err != nil {
+			return
+		}
+		for {
+			var req []byte
+			err = ss.RecvMsg(&req)
+			if err == io.EOF {
+				err = nil
+				return
+			}
+			if err != nil {
+				return
+			}
+			msg := extractJSONMessage(req)
+			if err = ss.SendMsg([]byte(fmt.Sprintf(`{"message":"echo:%s"}`, msg))); err != nil {
+				return
+			}
+		}
+	default:
+		err = xerror.New(code.Code_UNIMPLEMENTED, "unknown method")
+	}
+}
+
+func extractJSONMessage(b []byte) string {
+	s := string(b)
+	prefix := `{"message":"`
+	suffix := `"}`
+	if strings.HasPrefix(s, prefix) && strings.HasSuffix(s, suffix) {
+		return strings.TrimSuffix(strings.TrimPrefix(s, prefix), suffix)
+	}
+	return s
 }
