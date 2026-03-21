@@ -159,6 +159,7 @@ type callInfo struct {
 	maxReceiveMessageSize *int
 	maxSendMessageSize    *int
 	contentSubtype        string
+	contentSubtypeSet     bool
 	codec                 encoding.Codec
 	maxRetryRPCBufferSize int
 }
@@ -546,10 +547,16 @@ func setCallInfoCodec(c *callInfo) error {
 			// change with the deprecated version.
 			c.contentSubtype = strings.ToLower(c.codec.Name())
 		}
+		if c.contentSubtype == "" {
+			return xerror.New(code.Code_INTERNAL, "grpc: forced codec requires a non-empty content-subtype")
+		}
 		return nil
 	}
 
 	if c.contentSubtype == "" {
+		if c.contentSubtypeSet {
+			return xerror.New(code.Code_INTERNAL, "grpc: content-subtype cannot be empty")
+		}
 		// No codec specified in CallOptions; use proto by default.
 		c.codec = encoding.GetCodec(proto.Name)
 		return nil

@@ -193,6 +193,9 @@ func (cc *clientConn) NewStream(
 	c := defaultCallInfo()
 	c.maxSendMessageSize = &cc.cfg.MaxSendMsgSize
 	c.maxReceiveMessageSize = &cc.cfg.MaxRecvMsgSize
+	if err = applyCallOptions(c, callOptionsFromContext(ctx)); err != nil {
+		return nil, err
+	}
 	if err = setCallInfoCodec(c); err != nil {
 		return nil, err
 	}
@@ -252,11 +255,6 @@ func (cc *clientConn) NewStream(
 }
 
 func (cc *clientConn) Close() error {
-	cc.mu.RLock()
-	if cc.state == remote.Shutdown {
-		cc.mu.RUnlock()
-		return errors.New("remote client closed")
-	}
 	cc.mu.Lock()
 	if cc.state == remote.Shutdown {
 		cc.mu.Unlock()

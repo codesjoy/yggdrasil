@@ -37,6 +37,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/consts"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/proto"
+	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/raw"
 	stats2 "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/stats"
 	transport2 "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport/keepalive"
@@ -103,9 +104,6 @@ func (opts *serverOptions) SetDefault() error {
 		opts.Attr = make(map[string]string)
 	}
 
-	if opts.CodeProto == "" {
-		opts.CodeProto = proto.Name
-	}
 	if opts.MaxReceiveMessageSize == 0 {
 		opts.MaxReceiveMessageSize = defaultServerMaxReceiveMessageSize
 	}
@@ -155,7 +153,9 @@ func newServer(handle remote.MethodHandle) (remote.Server, error) {
 	if err := opts.SetDefault(); err != nil {
 		return nil, err
 	}
-	opts.codec = encoding.GetCodec(opts.CodeProto)
+	if opts.CodeProto != "" {
+		opts.codec = encoding.GetCodec(opts.CodeProto)
+	}
 	if opts.DisableRecvBufferPool {
 		opts.recvBufferPool = nopBufferPool{}
 	} else {
