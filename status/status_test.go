@@ -22,9 +22,10 @@ import (
 	"testing"
 
 	"github.com/codesjoy/pkg/basic/xerror"
-	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/genproto/googleapis/rpc/code"
+
+	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
 )
 
 type testReason struct {

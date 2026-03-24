@@ -4,12 +4,14 @@ package error_handling
 
 import (
 	context "context"
+
 	xerror "github.com/codesjoy/pkg/basic/xerror"
+	code "google.golang.org/genproto/googleapis/rpc/code"
+
 	client "github.com/codesjoy/yggdrasil/v2/client"
 	interceptor "github.com/codesjoy/yggdrasil/v2/interceptor"
 	metadata "github.com/codesjoy/yggdrasil/v2/metadata"
 	server "github.com/codesjoy/yggdrasil/v2/server"
-	code "google.golang.org/genproto/googleapis/rpc/code"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -326,8 +328,7 @@ type UnsafeLibraryServiceServer interface {
 }
 
 // UnimplementedLibraryServiceServer must be embedded to have forward compatible implementations.
-type UnimplementedLibraryServiceServer struct {
-}
+type UnimplementedLibraryServiceServer struct{}
 
 func (UnimplementedLibraryServiceServer) CreateUser(context.Context, *CreateUserRequest) (*CreateUserResponse, error) {
 	return nil, xerror.New(code.Code_UNIMPLEMENTED, "method CreateUser not implemented")

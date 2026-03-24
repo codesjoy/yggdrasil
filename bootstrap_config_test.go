@@ -23,10 +23,11 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/config/source"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codesjoy/yggdrasil/v2/config"
+	"github.com/codesjoy/yggdrasil/v2/config/source"
 )
 
 type mockConfigSource struct {

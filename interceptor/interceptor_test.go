@@ -21,9 +21,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/stream"
-	"github.com/stretchr/testify/assert"
 )
 
 // TestRegisterUnaryClientIntBuilder tests RegisterUnaryClientIntBuilder function

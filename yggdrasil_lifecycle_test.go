@@ -18,10 +18,11 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/codesjoy/yggdrasil/v2/application"
-	"github.com/codesjoy/yggdrasil/v2/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codesjoy/yggdrasil/v2/application"
+	"github.com/codesjoy/yggdrasil/v2/server"
 )
 
 func resetLifecycleStateForTest(t *testing.T) {

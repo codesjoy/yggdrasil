@@ -28,15 +28,17 @@ import (
 	"testing"
 
 	"github.com/codesjoy/pkg/basic/xerror"
+
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
 	protoenc "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/proto"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/proto/codec_perf"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport/testutils"
 
-	"github.com/codesjoy/yggdrasil/v2/status"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/codesjoy/yggdrasil/v2/status"
 )
 
 type fullReader struct {

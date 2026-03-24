@@ -20,9 +20,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/codesjoy/yggdrasil/v2/internal/backoff"
 	"github.com/codesjoy/yggdrasil/v2/remote"
-	"github.com/stretchr/testify/assert"
 )
 
 func newTestBackoffStrategy() backoff.Strategy {

@@ -22,14 +22,15 @@
 package libraryv1
 
 import (
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
 )
 
 const (
@@ -45,13 +46,13 @@ type Book struct {
 	// The resource name of the book.
 	// Book names have the form `shelves/{shelf_id}/books/{book_id}`.
 	// The name is ignored when creating a book.
-	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name string `                   protobuf:"bytes,1,opt,name=name,proto3"   json:"name,omitempty"`
 	// The name of the book author.
-	Author string `protobuf:"bytes,2,opt,name=author,proto3" json:"author,omitempty"`
+	Author string `                   protobuf:"bytes,2,opt,name=author,proto3" json:"author,omitempty"`
 	// The title of the book.
-	Title string `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	Title string `                   protobuf:"bytes,3,opt,name=title,proto3"  json:"title,omitempty"`
 	// Value indicating whether the book has been read.
-	Read          bool `protobuf:"varint,4,opt,name=read,proto3" json:"read,omitempty"`
+	Read          bool `                   protobuf:"varint,4,opt,name=read,proto3"  json:"read,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -120,9 +121,9 @@ type Shelf struct {
 	// The resource name of the shelf.
 	// Shelf names have the form `shelves/{shelf_id}`.
 	// The name is ignored when creating a shelf.
-	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name string `                   protobuf:"bytes,1,opt,name=name,proto3"  json:"name,omitempty"`
 	// The theme of the shelf
-	Theme         string `protobuf:"bytes,2,opt,name=theme,proto3" json:"theme,omitempty"`
+	Theme         string `                   protobuf:"bytes,2,opt,name=theme,proto3" json:"theme,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -175,7 +176,7 @@ func (x *Shelf) GetTheme() string {
 type CreateShelfRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The shelf to create.
-	Shelf         *Shelf `protobuf:"bytes,1,opt,name=shelf,proto3" json:"shelf,omitempty"`
+	Shelf         *Shelf `                   protobuf:"bytes,1,opt,name=shelf,proto3" json:"shelf,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -221,7 +222,7 @@ func (x *CreateShelfRequest) GetShelf() *Shelf {
 type GetShelfRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The name of the shelf to retrieve.
-	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name          string `                   protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -268,12 +269,12 @@ type ListShelvesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Requested page size. Server may return fewer shelves than requested.
 	// If unspecified, server will pick an appropriate default.
-	PageSize int32 `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageSize int32 `                   protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3"  json:"page_size,omitempty"`
 	// A token identifying a page of results the server should return.
 	// Typically, this is the value of
 	// [ListShelvesResponse.next_page_token][google.example.library.v1.ListShelvesResponse.next_page_token]
 	// returned from the previous call to `ListShelves` method.
-	PageToken     string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	PageToken     string `                   protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -326,13 +327,13 @@ func (x *ListShelvesRequest) GetPageToken() string {
 type ListShelvesResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The list of shelves.
-	Shelves []*Shelf `protobuf:"bytes,1,rep,name=shelves,proto3" json:"shelves,omitempty"`
+	Shelves []*Shelf `                   protobuf:"bytes,1,rep,name=shelves,proto3"                            json:"shelves,omitempty"`
 	// A token to retrieve next page of results.
 	// Pass this value in the
 	// [ListShelvesRequest.page_token][google.example.library.v1.ListShelvesRequest.page_token]
 	// field in the subsequent call to `ListShelves` method to retrieve the next
 	// page of results.
-	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	NextPageToken string `                   protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -385,7 +386,7 @@ func (x *ListShelvesResponse) GetNextPageToken() string {
 type DeleteShelfRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The name of the shelf to delete.
-	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name          string `                   protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -432,9 +433,9 @@ func (x *DeleteShelfRequest) GetName() string {
 type MergeShelvesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The name of the shelf we're adding books to.
-	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name string `                   protobuf:"bytes,1,opt,name=name,proto3"                        json:"name,omitempty"`
 	// The name of the shelf we're removing books from and deleting.
-	OtherShelf    string `protobuf:"bytes,2,opt,name=other_shelf,json=otherShelf,proto3" json:"other_shelf,omitempty"`
+	OtherShelf    string `                   protobuf:"bytes,2,opt,name=other_shelf,json=otherShelf,proto3" json:"other_shelf,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -487,9 +488,9 @@ func (x *MergeShelvesRequest) GetOtherShelf() string {
 type CreateBookRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The name of the shelf in which the book is created.
-	Parent string `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	Parent string `                   protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	// The book to create.
-	Book          *Book `protobuf:"bytes,2,opt,name=book,proto3" json:"book,omitempty"`
+	Book          *Book `                   protobuf:"bytes,2,opt,name=book,proto3"   json:"book,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -542,7 +543,7 @@ func (x *CreateBookRequest) GetBook() *Book {
 type GetBookRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The name of the book to retrieve.
-	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name          string `                   protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -588,15 +589,15 @@ func (x *GetBookRequest) GetName() string {
 type ListBooksRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The name of the shelf whose books we'd like to list.
-	Parent string `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	Parent string `                   protobuf:"bytes,1,opt,name=parent,proto3"                    json:"parent,omitempty"`
 	// Requested page size. Server may return fewer books than requested.
 	// If unspecified, server will pick an appropriate default.
-	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageSize int32 `                   protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3"  json:"page_size,omitempty"`
 	// A token identifying a page of results the server should return.
 	// Typically, this is the value of
 	// [ListBooksResponse.next_page_token][google.example.library.v1.ListBooksResponse.next_page_token].
 	// returned from the previous call to `ListBooks` method.
-	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	PageToken     string `                   protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -656,13 +657,13 @@ func (x *ListBooksRequest) GetPageToken() string {
 type ListBooksResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The list of books.
-	Books []*Book `protobuf:"bytes,1,rep,name=books,proto3" json:"books,omitempty"`
+	Books []*Book `                   protobuf:"bytes,1,rep,name=books,proto3"                              json:"books,omitempty"`
 	// A token to retrieve next page of results.
 	// Pass this value in the
 	// [ListBooksRequest.page_token][google.example.library.v1.ListBooksRequest.page_token]
 	// field in the subsequent call to `ListBooks` method to retrieve the next
 	// page of results.
-	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	NextPageToken string `                   protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -715,9 +716,9 @@ func (x *ListBooksResponse) GetNextPageToken() string {
 type UpdateBookRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The name of the book to update.
-	Book *Book `protobuf:"bytes,1,opt,name=book,proto3" json:"book,omitempty"`
+	Book *Book `                   protobuf:"bytes,1,opt,name=book,proto3"                        json:"book,omitempty"`
 	// Required. Mask of fields to update.
-	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
+	UpdateMask    *fieldmaskpb.FieldMask `                   protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -770,7 +771,7 @@ func (x *UpdateBookRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
 type DeleteBookRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The name of the book to delete.
-	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name          string `                   protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -817,9 +818,9 @@ func (x *DeleteBookRequest) GetName() string {
 type MoveBookRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The name of the book to move.
-	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name string `                   protobuf:"bytes,1,opt,name=name,proto3"                                 json:"name,omitempty"`
 	// The name of the destination shelf.
-	OtherShelfName string `protobuf:"bytes,2,opt,name=other_shelf_name,json=otherShelfName,proto3" json:"other_shelf_name,omitempty"`
+	OtherShelfName string `                   protobuf:"bytes,2,opt,name=other_shelf_name,json=otherShelfName,proto3" json:"other_shelf_name,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -956,31 +957,64 @@ var (
 
 func file_library_v1_library_proto_rawDescGZIP() []byte {
 	file_library_v1_library_proto_rawDescOnce.Do(func() {
-		file_library_v1_library_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_library_v1_library_proto_rawDesc), len(file_library_v1_library_proto_rawDesc)))
+		file_library_v1_library_proto_rawDescData = protoimpl.X.CompressGZIP(
+			unsafe.Slice(
+				unsafe.StringData(file_library_v1_library_proto_rawDesc),
+				len(file_library_v1_library_proto_rawDesc),
+			),
+		)
 	})
 	return file_library_v1_library_proto_rawDescData
 }
 
-var file_library_v1_library_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
-var file_library_v1_library_proto_goTypes = []any{
-	(*Book)(nil),                  // 0: codesjoy.yggdrasil.example.proto.library.v1.Book
-	(*Shelf)(nil),                 // 1: codesjoy.yggdrasil.example.proto.library.v1.Shelf
-	(*CreateShelfRequest)(nil),    // 2: codesjoy.yggdrasil.example.proto.library.v1.CreateShelfRequest
-	(*GetShelfRequest)(nil),       // 3: codesjoy.yggdrasil.example.proto.library.v1.GetShelfRequest
-	(*ListShelvesRequest)(nil),    // 4: codesjoy.yggdrasil.example.proto.library.v1.ListShelvesRequest
-	(*ListShelvesResponse)(nil),   // 5: codesjoy.yggdrasil.example.proto.library.v1.ListShelvesResponse
-	(*DeleteShelfRequest)(nil),    // 6: codesjoy.yggdrasil.example.proto.library.v1.DeleteShelfRequest
-	(*MergeShelvesRequest)(nil),   // 7: codesjoy.yggdrasil.example.proto.library.v1.MergeShelvesRequest
-	(*CreateBookRequest)(nil),     // 8: codesjoy.yggdrasil.example.proto.library.v1.CreateBookRequest
-	(*GetBookRequest)(nil),        // 9: codesjoy.yggdrasil.example.proto.library.v1.GetBookRequest
-	(*ListBooksRequest)(nil),      // 10: codesjoy.yggdrasil.example.proto.library.v1.ListBooksRequest
-	(*ListBooksResponse)(nil),     // 11: codesjoy.yggdrasil.example.proto.library.v1.ListBooksResponse
-	(*UpdateBookRequest)(nil),     // 12: codesjoy.yggdrasil.example.proto.library.v1.UpdateBookRequest
-	(*DeleteBookRequest)(nil),     // 13: codesjoy.yggdrasil.example.proto.library.v1.DeleteBookRequest
-	(*MoveBookRequest)(nil),       // 14: codesjoy.yggdrasil.example.proto.library.v1.MoveBookRequest
-	(*fieldmaskpb.FieldMask)(nil), // 15: google.protobuf.FieldMask
-	(*emptypb.Empty)(nil),         // 16: google.protobuf.Empty
-}
+var (
+	file_library_v1_library_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+	file_library_v1_library_proto_goTypes  = []any{
+		(*Book)(nil),  // 0: codesjoy.yggdrasil.example.proto.library.v1.Book
+		(*Shelf)(nil), // 1: codesjoy.yggdrasil.example.proto.library.v1.Shelf
+		(*CreateShelfRequest)(
+			nil,
+		), // 2: codesjoy.yggdrasil.example.proto.library.v1.CreateShelfRequest
+		(*GetShelfRequest)(
+			nil,
+		), // 3: codesjoy.yggdrasil.example.proto.library.v1.GetShelfRequest
+		(*ListShelvesRequest)(
+			nil,
+		), // 4: codesjoy.yggdrasil.example.proto.library.v1.ListShelvesRequest
+		(*ListShelvesResponse)(
+			nil,
+		), // 5: codesjoy.yggdrasil.example.proto.library.v1.ListShelvesResponse
+		(*DeleteShelfRequest)(
+			nil,
+		), // 6: codesjoy.yggdrasil.example.proto.library.v1.DeleteShelfRequest
+		(*MergeShelvesRequest)(
+			nil,
+		), // 7: codesjoy.yggdrasil.example.proto.library.v1.MergeShelvesRequest
+		(*CreateBookRequest)(
+			nil,
+		), // 8: codesjoy.yggdrasil.example.proto.library.v1.CreateBookRequest
+		(*GetBookRequest)(
+			nil,
+		), // 9: codesjoy.yggdrasil.example.proto.library.v1.GetBookRequest
+		(*ListBooksRequest)(
+			nil,
+		), // 10: codesjoy.yggdrasil.example.proto.library.v1.ListBooksRequest
+		(*ListBooksResponse)(
+			nil,
+		), // 11: codesjoy.yggdrasil.example.proto.library.v1.ListBooksResponse
+		(*UpdateBookRequest)(
+			nil,
+		), // 12: codesjoy.yggdrasil.example.proto.library.v1.UpdateBookRequest
+		(*DeleteBookRequest)(
+			nil,
+		), // 13: codesjoy.yggdrasil.example.proto.library.v1.DeleteBookRequest
+		(*MoveBookRequest)(
+			nil,
+		), // 14: codesjoy.yggdrasil.example.proto.library.v1.MoveBookRequest
+		(*fieldmaskpb.FieldMask)(nil), // 15: google.protobuf.FieldMask
+		(*emptypb.Empty)(nil),         // 16: google.protobuf.Empty
+	}
+)
 var file_library_v1_library_proto_depIdxs = []int32{
 	1,  // 0: codesjoy.yggdrasil.example.proto.library.v1.CreateShelfRequest.shelf:type_name -> codesjoy.yggdrasil.example.proto.library.v1.Shelf
 	1,  // 1: codesjoy.yggdrasil.example.proto.library.v1.ListShelvesResponse.shelves:type_name -> codesjoy.yggdrasil.example.proto.library.v1.Shelf
@@ -1026,7 +1060,10 @@ func file_library_v1_library_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_library_v1_library_proto_rawDesc), len(file_library_v1_library_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(
+				unsafe.StringData(file_library_v1_library_proto_rawDesc),
+				len(file_library_v1_library_proto_rawDesc),
+			),
 			NumEnums:      0,
 			NumMessages:   15,
 			NumExtensions: 0,

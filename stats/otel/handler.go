@@ -19,9 +19,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v2/internal/constant"
-	"github.com/codesjoy/yggdrasil/v2/stats"
-	"github.com/codesjoy/yggdrasil/v2/status"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -30,6 +27,10 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/genproto/googleapis/rpc/code"
+
+	"github.com/codesjoy/yggdrasil/v2/internal/constant"
+	"github.com/codesjoy/yggdrasil/v2/stats"
+	"github.com/codesjoy/yggdrasil/v2/status"
 )
 
 type rpcContextKey struct{}

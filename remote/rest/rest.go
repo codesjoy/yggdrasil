@@ -28,6 +28,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"google.golang.org/genproto/googleapis/rpc/code"
+	"google.golang.org/protobuf/proto"
+
 	"github.com/codesjoy/yggdrasil/v2/config"
 	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
@@ -35,9 +39,6 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/remote/peer"
 	"github.com/codesjoy/yggdrasil/v2/remote/rest/middleware"
 	"github.com/codesjoy/yggdrasil/v2/status"
-	"github.com/go-chi/chi/v5"
-	"google.golang.org/genproto/googleapis/rpc/code"
-	"google.golang.org/protobuf/proto"
 )
 
 // Config is the configuration for the server.

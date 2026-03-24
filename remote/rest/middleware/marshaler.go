@@ -18,9 +18,10 @@ package middleware
 import (
 	"net/http"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func init() {

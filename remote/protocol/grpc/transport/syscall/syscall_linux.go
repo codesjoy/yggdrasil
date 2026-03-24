@@ -28,8 +28,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v2/remote/logger"
 	"golang.org/x/sys/unix"
+
+	"github.com/codesjoy/yggdrasil/v2/remote/logger"
 )
 
 // GetCPUTime returns how much CPU time has passed since the start of this process.

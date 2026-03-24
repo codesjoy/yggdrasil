@@ -18,8 +18,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/codesjoy/yggdrasil/v2/internal/constant"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/codesjoy/yggdrasil/v2/internal/constant"
 )
 
 // Test implementations for interfaces

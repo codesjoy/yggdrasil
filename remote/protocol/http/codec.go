@@ -20,8 +20,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
 	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
 )
 
 const (

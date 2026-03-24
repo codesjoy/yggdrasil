@@ -39,14 +39,15 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport/syscall"
 	"github.com/codesjoy/yggdrasil/v2/stats"
 
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/hpack"
+	"google.golang.org/genproto/googleapis/rpc/code"
+
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote/credentials"
 	"github.com/codesjoy/yggdrasil/v2/remote/logger"
 	"github.com/codesjoy/yggdrasil/v2/remote/peer"
 	"github.com/codesjoy/yggdrasil/v2/status"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/hpack"
-	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
 // clientConnectionCounter counts the number of connections a client has

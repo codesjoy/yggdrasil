@@ -20,15 +20,16 @@ import (
 	"time"
 
 	"github.com/codesjoy/pkg/basic/xerror"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/code"
+	stpb "google.golang.org/genproto/googleapis/rpc/status"
+
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
 	"github.com/codesjoy/yggdrasil/v2/stats"
 	"github.com/codesjoy/yggdrasil/v2/status"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/genproto/googleapis/rpc/code"
-	stpb "google.golang.org/genproto/googleapis/rpc/status"
 )
 
 func startHTTPTestServer(t *testing.T, handle remote.MethodHandle) (addr string, stop func()) {

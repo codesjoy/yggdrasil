@@ -19,8 +19,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
 )
 
 func TestRegistry(t *testing.T) {

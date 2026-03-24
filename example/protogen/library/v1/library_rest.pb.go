@@ -4,21 +4,25 @@ package libraryv1
 
 import (
 	context "context"
+	io "io"
+	http "net/http"
+
 	xerror "github.com/codesjoy/pkg/basic/xerror"
+	v5 "github.com/go-chi/chi/v5"
+	code "google.golang.org/genproto/googleapis/rpc/code"
+
 	interceptor "github.com/codesjoy/yggdrasil/v2/interceptor"
 	marshaler "github.com/codesjoy/yggdrasil/v2/remote/marshaler"
 	rest "github.com/codesjoy/yggdrasil/v2/remote/rest"
 	server "github.com/codesjoy/yggdrasil/v2/server"
-	v5 "github.com/go-chi/chi/v5"
-	code "google.golang.org/genproto/googleapis/rpc/code"
-	io "io"
-	http "net/http"
 )
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the yggdrasil package it is being compiled against.
-var _ = new(marshaler.ProtoMarshaller)
-var _ = io.EOF
+var (
+	_ = new(marshaler.ProtoMarshaller)
+	_ = io.EOF
+)
 
 func local_handler_LibraryService_CreateShelf_0(w http.ResponseWriter, r *http.Request, server interface{}, unaryInt interceptor.UnaryServerInterceptor) (interface{}, error) {
 	protoReq := &CreateShelfRequest{}

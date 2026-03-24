@@ -22,8 +22,9 @@ import (
 	"log/slog"
 	"slices"
 
-	"github.com/codesjoy/yggdrasil/v2/logger/buffer"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/codesjoy/yggdrasil/v2/logger/buffer"
 )
 
 // CommonHandlerConfig defines the configuration for the commonHandler.

@@ -33,12 +33,13 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/codesjoy/yggdrasil/v2/status"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/codesjoy/yggdrasil/v2/status"
 )
 
 const (

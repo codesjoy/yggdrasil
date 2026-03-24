@@ -21,11 +21,12 @@
 package error_handling
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -38,9 +39,9 @@ const (
 // Message definitions
 type CreateUserRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Email         string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Password      string                 `protobuf:"bytes,3,opt,name=password,proto3" json:"password,omitempty"`
+	Email         string                 `                   protobuf:"bytes,1,opt,name=email,proto3"    json:"email,omitempty"`
+	Name          string                 `                   protobuf:"bytes,2,opt,name=name,proto3"     json:"name,omitempty"`
+	Password      string                 `                   protobuf:"bytes,3,opt,name=password,proto3" json:"password,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -98,7 +99,7 @@ func (x *CreateUserRequest) GetPassword() string {
 
 type CreateUserResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	User          *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	User          *User                  `                   protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -142,7 +143,7 @@ func (x *CreateUserResponse) GetUser() *User {
 
 type GetUserRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	UserId        string                 `                   protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -186,7 +187,7 @@ func (x *GetUserRequest) GetUserId() string {
 
 type GetUserResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	User          *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	User          *User                  `                   protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -230,8 +231,8 @@ func (x *GetUserResponse) GetUser() *User {
 
 type AuthenticateUserRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Email         string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
-	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	Email         string                 `                   protobuf:"bytes,1,opt,name=email,proto3"    json:"email,omitempty"`
+	Password      string                 `                   protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -282,8 +283,8 @@ func (x *AuthenticateUserRequest) GetPassword() string {
 
 type AuthenticateUserResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	User          *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
-	Token         string                 `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
+	User          *User                  `                   protobuf:"bytes,1,opt,name=user,proto3"  json:"user,omitempty"`
+	Token         string                 `                   protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -334,9 +335,9 @@ func (x *AuthenticateUserResponse) GetToken() string {
 
 type CreateBookRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Title         string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
-	Author        string                 `protobuf:"bytes,2,opt,name=author,proto3" json:"author,omitempty"`
-	Isbn          string                 `protobuf:"bytes,3,opt,name=isbn,proto3" json:"isbn,omitempty"`
+	Title         string                 `                   protobuf:"bytes,1,opt,name=title,proto3"  json:"title,omitempty"`
+	Author        string                 `                   protobuf:"bytes,2,opt,name=author,proto3" json:"author,omitempty"`
+	Isbn          string                 `                   protobuf:"bytes,3,opt,name=isbn,proto3"   json:"isbn,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -394,7 +395,7 @@ func (x *CreateBookRequest) GetIsbn() string {
 
 type CreateBookResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Book          *Book                  `protobuf:"bytes,1,opt,name=book,proto3" json:"book,omitempty"`
+	Book          *Book                  `                   protobuf:"bytes,1,opt,name=book,proto3" json:"book,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -438,7 +439,7 @@ func (x *CreateBookResponse) GetBook() *Book {
 
 type GetBookRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	BookId        string                 `protobuf:"bytes,1,opt,name=book_id,json=bookId,proto3" json:"book_id,omitempty"`
+	BookId        string                 `                   protobuf:"bytes,1,opt,name=book_id,json=bookId,proto3" json:"book_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -482,7 +483,7 @@ func (x *GetBookRequest) GetBookId() string {
 
 type GetBookResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Book          *Book                  `protobuf:"bytes,1,opt,name=book,proto3" json:"book,omitempty"`
+	Book          *Book                  `                   protobuf:"bytes,1,opt,name=book,proto3" json:"book,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -526,8 +527,8 @@ func (x *GetBookResponse) GetBook() *Book {
 
 type BorrowBookRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	BookId        string                 `protobuf:"bytes,1,opt,name=book_id,json=bookId,proto3" json:"book_id,omitempty"`
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	BookId        string                 `                   protobuf:"bytes,1,opt,name=book_id,json=bookId,proto3" json:"book_id,omitempty"`
+	UserId        string                 `                   protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -578,7 +579,7 @@ func (x *BorrowBookRequest) GetUserId() string {
 
 type BorrowBookResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Success       bool                   `                   protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -622,7 +623,7 @@ func (x *BorrowBookResponse) GetSuccess() bool {
 
 type ReturnBookRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	BookId        string                 `protobuf:"bytes,1,opt,name=book_id,json=bookId,proto3" json:"book_id,omitempty"`
+	BookId        string                 `                   protobuf:"bytes,1,opt,name=book_id,json=bookId,proto3" json:"book_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -666,7 +667,7 @@ func (x *ReturnBookRequest) GetBookId() string {
 
 type ReturnBookResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Success       bool                   `                   protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -710,8 +711,8 @@ func (x *ReturnBookResponse) GetSuccess() bool {
 
 type CreateShelfRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Capacity      int32                  `protobuf:"varint,2,opt,name=capacity,proto3" json:"capacity,omitempty"`
+	Name          string                 `                   protobuf:"bytes,1,opt,name=name,proto3"      json:"name,omitempty"`
+	Capacity      int32                  `                   protobuf:"varint,2,opt,name=capacity,proto3" json:"capacity,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -762,7 +763,7 @@ func (x *CreateShelfRequest) GetCapacity() int32 {
 
 type CreateShelfResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Shelf         *Shelf                 `protobuf:"bytes,1,opt,name=shelf,proto3" json:"shelf,omitempty"`
+	Shelf         *Shelf                 `                   protobuf:"bytes,1,opt,name=shelf,proto3" json:"shelf,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -806,8 +807,8 @@ func (x *CreateShelfResponse) GetShelf() *Shelf {
 
 type AddBookToShelfRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ShelfId       string                 `protobuf:"bytes,1,opt,name=shelf_id,json=shelfId,proto3" json:"shelf_id,omitempty"`
-	BookId        string                 `protobuf:"bytes,2,opt,name=book_id,json=bookId,proto3" json:"book_id,omitempty"`
+	ShelfId       string                 `                   protobuf:"bytes,1,opt,name=shelf_id,json=shelfId,proto3" json:"shelf_id,omitempty"`
+	BookId        string                 `                   protobuf:"bytes,2,opt,name=book_id,json=bookId,proto3"   json:"book_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -858,7 +859,7 @@ func (x *AddBookToShelfRequest) GetBookId() string {
 
 type AddBookToShelfResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Success       bool                   `                   protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -902,7 +903,7 @@ func (x *AddBookToShelfResponse) GetSuccess() bool {
 
 type TriggerErrorRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ErrorType     string                 `protobuf:"bytes,1,opt,name=error_type,json=errorType,proto3" json:"error_type,omitempty"` // "database_error", "network_error", "internal_error"
+	ErrorType     string                 `                   protobuf:"bytes,1,opt,name=error_type,json=errorType,proto3" json:"error_type,omitempty"` // "database_error", "network_error", "internal_error"
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -946,7 +947,7 @@ func (x *TriggerErrorRequest) GetErrorType() string {
 
 type TriggerErrorResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Message       string                 `                   protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -991,9 +992,9 @@ func (x *TriggerErrorResponse) GetMessage() string {
 // Data models
 type User struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Email         string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Id            string                 `                   protobuf:"bytes,1,opt,name=id,proto3"    json:"id,omitempty"`
+	Email         string                 `                   protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	Name          string                 `                   protobuf:"bytes,3,opt,name=name,proto3"  json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1051,11 +1052,11 @@ func (x *User) GetName() string {
 
 type Book struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Author        string                 `protobuf:"bytes,3,opt,name=author,proto3" json:"author,omitempty"`
-	Isbn          string                 `protobuf:"bytes,4,opt,name=isbn,proto3" json:"isbn,omitempty"`
-	BorrowerId    string                 `protobuf:"bytes,5,opt,name=borrower_id,json=borrowerId,proto3" json:"borrower_id,omitempty"`
+	Id            string                 `                   protobuf:"bytes,1,opt,name=id,proto3"                          json:"id,omitempty"`
+	Title         string                 `                   protobuf:"bytes,2,opt,name=title,proto3"                       json:"title,omitempty"`
+	Author        string                 `                   protobuf:"bytes,3,opt,name=author,proto3"                      json:"author,omitempty"`
+	Isbn          string                 `                   protobuf:"bytes,4,opt,name=isbn,proto3"                        json:"isbn,omitempty"`
+	BorrowerId    string                 `                   protobuf:"bytes,5,opt,name=borrower_id,json=borrowerId,proto3" json:"borrower_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1127,10 +1128,10 @@ func (x *Book) GetBorrowerId() string {
 
 type Shelf struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Capacity      int32                  `protobuf:"varint,3,opt,name=capacity,proto3" json:"capacity,omitempty"`
-	CurrentCount  int32                  `protobuf:"varint,4,opt,name=current_count,json=currentCount,proto3" json:"current_count,omitempty"`
+	Id            string                 `                   protobuf:"bytes,1,opt,name=id,proto3"                               json:"id,omitempty"`
+	Name          string                 `                   protobuf:"bytes,2,opt,name=name,proto3"                             json:"name,omitempty"`
+	Capacity      int32                  `                   protobuf:"varint,3,opt,name=capacity,proto3"                        json:"capacity,omitempty"`
+	CurrentCount  int32                  `                   protobuf:"varint,4,opt,name=current_count,json=currentCount,proto3" json:"current_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1288,37 +1289,86 @@ var (
 
 func file_error_handling_service_proto_rawDescGZIP() []byte {
 	file_error_handling_service_proto_rawDescOnce.Do(func() {
-		file_error_handling_service_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_error_handling_service_proto_rawDesc), len(file_error_handling_service_proto_rawDesc)))
+		file_error_handling_service_proto_rawDescData = protoimpl.X.CompressGZIP(
+			unsafe.Slice(
+				unsafe.StringData(file_error_handling_service_proto_rawDesc),
+				len(file_error_handling_service_proto_rawDesc),
+			),
+		)
 	})
 	return file_error_handling_service_proto_rawDescData
 }
 
-var file_error_handling_service_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
-var file_error_handling_service_proto_goTypes = []any{
-	(*CreateUserRequest)(nil),        // 0: codesjoy.yggdrasil.example.proto.errorhandling.CreateUserRequest
-	(*CreateUserResponse)(nil),       // 1: codesjoy.yggdrasil.example.proto.errorhandling.CreateUserResponse
-	(*GetUserRequest)(nil),           // 2: codesjoy.yggdrasil.example.proto.errorhandling.GetUserRequest
-	(*GetUserResponse)(nil),          // 3: codesjoy.yggdrasil.example.proto.errorhandling.GetUserResponse
-	(*AuthenticateUserRequest)(nil),  // 4: codesjoy.yggdrasil.example.proto.errorhandling.AuthenticateUserRequest
-	(*AuthenticateUserResponse)(nil), // 5: codesjoy.yggdrasil.example.proto.errorhandling.AuthenticateUserResponse
-	(*CreateBookRequest)(nil),        // 6: codesjoy.yggdrasil.example.proto.errorhandling.CreateBookRequest
-	(*CreateBookResponse)(nil),       // 7: codesjoy.yggdrasil.example.proto.errorhandling.CreateBookResponse
-	(*GetBookRequest)(nil),           // 8: codesjoy.yggdrasil.example.proto.errorhandling.GetBookRequest
-	(*GetBookResponse)(nil),          // 9: codesjoy.yggdrasil.example.proto.errorhandling.GetBookResponse
-	(*BorrowBookRequest)(nil),        // 10: codesjoy.yggdrasil.example.proto.errorhandling.BorrowBookRequest
-	(*BorrowBookResponse)(nil),       // 11: codesjoy.yggdrasil.example.proto.errorhandling.BorrowBookResponse
-	(*ReturnBookRequest)(nil),        // 12: codesjoy.yggdrasil.example.proto.errorhandling.ReturnBookRequest
-	(*ReturnBookResponse)(nil),       // 13: codesjoy.yggdrasil.example.proto.errorhandling.ReturnBookResponse
-	(*CreateShelfRequest)(nil),       // 14: codesjoy.yggdrasil.example.proto.errorhandling.CreateShelfRequest
-	(*CreateShelfResponse)(nil),      // 15: codesjoy.yggdrasil.example.proto.errorhandling.CreateShelfResponse
-	(*AddBookToShelfRequest)(nil),    // 16: codesjoy.yggdrasil.example.proto.errorhandling.AddBookToShelfRequest
-	(*AddBookToShelfResponse)(nil),   // 17: codesjoy.yggdrasil.example.proto.errorhandling.AddBookToShelfResponse
-	(*TriggerErrorRequest)(nil),      // 18: codesjoy.yggdrasil.example.proto.errorhandling.TriggerErrorRequest
-	(*TriggerErrorResponse)(nil),     // 19: codesjoy.yggdrasil.example.proto.errorhandling.TriggerErrorResponse
-	(*User)(nil),                     // 20: codesjoy.yggdrasil.example.proto.errorhandling.User
-	(*Book)(nil),                     // 21: codesjoy.yggdrasil.example.proto.errorhandling.Book
-	(*Shelf)(nil),                    // 22: codesjoy.yggdrasil.example.proto.errorhandling.Shelf
-}
+var (
+	file_error_handling_service_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+	file_error_handling_service_proto_goTypes  = []any{
+		(*CreateUserRequest)(
+			nil,
+		), // 0: codesjoy.yggdrasil.example.proto.errorhandling.CreateUserRequest
+		(*CreateUserResponse)(
+			nil,
+		), // 1: codesjoy.yggdrasil.example.proto.errorhandling.CreateUserResponse
+		(*GetUserRequest)(
+			nil,
+		), // 2: codesjoy.yggdrasil.example.proto.errorhandling.GetUserRequest
+		(*GetUserResponse)(
+			nil,
+		), // 3: codesjoy.yggdrasil.example.proto.errorhandling.GetUserResponse
+		(*AuthenticateUserRequest)(
+			nil,
+		), // 4: codesjoy.yggdrasil.example.proto.errorhandling.AuthenticateUserRequest
+		(*AuthenticateUserResponse)(
+			nil,
+		), // 5: codesjoy.yggdrasil.example.proto.errorhandling.AuthenticateUserResponse
+		(*CreateBookRequest)(
+			nil,
+		), // 6: codesjoy.yggdrasil.example.proto.errorhandling.CreateBookRequest
+		(*CreateBookResponse)(
+			nil,
+		), // 7: codesjoy.yggdrasil.example.proto.errorhandling.CreateBookResponse
+		(*GetBookRequest)(
+			nil,
+		), // 8: codesjoy.yggdrasil.example.proto.errorhandling.GetBookRequest
+		(*GetBookResponse)(
+			nil,
+		), // 9: codesjoy.yggdrasil.example.proto.errorhandling.GetBookResponse
+		(*BorrowBookRequest)(
+			nil,
+		), // 10: codesjoy.yggdrasil.example.proto.errorhandling.BorrowBookRequest
+		(*BorrowBookResponse)(
+			nil,
+		), // 11: codesjoy.yggdrasil.example.proto.errorhandling.BorrowBookResponse
+		(*ReturnBookRequest)(
+			nil,
+		), // 12: codesjoy.yggdrasil.example.proto.errorhandling.ReturnBookRequest
+		(*ReturnBookResponse)(
+			nil,
+		), // 13: codesjoy.yggdrasil.example.proto.errorhandling.ReturnBookResponse
+		(*CreateShelfRequest)(
+			nil,
+		), // 14: codesjoy.yggdrasil.example.proto.errorhandling.CreateShelfRequest
+		(*CreateShelfResponse)(
+			nil,
+		), // 15: codesjoy.yggdrasil.example.proto.errorhandling.CreateShelfResponse
+		(*AddBookToShelfRequest)(
+			nil,
+		), // 16: codesjoy.yggdrasil.example.proto.errorhandling.AddBookToShelfRequest
+		(*AddBookToShelfResponse)(
+			nil,
+		), // 17: codesjoy.yggdrasil.example.proto.errorhandling.AddBookToShelfResponse
+		(*TriggerErrorRequest)(
+			nil,
+		), // 18: codesjoy.yggdrasil.example.proto.errorhandling.TriggerErrorRequest
+		(*TriggerErrorResponse)(
+			nil,
+		), // 19: codesjoy.yggdrasil.example.proto.errorhandling.TriggerErrorResponse
+		(*User)(nil), // 20: codesjoy.yggdrasil.example.proto.errorhandling.User
+		(*Book)(nil), // 21: codesjoy.yggdrasil.example.proto.errorhandling.Book
+		(*Shelf)(
+			nil,
+		), // 22: codesjoy.yggdrasil.example.proto.errorhandling.Shelf
+	}
+)
 var file_error_handling_service_proto_depIdxs = []int32{
 	20, // 0: codesjoy.yggdrasil.example.proto.errorhandling.CreateUserResponse.user:type_name -> codesjoy.yggdrasil.example.proto.errorhandling.User
 	20, // 1: codesjoy.yggdrasil.example.proto.errorhandling.GetUserResponse.user:type_name -> codesjoy.yggdrasil.example.proto.errorhandling.User
@@ -1363,7 +1413,10 @@ func file_error_handling_service_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_error_handling_service_proto_rawDesc), len(file_error_handling_service_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(
+				unsafe.StringData(file_error_handling_service_proto_rawDesc),
+				len(file_error_handling_service_proto_rawDesc),
+			),
 			NumEnums:      0,
 			NumMessages:   23,
 			NumExtensions: 0,

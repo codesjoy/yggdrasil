@@ -21,11 +21,12 @@
 package error_handling
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -144,15 +145,22 @@ var (
 
 func file_error_handling_reason_proto_rawDescGZIP() []byte {
 	file_error_handling_reason_proto_rawDescOnce.Do(func() {
-		file_error_handling_reason_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_error_handling_reason_proto_rawDesc), len(file_error_handling_reason_proto_rawDesc)))
+		file_error_handling_reason_proto_rawDescData = protoimpl.X.CompressGZIP(
+			unsafe.Slice(
+				unsafe.StringData(file_error_handling_reason_proto_rawDesc),
+				len(file_error_handling_reason_proto_rawDesc),
+			),
+		)
 	})
 	return file_error_handling_reason_proto_rawDescData
 }
 
-var file_error_handling_reason_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_error_handling_reason_proto_goTypes = []any{
-	(Reason)(0), // 0: codesjoy.yggdrasil.example.proto.errorhandling.Reason
-}
+var (
+	file_error_handling_reason_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+	file_error_handling_reason_proto_goTypes   = []any{
+		(Reason)(0), // 0: codesjoy.yggdrasil.example.proto.errorhandling.Reason
+	}
+)
 var file_error_handling_reason_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
 	0, // [0:0] is the sub-list for method input_type
@@ -170,7 +178,10 @@ func file_error_handling_reason_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_error_handling_reason_proto_rawDesc), len(file_error_handling_reason_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(
+				unsafe.StringData(file_error_handling_reason_proto_rawDesc),
+				len(file_error_handling_reason_proto_rawDesc),
+			),
 			NumEnums:      1,
 			NumMessages:   0,
 			NumExtensions: 0,

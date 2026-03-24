@@ -22,10 +22,11 @@ import (
 	"time"
 
 	"github.com/codesjoy/pkg/basic/xerror"
+	"github.com/stretchr/testify/assert"
+
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/stream"
-	"github.com/stretchr/testify/assert"
 
 	"google.golang.org/genproto/googleapis/rpc/code"
 )

@@ -20,8 +20,9 @@ import (
 	"mime"
 	"net/http"
 
-	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
 	"google.golang.org/protobuf/encoding/protojson"
+
+	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
 )
 
 // BuildMarshalerRegistry builds a marshaler registry from a list of MIME types.

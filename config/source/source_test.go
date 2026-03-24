@@ -17,12 +17,13 @@ package source_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/codesjoy/yggdrasil/v2/config/source"
 	_ "github.com/codesjoy/yggdrasil/v2/config/source/env"
 	_ "github.com/codesjoy/yggdrasil/v2/config/source/file"
 	_ "github.com/codesjoy/yggdrasil/v2/config/source/flag"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type testSource struct{}

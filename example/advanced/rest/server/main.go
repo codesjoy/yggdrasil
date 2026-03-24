@@ -21,6 +21,8 @@ import (
 	"os"
 	"time"
 
+	"google.golang.org/protobuf/types/known/emptypb"
+
 	"github.com/codesjoy/yggdrasil/v2"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/config/source/file"
@@ -28,7 +30,6 @@ import (
 	_ "github.com/codesjoy/yggdrasil/v2/interceptor/logging"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type LibraryImpl struct {

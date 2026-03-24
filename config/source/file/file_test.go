@@ -23,10 +23,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v2/config/source"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	"github.com/codesjoy/yggdrasil/v2/config/source"
 )
 
 // TestFile_NewSource tests creating a new file source

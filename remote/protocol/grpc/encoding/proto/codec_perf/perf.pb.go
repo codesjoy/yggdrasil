@@ -24,10 +24,11 @@
 package codec_perf
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -106,15 +107,19 @@ var (
 
 func file_test_codec_perf_perf_proto_rawDescGZIP() []byte {
 	file_test_codec_perf_perf_proto_rawDescOnce.Do(func() {
-		file_test_codec_perf_perf_proto_rawDescData = protoimpl.X.CompressGZIP(file_test_codec_perf_perf_proto_rawDescData)
+		file_test_codec_perf_perf_proto_rawDescData = protoimpl.X.CompressGZIP(
+			file_test_codec_perf_perf_proto_rawDescData,
+		)
 	})
 	return file_test_codec_perf_perf_proto_rawDescData
 }
 
-var file_test_codec_perf_perf_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-var file_test_codec_perf_perf_proto_goTypes = []interface{}{
-	(*Buffer)(nil), // 0: codec.perf.Buffer
-}
+var (
+	file_test_codec_perf_perf_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+	file_test_codec_perf_perf_proto_goTypes  = []interface{}{
+		(*Buffer)(nil), // 0: codec.perf.Buffer
+	}
+)
 var file_test_codec_perf_perf_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
 	0, // [0:0] is the sub-list for method input_type

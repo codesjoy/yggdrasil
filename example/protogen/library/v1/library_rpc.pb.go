@@ -4,13 +4,15 @@ package libraryv1
 
 import (
 	context "context"
+
 	xerror "github.com/codesjoy/pkg/basic/xerror"
+	code "google.golang.org/genproto/googleapis/rpc/code"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
+
 	client "github.com/codesjoy/yggdrasil/v2/client"
 	interceptor "github.com/codesjoy/yggdrasil/v2/interceptor"
 	metadata "github.com/codesjoy/yggdrasil/v2/metadata"
 	server "github.com/codesjoy/yggdrasil/v2/server"
-	code "google.golang.org/genproto/googleapis/rpc/code"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -356,8 +358,7 @@ type UnsafeLibraryServiceServer interface {
 }
 
 // UnimplementedLibraryServiceServer must be embedded to have forward compatible implementations.
-type UnimplementedLibraryServiceServer struct {
-}
+type UnimplementedLibraryServiceServer struct{}
 
 func (UnimplementedLibraryServiceServer) CreateShelf(context.Context, *CreateShelfRequest) (*Shelf, error) {
 	return nil, xerror.New(code.Code_UNIMPLEMENTED, "method CreateShelf not implemented")

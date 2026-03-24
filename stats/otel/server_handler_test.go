@@ -19,9 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v2/stats"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/codesjoy/yggdrasil/v2/stats"
 )
 
 // TestNewSvrHandler tests newSvrHandler function

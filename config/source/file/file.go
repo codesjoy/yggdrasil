@@ -27,11 +27,12 @@ import (
 	"time"
 
 	"github.com/codesjoy/pkg/utils/xgo"
-	"github.com/codesjoy/yggdrasil/v2/config/source"
-	"github.com/codesjoy/yggdrasil/v2/internal/backoff"
 	"github.com/fsnotify/fsnotify"
 	"github.com/mitchellh/mapstructure"
 	"gopkg.in/yaml.v3"
+
+	"github.com/codesjoy/yggdrasil/v2/config/source"
+	"github.com/codesjoy/yggdrasil/v2/internal/backoff"
 )
 
 var errSourceClosed = errors.New("the file source is closed")

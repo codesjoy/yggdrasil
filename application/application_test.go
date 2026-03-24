@@ -23,11 +23,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v2/governor"
-	"github.com/codesjoy/yggdrasil/v2/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codesjoy/yggdrasil/v2/governor"
+	"github.com/codesjoy/yggdrasil/v2/registry"
 )
 
 // Mock implementations for testing

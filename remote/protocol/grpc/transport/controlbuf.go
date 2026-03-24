@@ -31,8 +31,9 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/remote/logger"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport/grpcutil"
 
-	"github.com/codesjoy/yggdrasil/v2/status"
 	"golang.org/x/net/http2/hpack"
+
+	"github.com/codesjoy/yggdrasil/v2/status"
 
 	"golang.org/x/net/http2"
 )

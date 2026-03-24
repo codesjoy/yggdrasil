@@ -26,6 +26,8 @@ import (
 	"sync"
 
 	"github.com/codesjoy/pkg/basic/xerror"
+	"google.golang.org/genproto/googleapis/rpc/code"
+
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/governor"
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
@@ -37,7 +39,6 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/remote/rest"
 	"github.com/codesjoy/yggdrasil/v2/stats"
 	"github.com/codesjoy/yggdrasil/v2/stream"
-	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
 const (

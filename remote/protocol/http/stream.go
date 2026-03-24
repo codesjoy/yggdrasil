@@ -26,14 +26,15 @@ import (
 	"time"
 
 	"github.com/codesjoy/pkg/basic/xerror"
+	"google.golang.org/genproto/googleapis/rpc/code"
+	stpb "google.golang.org/genproto/googleapis/rpc/status"
+	"google.golang.org/protobuf/proto"
+
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote/peer"
 	"github.com/codesjoy/yggdrasil/v2/stats"
 	"github.com/codesjoy/yggdrasil/v2/status"
 	"github.com/codesjoy/yggdrasil/v2/stream"
-	"google.golang.org/genproto/googleapis/rpc/code"
-	stpb "google.golang.org/genproto/googleapis/rpc/status"
-	"google.golang.org/protobuf/proto"
 )
 
 const (

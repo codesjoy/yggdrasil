@@ -34,15 +34,16 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/hpack"
+	"google.golang.org/genproto/googleapis/rpc/code"
+
 	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport/grpctest"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport/leakcheck"
 	testutils2 "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport/testutils"
 	"github.com/codesjoy/yggdrasil/v2/stats"
 	"github.com/codesjoy/yggdrasil/v2/status"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/hpack"
-	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
 type s struct {

@@ -18,9 +18,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/propagation"
+
+	"github.com/codesjoy/yggdrasil/v2/metadata"
 )
 
 // TestParseFullMethod tests parseFullMethod function

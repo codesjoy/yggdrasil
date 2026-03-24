@@ -20,6 +20,7 @@ import (
 	"log/slog"
 
 	"github.com/codesjoy/pkg/utils/xsync"
+
 	"github.com/codesjoy/yggdrasil/v2/balancer"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/resolver"

@@ -21,9 +21,10 @@ package testutils
 import (
 	"testing"
 
+	"google.golang.org/protobuf/types/known/anypb"
+
 	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport/grpctest"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	"google.golang.org/genproto/googleapis/rpc/code"
 )

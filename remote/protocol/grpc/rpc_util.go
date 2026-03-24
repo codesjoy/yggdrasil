@@ -31,6 +31,7 @@ import (
 	"sync"
 
 	"github.com/codesjoy/pkg/basic/xerror"
+
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/consts"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/proto"
@@ -548,7 +549,10 @@ func setCallInfoCodec(c *callInfo) error {
 			c.contentSubtype = strings.ToLower(c.codec.Name())
 		}
 		if c.contentSubtype == "" {
-			return xerror.New(code.Code_INTERNAL, "grpc: forced codec requires a non-empty content-subtype")
+			return xerror.New(
+				code.Code_INTERNAL,
+				"grpc: forced codec requires a non-empty content-subtype",
+			)
 		}
 		return nil
 	}

@@ -24,13 +24,14 @@ import (
 	"sync"
 
 	"github.com/codesjoy/pkg/basic/xerror"
+	"google.golang.org/genproto/googleapis/rpc/code"
+
 	"github.com/codesjoy/yggdrasil/v2"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/config/source/file"
 	errorhandlingpb "github.com/codesjoy/yggdrasil/v2/example/protogen/error-handling"
 	_ "github.com/codesjoy/yggdrasil/v2/interceptor/logging"
 	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
-	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
 // LibraryServer implements the LibraryService

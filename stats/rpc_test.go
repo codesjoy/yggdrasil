@@ -18,8 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/codesjoy/yggdrasil/v2/metadata"
 )
 
 // TestRPCTagInfoBase tests RPCTagInfoBase methods

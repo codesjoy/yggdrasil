@@ -23,8 +23,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v2/logger/buffer"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/codesjoy/yggdrasil/v2/logger/buffer"
 )
 
 type syncLinesWriter struct {

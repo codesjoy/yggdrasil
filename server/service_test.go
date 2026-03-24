@@ -20,9 +20,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
 	"github.com/codesjoy/yggdrasil/v2/stream"
-	"github.com/stretchr/testify/assert"
 )
 
 // Test MethodDesc functionality

@@ -17,8 +17,9 @@ package otel
 import (
 	"testing"
 
-	"github.com/codesjoy/yggdrasil/v2/stats"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/codesjoy/yggdrasil/v2/stats"
 )
 
 // TestInit tests package initialization

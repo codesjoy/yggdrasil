@@ -21,11 +21,12 @@
 package helloworld
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -37,7 +38,7 @@ const (
 
 type SayHelloRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name          string                 `                   protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -81,7 +82,7 @@ func (x *SayHelloRequest) GetName() string {
 
 type SayHelloResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Message       string                 `                   protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -125,7 +126,7 @@ func (x *SayHelloResponse) GetMessage() string {
 
 type SayErrorRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name          string                 `                   protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -169,7 +170,7 @@ func (x *SayErrorRequest) GetName() string {
 
 type SayErrorResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Message       string                 `                   protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -213,7 +214,7 @@ func (x *SayErrorResponse) GetMessage() string {
 
 type SayHelloStreamRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name          string                 `                   protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -257,7 +258,7 @@ func (x *SayHelloStreamRequest) GetName() string {
 
 type SayHelloStreamResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Message       string                 `                   protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -301,7 +302,7 @@ func (x *SayHelloStreamResponse) GetMessage() string {
 
 type SayHelloClientStreamRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name          string                 `                   protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -345,7 +346,7 @@ func (x *SayHelloClientStreamRequest) GetName() string {
 
 type SayHelloClientStreamResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Message       string                 `                   protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -389,7 +390,7 @@ func (x *SayHelloClientStreamResponse) GetMessage() string {
 
 type SayHelloServerStreamRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name          string                 `                   protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -433,7 +434,7 @@ func (x *SayHelloServerStreamRequest) GetName() string {
 
 type SayHelloServerStreamResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Message       string                 `                   protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -515,24 +516,51 @@ var (
 
 func file_helloworld_helloworld_proto_rawDescGZIP() []byte {
 	file_helloworld_helloworld_proto_rawDescOnce.Do(func() {
-		file_helloworld_helloworld_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_helloworld_helloworld_proto_rawDesc), len(file_helloworld_helloworld_proto_rawDesc)))
+		file_helloworld_helloworld_proto_rawDescData = protoimpl.X.CompressGZIP(
+			unsafe.Slice(
+				unsafe.StringData(file_helloworld_helloworld_proto_rawDesc),
+				len(file_helloworld_helloworld_proto_rawDesc),
+			),
+		)
 	})
 	return file_helloworld_helloworld_proto_rawDescData
 }
 
-var file_helloworld_helloworld_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
-var file_helloworld_helloworld_proto_goTypes = []any{
-	(*SayHelloRequest)(nil),              // 0: codesjoy.yggdrasil.example.proto.helloword.SayHelloRequest
-	(*SayHelloResponse)(nil),             // 1: codesjoy.yggdrasil.example.proto.helloword.SayHelloResponse
-	(*SayErrorRequest)(nil),              // 2: codesjoy.yggdrasil.example.proto.helloword.SayErrorRequest
-	(*SayErrorResponse)(nil),             // 3: codesjoy.yggdrasil.example.proto.helloword.SayErrorResponse
-	(*SayHelloStreamRequest)(nil),        // 4: codesjoy.yggdrasil.example.proto.helloword.SayHelloStreamRequest
-	(*SayHelloStreamResponse)(nil),       // 5: codesjoy.yggdrasil.example.proto.helloword.SayHelloStreamResponse
-	(*SayHelloClientStreamRequest)(nil),  // 6: codesjoy.yggdrasil.example.proto.helloword.SayHelloClientStreamRequest
-	(*SayHelloClientStreamResponse)(nil), // 7: codesjoy.yggdrasil.example.proto.helloword.SayHelloClientStreamResponse
-	(*SayHelloServerStreamRequest)(nil),  // 8: codesjoy.yggdrasil.example.proto.helloword.SayHelloServerStreamRequest
-	(*SayHelloServerStreamResponse)(nil), // 9: codesjoy.yggdrasil.example.proto.helloword.SayHelloServerStreamResponse
-}
+var (
+	file_helloworld_helloworld_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+	file_helloworld_helloworld_proto_goTypes  = []any{
+		(*SayHelloRequest)(
+			nil,
+		), // 0: codesjoy.yggdrasil.example.proto.helloword.SayHelloRequest
+		(*SayHelloResponse)(
+			nil,
+		), // 1: codesjoy.yggdrasil.example.proto.helloword.SayHelloResponse
+		(*SayErrorRequest)(
+			nil,
+		), // 2: codesjoy.yggdrasil.example.proto.helloword.SayErrorRequest
+		(*SayErrorResponse)(
+			nil,
+		), // 3: codesjoy.yggdrasil.example.proto.helloword.SayErrorResponse
+		(*SayHelloStreamRequest)(
+			nil,
+		), // 4: codesjoy.yggdrasil.example.proto.helloword.SayHelloStreamRequest
+		(*SayHelloStreamResponse)(
+			nil,
+		), // 5: codesjoy.yggdrasil.example.proto.helloword.SayHelloStreamResponse
+		(*SayHelloClientStreamRequest)(
+			nil,
+		), // 6: codesjoy.yggdrasil.example.proto.helloword.SayHelloClientStreamRequest
+		(*SayHelloClientStreamResponse)(
+			nil,
+		), // 7: codesjoy.yggdrasil.example.proto.helloword.SayHelloClientStreamResponse
+		(*SayHelloServerStreamRequest)(
+			nil,
+		), // 8: codesjoy.yggdrasil.example.proto.helloword.SayHelloServerStreamRequest
+		(*SayHelloServerStreamResponse)(
+			nil,
+		), // 9: codesjoy.yggdrasil.example.proto.helloword.SayHelloServerStreamResponse
+	}
+)
 var file_helloworld_helloworld_proto_depIdxs = []int32{
 	0, // 0: codesjoy.yggdrasil.example.proto.helloword.GreeterService.SayHello:input_type -> codesjoy.yggdrasil.example.proto.helloword.SayHelloRequest
 	2, // 1: codesjoy.yggdrasil.example.proto.helloword.GreeterService.SayError:input_type -> codesjoy.yggdrasil.example.proto.helloword.SayErrorRequest
@@ -560,7 +588,10 @@ func file_helloworld_helloworld_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_helloworld_helloworld_proto_rawDesc), len(file_helloworld_helloworld_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(
+				unsafe.StringData(file_helloworld_helloworld_proto_rawDesc),
+				len(file_helloworld_helloworld_proto_rawDesc),
+			),
 			NumEnums:      0,
 			NumMessages:   10,
 			NumExtensions: 0,

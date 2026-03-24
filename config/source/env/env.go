@@ -22,9 +22,10 @@ import (
 	"strings"
 
 	"github.com/codesjoy/pkg/utils/xmap"
+	"github.com/mitchellh/mapstructure"
+
 	"github.com/codesjoy/yggdrasil/v2/config/internal"
 	"github.com/codesjoy/yggdrasil/v2/config/source"
-	"github.com/mitchellh/mapstructure"
 )
 
 type env struct {

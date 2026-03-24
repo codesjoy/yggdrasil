@@ -19,8 +19,9 @@ import (
 	"io"
 	"os"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
 	"gopkg.in/natefinch/lumberjack.v2"
+
+	"github.com/codesjoy/yggdrasil/v2/config"
 )
 
 func init() {

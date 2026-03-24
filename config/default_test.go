@@ -19,9 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v2/config/source"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codesjoy/yggdrasil/v2/config/source"
 )
 
 func TestDefaultConfig_Instance(t *testing.T) {

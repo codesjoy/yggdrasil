@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"github.com/codesjoy/pkg/basic/xerror"
+	"google.golang.org/genproto/googleapis/rpc/code"
+
 	"github.com/codesjoy/yggdrasil/v2"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/config/source/file"
@@ -30,7 +32,6 @@ import (
 	_ "github.com/codesjoy/yggdrasil/v2/interceptor/logging"
 	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
 	"github.com/codesjoy/yggdrasil/v2/status"
-	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
 func main() {

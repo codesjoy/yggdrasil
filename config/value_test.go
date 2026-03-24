@@ -19,8 +19,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v2/config/source/file"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/codesjoy/yggdrasil/v2/config/source/file"
 )
 
 func TestValue_Bool(t *testing.T) {

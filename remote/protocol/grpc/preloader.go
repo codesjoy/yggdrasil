@@ -20,8 +20,9 @@ package grpc
 
 import (
 	"github.com/codesjoy/pkg/basic/xerror"
-	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport"
 	"google.golang.org/genproto/googleapis/rpc/code"
+
+	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport"
 )
 
 // PreparedMsg is responsible for creating a Marshalled and Compressed object.

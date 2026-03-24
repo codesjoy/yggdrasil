@@ -18,11 +18,12 @@ import (
 	"context"
 	"strings"
 
-	"github.com/codesjoy/yggdrasil/v2/metadata"
-	xtrace "github.com/codesjoy/yggdrasil/v2/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	semconv "go.opentelemetry.io/otel/semconv/v1.23.1"
+
+	"github.com/codesjoy/yggdrasil/v2/metadata"
+	xtrace "github.com/codesjoy/yggdrasil/v2/otel"
 )
 
 func parseFullMethod(fullMethod string) (string, []attribute.KeyValue) {

@@ -19,9 +19,10 @@ import (
 	"context"
 	"errors"
 
-	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/genproto/googleapis/rpc/status"
+
+	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
 )
 
 // Status is the status of the error.

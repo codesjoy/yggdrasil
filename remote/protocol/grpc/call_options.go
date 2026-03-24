@@ -19,8 +19,9 @@ import (
 	"strings"
 
 	"github.com/codesjoy/pkg/basic/xerror"
-	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
 	"google.golang.org/genproto/googleapis/rpc/code"
+
+	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
 )
 
 // CallOption configures a single gRPC call.

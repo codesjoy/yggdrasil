@@ -22,12 +22,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
 	"github.com/codesjoy/yggdrasil/v2/internal/constant"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/remote/rest"
 	"github.com/codesjoy/yggdrasil/v2/stream"
-	"github.com/stretchr/testify/assert"
 )
 
 // Test service interfaces

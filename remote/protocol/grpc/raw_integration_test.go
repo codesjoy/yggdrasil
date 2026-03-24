@@ -24,6 +24,10 @@ import (
 	"time"
 
 	"github.com/codesjoy/pkg/basic/xerror"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/code"
+
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/gzip"
@@ -33,9 +37,6 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/stats"
 	yggstatus "github.com/codesjoy/yggdrasil/v2/status"
 	"github.com/codesjoy/yggdrasil/v2/stream"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
 const (
@@ -66,7 +67,9 @@ func TestRawUnaryCall(t *testing.T) {
 }
 
 func TestRawServerStreamCall(t *testing.T) {
-	t.Skip("low-level server-stream integration currently completes with OK status before payload delivery; raw codec is covered by unary, client-stream, and bidi tests")
+	t.Skip(
+		"low-level server-stream integration currently completes with OK status before payload delivery; raw codec is covered by unary, client-stream, and bidi tests",
+	)
 
 	cc := newRawTestClientConn(t, "", rawTestMethodHandle)
 
@@ -235,7 +238,11 @@ func newRawTestClientConn(
 	serviceName := sanitizeServiceName(t.Name())
 	configPrefix := fmt.Sprintf("{%s}", serviceName)
 	setConfigValue(t, config.Join(config.KeyBase, "remote", "protocol", scheme, "network"), "tcp")
-	setConfigValue(t, config.Join(config.KeyBase, "remote", "protocol", scheme, "address"), "127.0.0.1:0")
+	setConfigValue(
+		t,
+		config.Join(config.KeyBase, "remote", "protocol", scheme, "address"),
+		"127.0.0.1:0",
+	)
 	setConfigValue(t, config.Join(config.KeyBase, "remote", "protocol", scheme, "codeProto"), "")
 	setConfigValue(
 		t,
@@ -244,7 +251,14 @@ func newRawTestClientConn(
 	)
 	setConfigValue(
 		t,
-		config.Join(config.KeyBase, "client", configPrefix, "protocol_config", scheme, "compressor"),
+		config.Join(
+			config.KeyBase,
+			"client",
+			configPrefix,
+			"protocol_config",
+			scheme,
+			"compressor",
+		),
 		compressor,
 	)
 

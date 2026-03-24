@@ -33,6 +33,8 @@ import (
 	"time"
 
 	"github.com/codesjoy/pkg/basic/xerror"
+	"google.golang.org/genproto/googleapis/rpc/code"
+
 	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote/credentials"
@@ -40,7 +42,6 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport/keepalive"
 	"github.com/codesjoy/yggdrasil/v2/stats"
 	"github.com/codesjoy/yggdrasil/v2/status"
-	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
 type bufferPool struct {

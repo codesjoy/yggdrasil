@@ -20,11 +20,12 @@ import (
 	"time"
 
 	"github.com/codesjoy/pkg/basic/xerror"
-	"github.com/codesjoy/yggdrasil/v2/stats"
-	"github.com/codesjoy/yggdrasil/v2/status"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/codes"
 	"google.golang.org/genproto/googleapis/rpc/code"
+
+	"github.com/codesjoy/yggdrasil/v2/stats"
+	"github.com/codesjoy/yggdrasil/v2/status"
 )
 
 // TestNewHandler tests newHandler function

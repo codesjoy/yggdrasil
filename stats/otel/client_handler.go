@@ -18,10 +18,11 @@ package otel
 import (
 	"context"
 
-	"github.com/codesjoy/yggdrasil/v2/stats"
 	"go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/codesjoy/yggdrasil/v2/stats"
 )
 
 type clientHandler struct {
