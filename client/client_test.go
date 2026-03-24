@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"testing"
 	"time"
 
@@ -163,14 +164,25 @@ func TestInvoke_Success(t *testing.T) {
 		cs := newMockClientStream(ctx)
 		return cs, nil
 	}
+	reported := make([]error, 0, 1)
+	pickResult := newMockPickResult(mockClient)
+	pickResult.reportFunc = func(err error) {
+		reported = append(reported, err)
+	}
 
 	picker := newMockPicker()
-	picker.AddResult(newMockPickResult(mockClient), nil)
+	picker.AddResult(pickResult, nil)
 	c.updatePicker(picker)
 
 	err = cli.Invoke(context.Background(), "/test/method", "args", "reply")
 	if err != nil {
 		t.Errorf("Invoke failed: %v", err)
+	}
+	if len(reported) != 1 {
+		t.Fatalf("expected 1 report, got %d", len(reported))
+	}
+	if reported[0] != nil {
+		t.Fatalf("expected success report, got %v", reported[0])
 	}
 }
 
@@ -223,8 +235,13 @@ func TestNewStream_Success(t *testing.T) {
 	c := cli.(*client)
 
 	mockClient := newMockRemoteClient("test_remote", remote.Ready)
+	reported := make([]error, 0, 1)
+	pickResult := newMockPickResult(mockClient)
+	pickResult.reportFunc = func(err error) {
+		reported = append(reported, err)
+	}
 	picker := newMockPicker()
-	picker.AddResult(newMockPickResult(mockClient), nil)
+	picker.AddResult(pickResult, nil)
 	c.updatePicker(picker)
 
 	s, err := cli.NewStream(context.Background(), &stream.Desc{}, "/test/method")
@@ -234,6 +251,179 @@ func TestNewStream_Success(t *testing.T) {
 	if s == nil {
 		t.Error("expected stream to be non-nil")
 	}
+	if len(reported) != 0 {
+		t.Fatalf("expected no report before RPC completion, got %d", len(reported))
+	}
+}
+
+func TestNewStream_RemoteErrorReportsFailure(t *testing.T) {
+	appName := "test_stream_report_err_app"
+	conf := map[string]interface{}{
+		"balancer": "mock_balancer",
+		"remote": map[string]interface{}{
+			"endpoints": []resolver.BaseEndpoint{{Address: "addr"}},
+		},
+	}
+	_ = setupConfig(appName, conf)
+
+	cli, err := NewClient(context.Background(), appName)
+	if err != nil {
+		t.Fatalf("NewClient failed: %v", err)
+	}
+	defer cli.Close()
+
+	c := cli.(*client)
+	mockClient := newMockRemoteClient("test_remote", remote.Ready)
+	wantErr := errors.New("new stream failed")
+	mockClient.newStreamFunc = func(ctx context.Context, desc *stream.Desc, method string) (stream.ClientStream, error) {
+		return nil, wantErr
+	}
+
+	reported := make([]error, 0, 1)
+	pickResult := newMockPickResult(mockClient)
+	pickResult.reportFunc = func(err error) {
+		reported = append(reported, err)
+	}
+
+	picker := newMockPicker()
+	picker.AddResult(pickResult, nil)
+	c.updatePicker(picker)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	_, err = cli.NewStream(ctx, &stream.Desc{}, "/test/method")
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("expected %v, got %v", wantErr, err)
+	}
+	if len(reported) == 0 {
+		t.Fatal("expected at least 1 report")
+	}
+	for i, reportedErr := range reported {
+		if !errors.Is(reportedErr, wantErr) {
+			t.Fatalf("expected reported error %v at index %d, got %v", wantErr, i, reportedErr)
+		}
+	}
+}
+
+func TestClientStream_ReportLifecycle(t *testing.T) {
+	t.Run("send failure reports once", func(t *testing.T) {
+		mockStream := newMockClientStream(context.Background())
+		wantErr := errors.New("send failed")
+		mockStream.SetSendErr(wantErr)
+
+		reported := make([]error, 0, 1)
+		cs := &clientStream{
+			desc:         &stream.Desc{},
+			ClientStream: mockStream,
+			report: func(err error) {
+				reported = append(reported, err)
+			},
+		}
+
+		err := cs.SendMsg("payload")
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("expected %v, got %v", wantErr, err)
+		}
+
+		mockStream.SetRecvErr(nil)
+		if err := cs.RecvMsg(new(string)); err != nil {
+			t.Fatalf("expected recv success, got %v", err)
+		}
+
+		if len(reported) != 1 {
+			t.Fatalf("expected 1 report, got %d", len(reported))
+		}
+		if !errors.Is(reported[0], wantErr) {
+			t.Fatalf("expected reported error %v, got %v", wantErr, reported[0])
+		}
+	})
+
+	t.Run("unary recv success reports nil once", func(t *testing.T) {
+		mockStream := newMockClientStream(context.Background())
+		reported := make([]error, 0, 1)
+		cs := &clientStream{
+			desc:         &stream.Desc{},
+			ClientStream: mockStream,
+			report: func(err error) {
+				reported = append(reported, err)
+			},
+		}
+
+		if err := cs.RecvMsg(new(string)); err != nil {
+			t.Fatalf("expected recv success, got %v", err)
+		}
+
+		mockStream.SetRecvErr(errors.New("late recv failure"))
+		err := cs.RecvMsg(new(string))
+		if err == nil {
+			t.Fatal("expected second recv to fail")
+		}
+
+		if len(reported) != 1 {
+			t.Fatalf("expected 1 report, got %d", len(reported))
+		}
+		if reported[0] != nil {
+			t.Fatalf("expected success report, got %v", reported[0])
+		}
+	})
+
+	t.Run("unary recv failure reports error", func(t *testing.T) {
+		mockStream := newMockClientStream(context.Background())
+		wantErr := errors.New("recv failed")
+		mockStream.SetRecvErr(wantErr)
+
+		reported := make([]error, 0, 1)
+		cs := &clientStream{
+			desc:         &stream.Desc{},
+			ClientStream: mockStream,
+			report: func(err error) {
+				reported = append(reported, err)
+			},
+		}
+
+		err := cs.RecvMsg(new(string))
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("expected %v, got %v", wantErr, err)
+		}
+		if len(reported) != 1 {
+			t.Fatalf("expected 1 report, got %d", len(reported))
+		}
+		if !errors.Is(reported[0], wantErr) {
+			t.Fatalf("expected reported error %v, got %v", wantErr, reported[0])
+		}
+	})
+
+	t.Run("server stream reports success on eof only", func(t *testing.T) {
+		mockStream := newMockClientStream(context.Background())
+		reported := make([]error, 0, 1)
+		cs := &clientStream{
+			desc:         &stream.Desc{ServerStreams: true},
+			ClientStream: mockStream,
+			report: func(err error) {
+				reported = append(reported, err)
+			},
+		}
+
+		if err := cs.RecvMsg(new(string)); err != nil {
+			t.Fatalf("expected first recv success, got %v", err)
+		}
+		if len(reported) != 0 {
+			t.Fatalf("expected no report before stream completion, got %d", len(reported))
+		}
+
+		mockStream.SetRecvErr(io.EOF)
+		err := cs.RecvMsg(new(string))
+		if !errors.Is(err, io.EOF) {
+			t.Fatalf("expected EOF, got %v", err)
+		}
+		if len(reported) != 1 {
+			t.Fatalf("expected 1 report, got %d", len(reported))
+		}
+		if reported[0] != nil {
+			t.Fatalf("expected success report, got %v", reported[0])
+		}
+	})
 }
 
 func TestClose(t *testing.T) {

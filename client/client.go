@@ -28,6 +28,8 @@ import (
 	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/pkg/utils/xgo"
 	"github.com/codesjoy/pkg/utils/xsync"
+	"google.golang.org/genproto/googleapis/rpc/code"
+
 	"github.com/codesjoy/yggdrasil/v2/balancer"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
@@ -37,7 +39,6 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/resolver"
 	"github.com/codesjoy/yggdrasil/v2/stats"
 	"github.com/codesjoy/yggdrasil/v2/stream"
-	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
 // ErrClientClosing is returned when the client is closing.
@@ -60,13 +61,23 @@ type Client interface {
 type clientStream struct {
 	desc *stream.Desc
 	stream.ClientStream
-	report func(err error)
+	report   func(err error)
+	reported atomic.Bool
+}
+
+func (c *clientStream) reportResult(err error) {
+	if c.report == nil {
+		return
+	}
+	if c.reported.CompareAndSwap(false, true) {
+		c.report(err)
+	}
 }
 
 func (c *clientStream) SendMsg(m interface{}) error {
 	err := c.ClientStream.SendMsg(m)
 	if err != nil && err != io.EOF {
-		c.report(err)
+		c.reportResult(err)
 	}
 	return err
 }
@@ -81,8 +92,16 @@ func (c *clientStream) RecvMsg(m interface{}) error {
 			_ = metadata.SetTrailer(c.Context(), trailer)
 		}
 	}
-	if err != nil && err != io.EOF && !c.desc.ServerStreams {
-		c.report(err)
+	if err == nil && !c.desc.ServerStreams {
+		c.reportResult(nil)
+		return nil
+	}
+	if err == io.EOF && c.desc.ServerStreams {
+		c.reportResult(nil)
+		return err
+	}
+	if err != nil && err != io.EOF {
+		c.reportResult(err)
 	}
 	return err
 }

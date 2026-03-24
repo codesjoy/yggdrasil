@@ -181,15 +181,14 @@ func (p *pickResult) RemoteClient() remote.Client {
 
 // Report reports the result of the picker.
 func (p *pickResult) Report(err error) {
-	// Log the result for debugging/monitoring purposes
 	if err != nil {
 		slog.Debug("rpc call failed",
 			slog.String("endpoint", p.endpoint.Scheme()),
 			slog.Any("error", err),
 		)
+		return
 	}
-	// Future: This can be extended to support:
-	// - Circuit breaker integration
-	// - Adaptive load balancing (e.g., least-loaded, P2C)
-	// - Metrics collection for monitoring
+	slog.Debug("rpc call succeeded",
+		slog.String("endpoint", p.endpoint.Scheme()),
+	)
 }
