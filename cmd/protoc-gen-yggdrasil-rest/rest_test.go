@@ -61,7 +61,7 @@ func TestServiceDesc_Execute(t *testing.T) {
 	assert.Contains(t, output, `Path: "/v1/greeter/say_hello"`)
 }
 
-func TestServiceDesc_ParsePathValues(t *testing.T) {
+func TestBuildPathVars_ProducesRenderableBindings(t *testing.T) {
 	sd := &serviceDesc{
 		ChiPkg: "chi.",
 	}
@@ -72,14 +72,17 @@ func TestServiceDesc_ParsePathValues(t *testing.T) {
 	}{
 		{"{name}", `chi.URLParam(r, "params0")`},
 		{"{name=*}", `chi.URLParam(r, "params0")`},
-		{"/v1/{name}", `"/v1/"+chi.URLParam(r, "params0")`},
+		{"/v1/{name}", `chi.URLParam(r, "params0")`},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			path, _ := buildPathVars(tt.path)
-			output := sd.parsePathValues(path)
-			assert.Contains(t, output, tt.expected)
+			_, bindings, err := buildPathVars(tt.path)
+			assert.NoError(t, err)
+			if assert.Len(t, bindings, 1) {
+				output := sd.renderPathValue(bindings[0].Segments)
+				assert.Contains(t, output, tt.expected)
+			}
 		})
 	}
 }
@@ -185,58 +188,208 @@ func TestBuildPathVars(t *testing.T) {
 	tests := []struct {
 		path     string
 		expected string
+		vars     []pathVarBinding
+		wantErr  string
 	}{
-		{"/v1/{name}", "/v1/{params0}"},
-		{"/v1/{name=*}", "/v1/{params0}"},
-		{"/v1/{name=users/*}", "/v1/users/{params1}"},
-		{"/v1/{name=users/*/items/*}", "/v1/users/{params1}/items/{params2}"},
-		{"/v1/{name=/**}", "/v1//{params1}"},
-		{"/v1/{name=a/b/c}", "/v1/{params0}"},
-		{"/v1/{name=a/b}", "/v1/a/b"},
-		{"/v1/{name=/a/b/}", "/v1//a/b/"},
-		{"/v1/{name=a/*/b/*/c}", "/v1/{params0}"},
-		{"/v1/{name=a/**/b}", "/v1/{params0}"},
-	}
-
-	for _, tt := range tests {
-		path, _ := buildPathVars(tt.path)
-		assert.Equal(t, tt.expected, path)
-	}
-}
-
-func TestServiceDesc_ParsePathValues_Complex(t *testing.T) {
-	sd := &serviceDesc{
-		ChiPkg: "chi.",
-	}
-
-	tests := []struct {
-		path     string
-		expected string
-	}{
-		{"{params0}", `chi.URLParam(r, "params0")`},
 		{
-			"/v1/{params0}/items/{params1}",
-			`"/v1/"+chi.URLParam(r, "params0")+"/items/"+chi.URLParam(r, "params1")`,
+			path:     "/v1/{name}",
+			expected: "/v1/{params0}",
+			vars: []pathVarBinding{
+				pathBinding("name", paramSegment("params0")),
+			},
 		},
-		{"/v1/{params0}/", `"/v1/"+chi.URLParam(r, "params0")+"/"`},
 		{
-			"/v1/{params0}/{params1}/",
-			`"/v1/"+chi.URLParam(r, "params0")+"/"+chi.URLParam(r, "params1")+"/"`,
+			path:     "/v1/{name=*}",
+			expected: "/v1/{params0}",
+			vars: []pathVarBinding{
+				pathBinding("name", paramSegment("params0")),
+			},
+		},
+		{
+			path:     "/v1/{name=users/*}",
+			expected: "/v1/users/{params1}",
+			vars: []pathVarBinding{
+				pathBinding("name", literalSegment("users"), paramSegment("params1")),
+			},
+		},
+		{
+			path:     "/v1/{name=users/*/items/*}",
+			expected: "/v1/users/{params1}/items/{params2}",
+			vars: []pathVarBinding{
+				pathBinding("name",
+					literalSegment("users"),
+					paramSegment("params1"),
+					literalSegment("items"),
+					paramSegment("params2"),
+				),
+			},
+		},
+		{
+			path:     "/v1/{name=organizations/*/settings}",
+			expected: "/v1/organizations/{params1}/settings",
+			vars: []pathVarBinding{
+				pathBinding("name",
+					literalSegment("organizations"),
+					paramSegment("params1"),
+					literalSegment("settings"),
+				),
+			},
+		},
+		{
+			path:     "/v1/{name=organizations/*/applications/*/settings}",
+			expected: "/v1/organizations/{params1}/applications/{params2}/settings",
+			vars: []pathVarBinding{
+				pathBinding("name",
+					literalSegment("organizations"),
+					paramSegment("params1"),
+					literalSegment("applications"),
+					paramSegment("params2"),
+					literalSegment("settings"),
+				),
+			},
+		},
+		{
+			path:     "/v1/{name=a/b/c}",
+			expected: "/v1/a/b/c",
+			vars: []pathVarBinding{
+				pathBinding("name",
+					literalSegment("a"),
+					literalSegment("b"),
+					literalSegment("c"),
+				),
+			},
+		},
+		{
+			path:     "/v1/{name=a/b}",
+			expected: "/v1/a/b",
+			vars: []pathVarBinding{
+				pathBinding("name",
+					literalSegment("a"),
+					literalSegment("b"),
+				),
+			},
+		},
+		{
+			path:     "/v1/{name=a/*/b/*/c}",
+			expected: "/v1/a/{params1}/b/{params2}/c",
+			vars: []pathVarBinding{
+				pathBinding("name",
+					literalSegment("a"),
+					paramSegment("params1"),
+					literalSegment("b"),
+					paramSegment("params2"),
+					literalSegment("c"),
+				),
+			},
+		},
+		{
+			path:     "/v1/{parent=organizations/*}/settings/{name}",
+			expected: "/v1/organizations/{params1}/settings/{params2}",
+			vars: []pathVarBinding{
+				pathBinding("parent",
+					literalSegment("organizations"),
+					paramSegment("params1"),
+				),
+				pathBinding("name", paramSegment("params2")),
+			},
+		},
+		{
+			path:    "/v1/{na me}",
+			wantErr: `invalid binding "{na me}"`,
+		},
+		{
+			path:    "/v1/{ resource.name =organizations/*}",
+			wantErr: `invalid binding "{ resource.name =organizations/*}"`,
+		},
+		{
+			path:    "/v1/{name=/**}",
+			wantErr: "contains an empty path segment",
+		},
+		{
+			path:    "/v1/{name=/a/b/}",
+			wantErr: "contains an empty path segment",
+		},
+		{
+			path:    "/v1/{name=a/**/b}",
+			wantErr: `unsupported multi-segment wildcard "**"`,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			output := sd.parsePathValues(tt.path)
-			t.Logf("Path: %s, Output: %s", tt.path, output)
-			// The actual output might have a trailing quote if it ends with a slash
-			// because of the strings.TrimRight(path, `+""`) call in parsePathValues.
-			// Let's match the actual behavior.
-			if strings.HasSuffix(tt.path, "/") {
-				assert.Equal(t, tt.expected[:len(tt.expected)-1], output)
-			} else {
-				assert.Equal(t, tt.expected, output)
+			path, vars, err := buildPathVars(tt.path)
+			if tt.wantErr != "" {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
 			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, path)
+			assert.Equal(t, tt.vars, vars)
+		})
+	}
+}
+
+func TestServiceDesc_RenderPathValue(t *testing.T) {
+	sd := &serviceDesc{
+		ChiPkg: "chi.",
+	}
+
+	tests := []struct {
+		name     string
+		segments []pathBindingSegment
+		expected string
+	}{
+		{
+			name:     "single param",
+			segments: []pathBindingSegment{paramSegment("params0")},
+			expected: `chi.URLParam(r, "params0")`,
+		},
+		{
+			name: "literal and params",
+			segments: []pathBindingSegment{
+				literalSegment("users"),
+				paramSegment("params0"),
+				literalSegment("items"),
+				paramSegment("params1"),
+			},
+			expected: `"users/" + chi.URLParam(r, "params0") + "/items/" + chi.URLParam(r, "params1")`,
+		},
+		{
+			name: "singleton path",
+			segments: []pathBindingSegment{
+				literalSegment("organizations"),
+				paramSegment("params1"),
+				literalSegment("settings"),
+			},
+			expected: `"organizations/" + chi.URLParam(r, "params1") + "/settings"`,
+		},
+		{
+			name: "nested singleton path",
+			segments: []pathBindingSegment{
+				literalSegment("organizations"),
+				paramSegment("params1"),
+				literalSegment("applications"),
+				paramSegment("params2"),
+				literalSegment("settings"),
+			},
+			expected: `"organizations/" + chi.URLParam(r, "params1") + "/applications/" + chi.URLParam(r, "params2") + "/settings"`,
+		},
+		{
+			name: "fully literal",
+			segments: []pathBindingSegment{
+				literalSegment("a"),
+				literalSegment("b"),
+				literalSegment("c"),
+			},
+			expected: `"a/b/c"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output := sd.renderPathValue(tt.segments)
+			assert.Equal(t, tt.expected, output)
 		})
 	}
 }
@@ -312,4 +465,269 @@ func TestBuildHTTPRule_Errors(t *testing.T) {
 	_, err = buildHTTPRule(g, m, rule)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "does not declare a body")
+
+	rule = &annotations.HttpRule{
+		Pattern: &annotations.HttpRule_Get{
+			Get: "/v1/{name=organizations/**}",
+		},
+	}
+	_, err = buildHTTPRule(g, m, rule)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), `unsupported multi-segment wildcard "**"`)
+
+	rule = &annotations.HttpRule{
+		Pattern: &annotations.HttpRule_Get{
+			Get: "/v1/{na me}",
+		},
+	}
+	_, err = buildHTTPRule(g, m, rule)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), `invalid binding "{na me}"`)
+}
+
+func TestGenerateFiles_ExpandsSingletonRoute(t *testing.T) {
+	methodSets = make(map[string]int)
+
+	gen := newTestPlugin(t, &descriptorpb.FileDescriptorProto{
+		Name:    proto.String("test.proto"),
+		Package: proto.String("test"),
+		Options: &descriptorpb.FileOptions{
+			GoPackage: proto.String(
+				"github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rest;main",
+			),
+		},
+		Service: []*descriptorpb.ServiceDescriptorProto{
+			{
+				Name: proto.String("SettingsService"),
+				Method: []*descriptorpb.MethodDescriptorProto{
+					{
+						Name:       proto.String("GetSettings"),
+						InputType:  proto.String(".test.GetSettingsRequest"),
+						OutputType: proto.String(".test.GetSettingsResponse"),
+						Options:    &descriptorpb.MethodOptions{},
+					},
+				},
+			},
+		},
+		MessageType: []*descriptorpb.DescriptorProto{
+			{
+				Name: proto.String("GetSettingsRequest"),
+				Field: []*descriptorpb.FieldDescriptorProto{
+					{
+						Name:   proto.String("name"),
+						Number: proto.Int32(1),
+						Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+					},
+				},
+			},
+			{Name: proto.String("GetSettingsResponse")},
+		},
+	})
+	proto.SetExtension(
+		gen.Files[0].Services[0].Methods[0].Desc.Options(),
+		annotations.E_Http,
+		&annotations.HttpRule{
+			Pattern: &annotations.HttpRule_Get{
+				Get: "/v1/{name=organizations/*/settings}",
+			},
+		},
+	)
+
+	err := generateFiles(gen, gen.Files[0])
+	assert.NoError(t, err)
+
+	output := generatedFileContent(t, gen, "test_rest.pb.go")
+	assert.Contains(t, output, `Path:    "/v1/organizations/{params1}/settings"`)
+	assert.Contains(t, output, `PopulateFieldFromPath(protoReq, "name", val)`)
+	assert.Contains(t, output, `"organizations/" + v5.URLParam(r, "params1") + "/settings"`)
+}
+
+func TestGenerateFiles_NamedBodyPatchIncludesQueryBeforePathPopulation(t *testing.T) {
+	methodSets = make(map[string]int)
+
+	gen := newTestPlugin(t, &descriptorpb.FileDescriptorProto{
+		Name:    proto.String("test.proto"),
+		Package: proto.String("test"),
+		Options: &descriptorpb.FileOptions{
+			GoPackage: proto.String(
+				"github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rest;main",
+			),
+		},
+		Service: []*descriptorpb.ServiceDescriptorProto{
+			{
+				Name: proto.String("ResourcesService"),
+				Method: []*descriptorpb.MethodDescriptorProto{
+					{
+						Name:       proto.String("UpdateResource"),
+						InputType:  proto.String(".test.UpdateResourceRequest"),
+						OutputType: proto.String(".test.UpdateResourceResponse"),
+						Options:    &descriptorpb.MethodOptions{},
+					},
+				},
+			},
+		},
+		MessageType: []*descriptorpb.DescriptorProto{
+			{
+				Name: proto.String("Resource"),
+				Field: []*descriptorpb.FieldDescriptorProto{
+					{
+						Name:   proto.String("name"),
+						Number: proto.Int32(1),
+						Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+					},
+				},
+			},
+			{
+				Name: proto.String("UpdateResourceRequest"),
+				Field: []*descriptorpb.FieldDescriptorProto{
+					{
+						Name:     proto.String("resource"),
+						Number:   proto.Int32(1),
+						Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+						Type:     descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
+						TypeName: proto.String(".test.Resource"),
+					},
+					{
+						Name:   proto.String("update_mask"),
+						Number: proto.Int32(2),
+						Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+					},
+				},
+			},
+			{Name: proto.String("UpdateResourceResponse")},
+		},
+	})
+	proto.SetExtension(
+		gen.Files[0].Services[0].Methods[0].Desc.Options(),
+		annotations.E_Http,
+		&annotations.HttpRule{
+			Pattern: &annotations.HttpRule_Patch{
+				Patch: "/v1/{resource.name=organizations/*/settings}",
+			},
+			Body: "resource",
+		},
+	)
+
+	err := generateFiles(gen, gen.Files[0])
+	assert.NoError(t, err)
+
+	output := generatedFileContent(t, gen, "test_rest.pb.go")
+	decodeIdx := strings.Index(output, `Decode(protoReq.Resource)`)
+	queryIdx := strings.Index(output, `PopulateQueryParameters(protoReq, r.URL.Query())`)
+	pathIdx := strings.Index(output, `PopulateFieldFromPath(protoReq, "resource.name", val)`)
+	assert.NotEqual(t, -1, decodeIdx)
+	assert.NotEqual(t, -1, queryIdx)
+	assert.NotEqual(t, -1, pathIdx)
+	assert.True(t, decodeIdx < queryIdx)
+	assert.True(t, queryIdx < pathIdx)
+	assert.Contains(t, output, `Path:    "/v1/organizations/{params1}/settings"`)
+}
+
+func TestGenerateFiles_BodyStarSkipsQueryParsing(t *testing.T) {
+	methodSets = make(map[string]int)
+
+	gen := newTestPlugin(t, &descriptorpb.FileDescriptorProto{
+		Name:    proto.String("test.proto"),
+		Package: proto.String("test"),
+		Options: &descriptorpb.FileOptions{
+			GoPackage: proto.String(
+				"github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rest;main",
+			),
+		},
+		Service: []*descriptorpb.ServiceDescriptorProto{
+			{
+				Name: proto.String("ActionsService"),
+				Method: []*descriptorpb.MethodDescriptorProto{
+					{
+						Name:       proto.String("DeactivateResource"),
+						InputType:  proto.String(".test.DeactivateResourceRequest"),
+						OutputType: proto.String(".test.DeactivateResourceResponse"),
+						Options:    &descriptorpb.MethodOptions{},
+					},
+				},
+			},
+		},
+		MessageType: []*descriptorpb.DescriptorProto{
+			{
+				Name: proto.String("DeactivateResourceRequest"),
+				Field: []*descriptorpb.FieldDescriptorProto{
+					{
+						Name:   proto.String("name"),
+						Number: proto.Int32(1),
+						Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+					},
+					{
+						Name:   proto.String("reason"),
+						Number: proto.Int32(2),
+						Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+					},
+				},
+			},
+			{Name: proto.String("DeactivateResourceResponse")},
+		},
+	})
+	proto.SetExtension(
+		gen.Files[0].Services[0].Methods[0].Desc.Options(),
+		annotations.E_Http,
+		&annotations.HttpRule{
+			Pattern: &annotations.HttpRule_Post{
+				Post: "/v1/{name=organizations/*}:deactivate",
+			},
+			Body: "*",
+		},
+	)
+
+	err := generateFiles(gen, gen.Files[0])
+	assert.NoError(t, err)
+
+	output := generatedFileContent(t, gen, "test_rest.pb.go")
+	assert.Contains(t, output, `Decode(protoReq)`)
+	assert.NotContains(t, output, `PopulateQueryParameters(protoReq, r.URL.Query())`)
+	assert.Contains(t, output, `PopulateFieldFromPath(protoReq, "name", val)`)
+}
+
+// literalSegment creates a pathBindingSegment representing a static path component.
+func literalSegment(value string) pathBindingSegment {
+	return pathBindingSegment{Literal: value}
+}
+
+// paramSegment creates a pathBindingSegment representing a runtime route parameter.
+func paramSegment(value string) pathBindingSegment {
+	return pathBindingSegment{Param: value}
+}
+
+// pathBinding is a test helper that constructs a pathVarBinding from a field
+// path and a variadic list of segments.
+func pathBinding(field string, segments ...pathBindingSegment) pathVarBinding {
+	return pathVarBinding{
+		FieldPath: field,
+		Segments:  segments,
+	}
+}
+
+// newTestPlugin creates a protogen.Plugin from a single FileDescriptorProto
+// for use in end-to-end generation tests.
+func newTestPlugin(t *testing.T, file *descriptorpb.FileDescriptorProto) *protogen.Plugin {
+	t.Helper()
+
+	gen, err := protogen.Options{}.New(&pluginpb.CodeGeneratorRequest{
+		FileToGenerate: []string{file.GetName()},
+		ProtoFile:      []*descriptorpb.FileDescriptorProto{file},
+	})
+	assert.NoError(t, err)
+	return gen
+}
+
+// generatedFileContent returns the content of the generated file matching the
+// given suffix (e.g. "test_rest.pb.go").
+func generatedFileContent(t *testing.T, gen *protogen.Plugin, suffix string) string {
+	t.Helper()
+
+	for _, f := range gen.Response().File {
+		if strings.HasSuffix(f.GetName(), suffix) || strings.HasSuffix(f.GetName(), "_rest.pb.go") {
+			return f.GetContent()
+		}
+	}
+	t.Fatalf("generated file with suffix %q not found", suffix)
+	return ""
 }

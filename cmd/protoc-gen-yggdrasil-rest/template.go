@@ -17,11 +17,20 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"regexp"
+	"strconv"
 	"strings"
 	"text/template"
 )
 
+// restTemplate is the Go text/template that generates the REST handler functions
+// and service descriptor for a single protobuf service. Each method produces:
+//  1. A local handler function that decodes the request body, populates query
+//     parameters, extracts path values, and delegates to the service impl.
+//  2. An entry in the RestServiceDesc method list.
+//
+// Template execution order per request:
+//
+//	Decode(body) → PopulateQueryParameters → PopulateFieldFromPath → handler
 var restTemplate = `
 {{range $method := .Methods }}
 func local_handler_{{$.ServiceType}}_{{ .Name }}_{{.Num}}(w {{$.HTTPPkg}}ResponseWriter, r *{{$.HTTPPkg}}Request, server interface{}, unaryInt {{$.InterceptorPkg}}UnaryServerInterceptor) (interface{}, error) {
@@ -37,20 +46,21 @@ func local_handler_{{$.ServiceType}}_{{ .Name }}_{{.Num}}(w {{$.HTTPPkg}}Respons
 			if err := inbound.NewDecoder(r.Body).Decode(protoReq{{$method.Body}}); err != nil && err != {{$.IoPkg}}EOF {
 				return nil, {{$.StatusPkg}}Wrap(err, {{$.CodePkg}}Code_INVALID_ARGUMENT, "")
 			}
-		{{else -}}
+		{{end -}}
+		{{if $method.HasQueryParams }}
 			if err := {{$.RestPkg}}PopulateQueryParameters(protoReq, r.URL.Query()); err != nil {
 				return nil,  {{$.StatusPkg}}Wrap(err, {{$.CodePkg}}Code_INVALID_ARGUMENT, "")
 			}
 		{{end -}}
 
-		{{- range  $key, $value := .PathVars}}
-			if val := {{parsePathValues $value }}; len(val) == 0 {
-				return nil, {{$.StatusPkg}}New({{$.CodePkg}}Code_INVALID_ARGUMENT, "not found {{$key}}")
-			} else if err := {{$.RestPkg}}PopulateFieldFromPath(protoReq, {{$key | printf "%q"}}, val); err != nil {
+		{{- range  $binding := .PathBindings}}
+			if val := {{renderPathValue $binding.Segments }}; len(val) == 0 {
+				return nil, {{$.StatusPkg}}New({{$.CodePkg}}Code_INVALID_ARGUMENT, "not found {{$binding.FieldPath}}")
+			} else if err := {{$.RestPkg}}PopulateFieldFromPath(protoReq, {{$binding.FieldPath | printf "%q"}}, val); err != nil {
 				return nil, {{$.StatusPkg}}Wrap(err, {{$.CodePkg}}Code_INVALID_ARGUMENT, "")
 			}
 		{{- end}}
-	
+
 		if unaryInt == nil {
 			return  server.({{$.ServiceType}}Server).{{$method.Name}}(r.Context(), protoReq)
 		}
@@ -97,24 +107,29 @@ type serviceDesc struct {
 	Methods     []*methodDesc
 }
 
+// methodDesc holds all information needed to generate a single REST handler
+// function and its corresponding route registration entry.
 type methodDesc struct {
 	Name    string
-	Num     int
-	Method  string
-	Request string
+	Num     int    // overload counter for methods with multiple HTTP bindings
+	Method  string // HTTP verb (GET, POST, PUT, PATCH, DELETE, CUSTOM)
+	Request string // qualified Go type name of the request message
 
-	PathVars map[string]string
-	Path     string
+	// PathBindings contains the parsed path variable bindings. Each binding
+	// maps a protobuf field path to a sequence of literal and param segments.
+	PathBindings []pathVarBinding
+	Path         string // rewritten route path with {paramsN} placeholders
 
-	Body     string
-	BodyType string
-	HasBody  bool
+	Body           string // dot-prefixed CamelCase field accessor (e.g. ".Resource") or empty
+	BodyType       string // qualified Go type name of the body field message, for nil-initialization
+	HasBody        bool   // true when the HTTP rule declares a body
+	HasQueryParams bool   // true when query parameters should be populated (body="" or body="field")
 }
 
 func (s *serviceDesc) execute() string {
 	buf := new(bytes.Buffer)
 	tmpl, err := template.New("http-rest").
-		Funcs(template.FuncMap{"parsePathValues": s.parsePathValues}).
+		Funcs(template.FuncMap{"renderPathValue": s.renderPathValue}).
 		Parse(strings.TrimSpace(restTemplate))
 	if err != nil {
 		panic(err)
@@ -125,31 +140,45 @@ func (s *serviceDesc) execute() string {
 	return buf.String()
 }
 
-func (s *serviceDesc) parsePathValues(path string) string {
-	subPattern0 := regexp.MustCompile(`(?i)^{params[0-9]+}$`)
-	if subPattern0.MatchString(path) {
-		path = fmt.Sprintf(
-			`%sURLParam(r, "%s")`,
-			s.ChiPkg,
-			strings.TrimRight(strings.TrimLeft(path, "{"), "}"),
-		)
-		return path
+// renderPathValue converts a slice of pathBindingSegments into a Go
+// expression string that, when executed in the generated handler, reconstructs
+// the bound path value at runtime using chi.URLParam calls and string literals.
+//
+// Example: [literal("orgs"), param("params1"), literal("settings")]
+// → `"orgs/" + chi.URLParam(r, "params1") + "/settings"`
+func (s *serviceDesc) renderPathValue(segments []pathBindingSegment) string {
+	if len(segments) == 0 {
+		return `""`
 	}
-	path = subPattern0.ReplaceAllStringFunc(path, func(subStr string) string {
-		params := pathPattern.FindStringSubmatch(subStr)
-		return fmt.Sprintf(`%sURLParam(r, "%s")+"/`, s.ChiPkg, params[1])
-	})
-	subPattern1 := regexp.MustCompile(`(?i)/{(params[0-9]+)}/`)
-	path = subPattern1.ReplaceAllStringFunc(path, func(subStr string) string {
-		params := pathPattern.FindStringSubmatch(subStr)
-		return fmt.Sprintf(`/"+%sURLParam(r, "%s")+"/`, s.ChiPkg, params[1])
-	})
-	subPattern2 := regexp.MustCompile(`(?i)/{(params[0-9]+)}`)
-	path = subPattern2.ReplaceAllStringFunc(path, func(subStr string) string {
-		params := pathPattern.FindStringSubmatch(subStr)
-		return fmt.Sprintf(`/"+%sURLParam(r, "%s")+"`, s.ChiPkg, params[1])
-	})
-	path = fmt.Sprintf(`"%s"`, path)
-	path = strings.TrimRight(path, `+""`) // nolint:staticcheck
-	return path
+
+	parts := make([]string, 0, len(segments)*2)
+
+	// Accumulate consecutive literal segments (with "/" separators) into a
+	// single quoted string, flushing when a param segment is encountered.
+	var literal strings.Builder
+	flushLiteral := func() {
+		if literal.Len() == 0 {
+			return
+		}
+		parts = append(parts, strconv.Quote(literal.String()))
+		literal.Reset()
+	}
+
+	for idx, segment := range segments {
+		// Insert "/" between segments. The separator is accumulated into the
+		// literal buffer so that adjacent literals are merged cleanly.
+		if idx > 0 {
+			literal.WriteString("/")
+		}
+		if segment.Param != "" {
+			flushLiteral()
+			parts = append(parts, fmt.Sprintf(`%sURLParam(r, %q)`, s.ChiPkg, segment.Param))
+			continue
+		}
+		literal.WriteString(segment.Literal)
+	}
+	// Flush any trailing literal text.
+	flushLiteral()
+
+	return strings.Join(parts, " + ")
 }
