@@ -686,6 +686,55 @@ func TestGenerateFiles_BodyStarSkipsQueryParsing(t *testing.T) {
 	assert.Contains(t, output, `PopulateFieldFromPath(protoReq, "name", val)`)
 }
 
+func TestGenerateFiles_OmitsRestImportWhenHelpersAreUnused(t *testing.T) {
+	methodSets = make(map[string]int)
+
+	gen := newTestPlugin(t, &descriptorpb.FileDescriptorProto{
+		Name:    proto.String("test.proto"),
+		Package: proto.String("test"),
+		Options: &descriptorpb.FileOptions{
+			GoPackage: proto.String(
+				"github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rest;main",
+			),
+		},
+		Service: []*descriptorpb.ServiceDescriptorProto{
+			{
+				Name: proto.String("ActionsService"),
+				Method: []*descriptorpb.MethodDescriptorProto{
+					{
+						Name:       proto.String("RunAction"),
+						InputType:  proto.String(".test.RunActionRequest"),
+						OutputType: proto.String(".test.RunActionResponse"),
+						Options:    &descriptorpb.MethodOptions{},
+					},
+				},
+			},
+		},
+		MessageType: []*descriptorpb.DescriptorProto{
+			{Name: proto.String("RunActionRequest")},
+			{Name: proto.String("RunActionResponse")},
+		},
+	})
+	proto.SetExtension(
+		gen.Files[0].Services[0].Methods[0].Desc.Options(),
+		annotations.E_Http,
+		&annotations.HttpRule{
+			Pattern: &annotations.HttpRule_Post{
+				Post: "/v1/actions:run",
+			},
+			Body: "*",
+		},
+	)
+
+	err := generateFiles(gen, gen.Files[0])
+	assert.NoError(t, err)
+
+	output := generatedFileContent(t, gen, "test_rest.pb.go")
+	assert.NotContains(t, output, `"github.com/codesjoy/yggdrasil/v2/remote/rest"`)
+	assert.NotContains(t, output, `PopulateQueryParameters(`)
+	assert.NotContains(t, output, `PopulateFieldFromPath(`)
+}
+
 // literalSegment creates a pathBindingSegment representing a static path component.
 func literalSegment(value string) pathBindingSegment {
 	return pathBindingSegment{Literal: value}
