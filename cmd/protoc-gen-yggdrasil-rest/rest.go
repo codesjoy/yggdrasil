@@ -28,6 +28,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
+// Import path constants used to qualify identifiers in generated code.
 const (
 	httpPkg        = protogen.GoImportPath("net/http")
 	ctxPkg         = protogen.GoImportPath("context")
@@ -40,6 +41,8 @@ const (
 	codePkg        = protogen.GoImportPath("google.golang.org/genproto/googleapis/rpc/code")
 )
 
+// methodSets tracks the per-method-name counter used to disambiguate overloaded
+// handlers when the same RPC is bound to multiple HTTP routes.
 var methodSets = make(map[string]int)
 
 // generateFiles generates a _rest.pb.go file containing yggdrasil errors definitions.
@@ -92,6 +95,9 @@ func generateFileContent(
 	return nil
 }
 
+// genService builds the REST handler functions and service descriptor for a
+// single protobuf service. It iterates over all methods, resolves their HTTP
+// annotations, and emits the generated Go source via the template engine.
 func genService(
 	_ *protogen.Plugin,
 	_ *protogen.File,
@@ -105,7 +111,8 @@ func genService(
 		g.P("//")
 		g.P(deprecationComment)
 	}
-	// HTTP Server.
+
+	// Build the service descriptor with qualified import paths for generated code.
 	sd := &serviceDesc{
 		// ChiPkg:         g.QualifiedGoIdent(chiPkg.Ident("")),
 		HTTPPkg:        g.QualifiedGoIdent(httpPkg.Ident("")),
@@ -127,17 +134,24 @@ func genService(
 			return err
 		}
 	}
+
+	// Lazily set ChiPkg only when at least one method has path bindings,
+	// so that the chi import is omitted from generated files that don't need it.
 	for _, item := range sd.Methods {
-		if len(item.PathVars) > 0 {
+		if len(item.PathBindings) > 0 {
 			sd.ChiPkg = g.QualifiedGoIdent(
 				protogen.GoImportPath("github.com/go-chi/chi/v5").Ident(""),
 			)
+			break
 		}
 	}
 	g.P(sd.execute())
 	return nil
 }
 
+// buildMethod processes a single protobuf method. It extracts the HttpRule
+// annotation, resolves the main rule and any additional_bindings into
+// methodDesc entries, and appends them to the service descriptor.
 func buildMethod(sd *serviceDesc, g *protogen.GeneratedFile, method *protogen.Method) error {
 	if method.Desc.IsStreamingClient() || method.Desc.IsStreamingServer() {
 		return nil
@@ -167,6 +181,14 @@ func buildMethod(sd *serviceDesc, g *protogen.GeneratedFile, method *protogen.Me
 	return nil
 }
 
+// buildHTTPRule constructs a methodDesc from a single HttpRule. It resolves the
+// HTTP method and path, parses path bindings, and determines body/query-param
+// handling based on the rule's body field.
+//
+// Body semantics:
+//   - body="*"  → entire request is JSON-decoded; no query params emitted.
+//   - body="x"  → field "x" is JSON-decoded; remaining fields populated from query.
+//   - body=""   → no body (GET/DELETE); all fields populated from query.
 func buildHTTPRule(
 	g *protogen.GeneratedFile,
 	m *protogen.Method,
@@ -214,10 +236,15 @@ func buildHTTPRule(
 		}
 	}
 
-	if body == "*" {
+	switch body {
+	case "*":
 		md.HasBody = true
-	} else if body != "" {
+		md.HasQueryParams = false
+	case "":
+		md.HasQueryParams = true
+	default:
 		md.HasBody = true
+		md.HasQueryParams = true
 		md.Body = "." + camelCaseVars(body)
 		// Store the body field type for initialization in generated code
 		if bodyType := getBodyFieldType(g, m.Input, body); bodyType != "" {
@@ -245,11 +272,15 @@ func getBodyFieldType(g *protogen.GeneratedFile, msg *protogen.Message, bodyFiel
 	return ""
 }
 
+// buildMethodDesc creates a partially-populated methodDesc with the method
+// name, overload counter, request type, and resolved path bindings.
 func buildMethodDesc(
 	g *protogen.GeneratedFile,
 	m *protogen.Method,
 	method, path string,
 ) (*methodDesc, error) {
+	// Increment the overload counter after this function returns so that
+	// the next call with the same GoName gets a higher Num value.
 	defer func() { methodSets[m.GoName]++ }()
 	desc := &methodDesc{
 		Name:    m.GoName,
@@ -257,54 +288,201 @@ func buildMethodDesc(
 		Request: g.QualifiedGoIdent(m.Input.GoIdent),
 		Method:  method,
 	}
-	desc.Path, desc.PathVars = buildPathVars(path)
+	var err error
+	desc.Path, desc.PathBindings, err = buildPathVars(path)
+	if err != nil {
+		return nil, err
+	}
 	return desc, nil
 }
 
 var (
-	pathPattern = regexp.MustCompile(`(?i){([a-z.0-9_\s]+)=?([^{}]*)}`)
-	subPattern  = regexp.MustCompile(`(?i)(/[*]+)`)
+	// pathPattern extracts brace-delimited path variables from a route template.
+	// Captures: group 1 = field path (e.g. "name" or "resource.name"),
+	// group 2 = optional template (e.g. "users/*").
+	pathPattern = regexp.MustCompile(`{([^{}=]*)(?:=([^{}]*))?}`)
+
+	// fieldPathPattern validates that a binding name is a dotted sequence of
+	// lowercase identifiers (e.g. "name", "resource.name").
+	fieldPathPattern = regexp.MustCompile(`^[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)*$`)
 )
 
-func buildPathVars(path string) (string, map[string]string) {
-	nameVars := make(map[string]string)
-	paramsIdx := 0
-
-	path = pathPattern.ReplaceAllStringFunc(path, func(s string) string {
-		params := pathPattern.FindStringSubmatch(s)
-		name := strings.TrimSpace(params[1])
-		if len(params) <= 2 {
-			s = fmt.Sprintf("{params%d}", paramsIdx)
-			nameVars[name] = s
-			paramsIdx++
-			return s
-		}
-
-		if strings.HasPrefix(params[1], "/") || strings.HasSuffix(params[1], "/") {
-			s = fmt.Sprintf("{params%d}", paramsIdx)
-			nameVars[name] = s
-			paramsIdx++
-			return s
-		}
-		values := strings.Split(params[2], "/")
-		if len(values)%2 == 1 {
-			s = fmt.Sprintf("{params%d}", paramsIdx)
-			nameVars[name] = s
-			paramsIdx++
-			return s
-		}
-
-		s = subPattern.ReplaceAllStringFunc(params[2], func(string) string {
-			paramsIdx++
-			return fmt.Sprintf("/{params%d}", paramsIdx)
-		})
-		nameVars[name] = s
-		return s
-	})
-
-	return path, nameVars
+// pathBindingSegment represents one segment of a resolved path binding.
+// Exactly one of Literal or Param is set:
+//   - Literal: a static path component (e.g. "users", "settings").
+//   - Param: a runtime route parameter (e.g. "params1").
+type pathBindingSegment struct {
+	Literal string
+	Param   string
 }
 
+// pathVarBinding associates a protobuf field path with its resolved path
+// segments. For example, binding "name" in "/v1/{name=organizations/*/settings}"
+// produces FieldPath="name" with segments [literal("organizations"), param("params1"), literal("settings")].
+type pathVarBinding struct {
+	FieldPath string
+	Segments  []pathBindingSegment
+}
+
+// pathBindingExpansion is an intermediate result from expandPathBinding containing
+// the rewritten route string and the structured segments for value reconstruction.
+type pathBindingExpansion struct {
+	route    string
+	segments []pathBindingSegment
+}
+
+// buildPathVars parses all brace-delimited bindings in a route path and returns:
+//   - route: the rewritten path with placeholders (e.g. "/v1/organizations/{params1}/settings").
+//   - bindings: structured field-path-to-segments mappings for each binding.
+//   - error: validation failures (empty segments, unsupported wildcards, etc.).
+func buildPathVars(path string) (string, []pathVarBinding, error) {
+	var bindings []pathVarBinding
+	paramsIdx := 0
+	matches := pathPattern.FindAllStringSubmatchIndex(path, -1)
+	if len(matches) == 0 {
+		return path, bindings, nil
+	}
+
+	// Rebuild the path string, replacing each {binding} with its expanded route.
+	var b strings.Builder
+	last := 0
+	for _, match := range matches {
+		// Copy the literal text between the previous match and this one.
+		b.WriteString(path[last:match[0]])
+
+		placeholder := path[match[0]:match[1]]
+		name := path[match[2]:match[3]]
+
+		// The template (the part after '=') is optional.
+		template := ""
+		hasTemplate := match[4] >= 0 && match[5] >= 0
+		if hasTemplate {
+			template = path[match[4]:match[5]]
+		}
+
+		expansion, nextIdx, err := expandPathBinding(
+			placeholder,
+			name,
+			template,
+			hasTemplate,
+			paramsIdx,
+		)
+		if err != nil {
+			return "", nil, fmt.Errorf("path %q: %w", path, err)
+		}
+		b.WriteString(expansion.route)
+		bindings = append(bindings, pathVarBinding{
+			FieldPath: name,
+			Segments:  expansion.segments,
+		})
+		paramsIdx = nextIdx
+		last = match[1]
+	}
+	// Append any trailing literal text after the last binding.
+	b.WriteString(path[last:])
+
+	return b.String(), bindings, nil
+}
+
+// expandPathBinding resolves a single brace-delimited binding (e.g.
+// "{name=organizations/*/settings}") into a rewritten route fragment and a
+// list of structured segments. It returns the expansion, the next available
+// parameter index, and any validation error.
+//
+// The sawWildcard flag ensures that the first '*' in a template bumps the
+// parameter index by one, reserving paramsIdx for the binding counter and
+// using paramsIdx+1 for the first actual wildcard capture. Subsequent '*'
+// segments continue incrementing from there.
+func expandPathBinding(
+	placeholder, name, template string,
+	hasTemplate bool,
+	paramsIdx int,
+) (pathBindingExpansion, int, error) {
+	// Step 1: Validate the field path (e.g. "name", "resource.name").
+	if !isValidBindingFieldPath(name) {
+		return pathBindingExpansion{}, paramsIdx, fmt.Errorf("invalid binding %q", placeholder)
+	}
+
+	// Step 2: If there is no template or the template is a single wildcard,
+	// the entire binding maps to one placeholder parameter.
+	if !hasTemplate || template == "*" {
+		param := fmt.Sprintf("{params%d}", paramsIdx)
+		return pathBindingExpansion{
+			route: param,
+			segments: []pathBindingSegment{
+				{Param: strings.Trim(param, "{}")},
+			},
+		}, paramsIdx + 1, nil
+	}
+	if template == "" {
+		return pathBindingExpansion{}, paramsIdx, fmt.Errorf(
+			"binding %q has an empty template",
+			placeholder,
+		)
+	}
+
+	// Step 3: Split the template on '/' and classify each segment as either
+	// a literal or a wildcard parameter placeholder.
+	segments := strings.Split(template, "/")
+	routeParts := make([]string, 0, len(segments))
+	valueParts := make([]pathBindingSegment, 0, len(segments))
+	nextIdx := paramsIdx
+	sawWildcard := false
+	for _, segment := range segments {
+		// Reject empty segments caused by leading/trailing/double slashes.
+		if segment == "" {
+			return pathBindingExpansion{}, paramsIdx, fmt.Errorf(
+				"binding %q contains an empty path segment",
+				placeholder,
+			)
+		}
+		// Multi-segment wildcard is not supported by chi router.
+		if segment == "**" || strings.Contains(segment, "**") {
+			return pathBindingExpansion{}, paramsIdx, fmt.Errorf(
+				"binding %q uses unsupported multi-segment wildcard \"**\"",
+				placeholder,
+			)
+		}
+		if segment == "*" {
+			// The first wildcard in this template increments nextIdx past
+			// paramsIdx so that the binding counter slot is skipped.
+			if !sawWildcard {
+				nextIdx++
+				sawWildcard = true
+			}
+			param := fmt.Sprintf("{params%d}", nextIdx)
+			routeParts = append(routeParts, param)
+			valueParts = append(valueParts, pathBindingSegment{Param: strings.Trim(param, "{}")})
+			nextIdx++
+			continue
+		}
+		// Partial wildcards like "a*b" are not valid.
+		if strings.Contains(segment, "*") {
+			return pathBindingExpansion{}, paramsIdx, fmt.Errorf(
+				"binding %q contains an unsupported wildcard segment %q",
+				placeholder,
+				segment,
+			)
+		}
+		// Static literal segment.
+		routeParts = append(routeParts, segment)
+		valueParts = append(valueParts, pathBindingSegment{Literal: segment})
+	}
+	return pathBindingExpansion{
+		route:    strings.Join(routeParts, "/"),
+		segments: valueParts,
+	}, nextIdx, nil
+}
+
+// isValidBindingFieldPath returns true if name is a valid dotted field path
+// (e.g. "name", "resource.name") matching the protobuf field naming convention.
+func isValidBindingFieldPath(name string) bool {
+	return fieldPathPattern.MatchString(name)
+}
+
+// camelCaseVars converts a dot-separated snake_case path (e.g. "resource.name")
+// into a dot-separated CamelCase path (e.g. "Resource.Name") for use as a Go
+// struct field accessor in generated code.
 func camelCaseVars(s string) string {
 	if s == "" {
 		return ""
@@ -319,7 +497,7 @@ func camelCaseVars(s string) string {
 	return strings.Join(vars, ".")
 }
 
-// strToCamelCase converts from underscore separated form to camel case form.
+// strToCamelCase converts a snake_case identifier to CamelCase (e.g. "user_id" → "UserId").
 func strToCamelCase(s string) string {
 	if s == "" {
 		return ""
