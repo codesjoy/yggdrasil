@@ -118,7 +118,6 @@ func genService(
 		HTTPPkg:        g.QualifiedGoIdent(httpPkg.Ident("")),
 		MarshalerPkg:   g.QualifiedGoIdent(marshalerPkg.Ident("")),
 		StatusPkg:      g.QualifiedGoIdent(statusPkg.Ident("")),
-		RestPkg:        g.QualifiedGoIdent(restPkg.Ident("")),
 		SvrPkg:         g.QualifiedGoIdent(svrPkg.Ident("")),
 		CodePkg:        g.QualifiedGoIdent(codePkg.Ident("")),
 		CtxPkg:         g.QualifiedGoIdent(ctxPkg.Ident("")),
@@ -135,13 +134,18 @@ func genService(
 		}
 	}
 
-	// Lazily set ChiPkg only when at least one method has path bindings,
-	// so that the chi import is omitted from generated files that don't need it.
+	// Lazily set RestPkg and ChiPkg only when needed,
+	// so that unused imports are omitted from generated files.
 	for _, item := range sd.Methods {
+		if item.HasQueryParams || len(item.PathBindings) > 0 {
+			sd.RestPkg = g.QualifiedGoIdent(restPkg.Ident(""))
+		}
 		if len(item.PathBindings) > 0 {
 			sd.ChiPkg = g.QualifiedGoIdent(
 				protogen.GoImportPath("github.com/go-chi/chi/v5").Ident(""),
 			)
+		}
+		if sd.RestPkg != "" && sd.ChiPkg != "" {
 			break
 		}
 	}
