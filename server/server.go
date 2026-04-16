@@ -16,6 +16,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -223,7 +224,11 @@ func (s *server) RegisterRestRawHandlers(sd ...*RestRawHandlerDesc) {
 	}
 }
 
-func (s *server) Stop() error {
+func (s *server) Stop(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	s.mu.Lock()
 	if s.state == serverStateInit {
 		s.state = serverStateClosing
@@ -247,7 +252,7 @@ func (s *server) Stop() error {
 		wg.Add(1)
 		go func(srv remote.Server) {
 			defer wg.Done()
-			if err := srv.Stop(); err != nil {
+			if err := srv.Stop(ctx); err != nil {
 				mu.Lock()
 				errs = errors.Join(errs, err)
 				mu.Unlock()
@@ -262,7 +267,7 @@ func (s *server) Stop() error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := s.restSvr.Stop(); err != nil {
+			if err := s.restSvr.Stop(ctx); err != nil {
 				mu.Lock()
 				errs = errors.Join(errs, err)
 				mu.Unlock()
@@ -279,7 +284,7 @@ func (s *server) Stop() error {
 func (s *server) Serve(startFlag chan<- struct{}) (err error) {
 	defer func() {
 		if err != nil {
-			_ = s.Stop()
+			_ = s.Stop(context.Background())
 		}
 		if startFlag != nil {
 			close(startFlag)

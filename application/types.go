@@ -14,10 +14,12 @@
 
 package application
 
+import "context"
+
 // InternalServer internal server
 type InternalServer interface {
 	// Serve serves the internal server
 	Serve() error
 	// Stop stops the internal server
-	Stop() error
+	Stop(context.Context) error
 }

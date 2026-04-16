@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/resolver"
 	"github.com/codesjoy/yggdrasil/v2/stats"
 	"github.com/codesjoy/yggdrasil/v2/stream"
+	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -563,4 +565,159 @@ func TestNewClient_WithDefaults(t *testing.T) {
 
 	// The balancer should have received the static endpoint
 	// We can't check the concrete type since it's not exported, but we verified the Type()
+}
+
+func TestClient_CloseConcurrentUpdateState(t *testing.T) {
+	appName := "test_close_concurrent_update_state"
+	conf := map[string]interface{}{
+		"balancer": "mock_balancer",
+		"remote": map[string]interface{}{
+			"endpoints": []resolver.BaseEndpoint{
+				{Address: "127.0.0.1:8080", Protocol: "mock_protocol"},
+			},
+		},
+	}
+
+	require.NoError(t, setupConfig(appName, conf))
+
+	cli, err := NewClient(context.Background(), appName)
+	require.NoError(t, err)
+
+	c := cli.(*client)
+	state := resolver.BaseState{
+		Endpoints: []resolver.Endpoint{
+			resolver.BaseEndpoint{Address: "127.0.0.1:8080", Protocol: "mock_protocol"},
+		},
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 500; j++ {
+				c.UpdateState(state)
+			}
+		}()
+	}
+
+	closeDone := make(chan error, 1)
+	go func() {
+		closeDone <- cli.Close()
+	}()
+
+	select {
+	case err := <-closeDone:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close did not complete")
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("UpdateState goroutines did not complete")
+	}
+}
+
+func TestNewClient_AddWatchFailureCleansUp(t *testing.T) {
+	appName := "test_add_watch_failure_cleanup"
+	balancerName := "tracking_balancer_add_watch_failure"
+	resolverType := "failing_add_watch_type"
+	resolverName := "failing_add_watch_resolver"
+
+	trackingBalancer := newMockBalancer()
+	var serializerDone <-chan struct{}
+	balancer.RegisterBuilder(
+		balancerName,
+		func(serviceName, balancerName string, cli balancer.Client) (balancer.Balancer, error) {
+			if bc, ok := cli.(*balancerClient); ok {
+				serializerDone = bc.serializer.Done()
+			}
+			return trackingBalancer, nil
+		},
+	)
+
+	failingResolver := newMockResolver()
+	failingResolver.addErr = errors.New("add watch failed")
+	resolver.RegisterBuilder(resolverType, func(name string) (resolver.Resolver, error) {
+		return failingResolver, nil
+	})
+
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "resolver", resolverName, "type"), resolverType))
+	require.NoError(
+		t,
+		setupConfig(appName, map[string]interface{}{
+			"balancer": balancerName,
+			"resolver": resolverName,
+		}),
+	)
+
+	cli, err := NewClient(context.Background(), appName)
+	require.Nil(t, cli)
+	require.Error(t, err)
+
+	trackingBalancer.mu.Lock()
+	require.True(t, trackingBalancer.closed)
+	trackingBalancer.mu.Unlock()
+
+	require.NotNil(t, serializerDone)
+	select {
+	case <-serializerDone:
+	case <-time.After(time.Second):
+		t.Fatal("serializer context was not canceled")
+	}
+
+	failingResolver.mu.Lock()
+	require.Empty(t, failingResolver.watchers)
+	require.Equal(t, 0, failingResolver.delCount)
+	failingResolver.mu.Unlock()
+}
+
+func TestNewClient_StaticInitFailureCleansUp(t *testing.T) {
+	appName := "test_static_init_failure_cleanup"
+	balancerName := "tracking_balancer_static_failure"
+
+	trackingBalancer := newMockBalancer()
+	var serializerDone <-chan struct{}
+	balancer.RegisterBuilder(
+		balancerName,
+		func(serviceName, balancerName string, cli balancer.Client) (balancer.Balancer, error) {
+			if bc, ok := cli.(*balancerClient); ok {
+				serializerDone = bc.serializer.Done()
+			}
+			return trackingBalancer, nil
+		},
+	)
+
+	require.NoError(
+		t,
+		setupConfig(appName, map[string]interface{}{
+			"balancer": balancerName,
+			"remote": map[string]interface{}{
+				"endpoints": []resolver.BaseEndpoint{},
+			},
+		}),
+	)
+
+	cli, err := NewClient(context.Background(), appName)
+	require.Nil(t, cli)
+	require.EqualError(t, err, "no endpoints provided")
+
+	trackingBalancer.mu.Lock()
+	require.True(t, trackingBalancer.closed)
+	trackingBalancer.mu.Unlock()
+
+	require.NotNil(t, serializerDone)
+	select {
+	case <-serializerDone:
+	case <-time.After(time.Second):
+		t.Fatal("serializer context was not canceled")
+	}
 }

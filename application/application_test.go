@@ -28,7 +28,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codesjoy/yggdrasil/v2/governor"
+	"github.com/codesjoy/yggdrasil/v2/internal/constant"
 	"github.com/codesjoy/yggdrasil/v2/registry"
+	yserver "github.com/codesjoy/yggdrasil/v2/server"
 )
 
 // Mock implementations for testing
@@ -67,10 +69,72 @@ func (m *mockInternalServer) Serve() error {
 	return args.Error(0)
 }
 
-func (m *mockInternalServer) Stop() error {
-	args := m.Called()
+func (m *mockInternalServer) Stop(ctx context.Context) error {
+	args := m.Called(ctx)
 	m.stopped = true
 	return args.Error(0)
+}
+
+type blockingInternalServer struct {
+	stopCtx context.Context
+}
+
+func (b *blockingInternalServer) Serve() error {
+	return nil
+}
+
+func (b *blockingInternalServer) Stop(ctx context.Context) error {
+	b.stopCtx = ctx
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+type blockingAppServer struct {
+	stopCtx context.Context
+	endpts  []yserver.Endpoint
+}
+
+func (b *blockingAppServer) RegisterService(*yserver.ServiceDesc, interface{}) {}
+
+func (b *blockingAppServer) RegisterRestService(*yserver.RestServiceDesc, interface{}, ...string) {}
+
+func (b *blockingAppServer) RegisterRestRawHandlers(...*yserver.RestRawHandlerDesc) {}
+
+func (b *blockingAppServer) Serve(chan<- struct{}) error {
+	return nil
+}
+
+func (b *blockingAppServer) Stop(ctx context.Context) error {
+	b.stopCtx = ctx
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (b *blockingAppServer) Endpoints() []yserver.Endpoint {
+	return b.endpts
+}
+
+type stubAppEndpoint struct {
+	scheme   string
+	address  string
+	metadata map[string]string
+	kind     constant.ServerKind
+}
+
+func (e stubAppEndpoint) Scheme() string {
+	return e.scheme
+}
+
+func (e stubAppEndpoint) Address() string {
+	return e.address
+}
+
+func (e stubAppEndpoint) Metadata() map[string]string {
+	return e.metadata
+}
+
+func (e stubAppEndpoint) Kind() constant.ServerKind {
+	return e.kind
 }
 
 // Helper functions
@@ -225,7 +289,8 @@ func TestApplication_Deregister_Success(t *testing.T) {
 	assert.Equal(t, registryStateDone, app.registryState)
 
 	// Then deregister
-	app.deregister()
+	err := app.deregister(context.Background())
+	assert.NoError(t, err)
 	assert.True(t, mockReg.deregistered)
 	assert.Equal(t, registryStateCancel, app.registryState)
 }
@@ -234,7 +299,8 @@ func TestApplication_Deregister_NilRegistry(t *testing.T) {
 	app, _ := newApplication()
 
 	// Test deregistration with nil registry (should not panic)
-	app.deregister()
+	err := app.deregister(context.Background())
+	assert.NoError(t, err)
 	assert.Equal(t, registryStateInit, app.registryState)
 }
 
@@ -245,7 +311,8 @@ func TestApplication_Deregister_NotRegistered(t *testing.T) {
 	app, _ := newApplication(WithRegistry(mockReg))
 
 	// Test deregistration when not registered
-	app.deregister()
+	err := app.deregister(context.Background())
+	assert.NoError(t, err)
 	assert.Equal(t, registryStateInit, app.registryState)
 	assert.False(t, mockReg.deregistered)
 }
@@ -262,7 +329,8 @@ func TestApplication_Deregister_Error(t *testing.T) {
 	app.register()
 
 	// Then deregister with error
-	app.deregister()
+	err := app.deregister(context.Background())
+	assert.Error(t, err)
 	assert.True(t, mockReg.deregistered)
 	assert.Equal(t, registryStateCancel, app.registryState)
 }
@@ -435,17 +503,29 @@ func TestApplication_ConcurrentInit(t *testing.T) {
 
 	// Test concurrent init calls
 	for i := 0; i < 10; i++ {
+		timeout := time.Duration(i) * time.Second
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			app.Init(WithShutdownTimeout(time.Duration(i) * time.Second))
+			app.Init(WithShutdownTimeout(timeout))
 		}()
 	}
 
 	wg.Wait()
 
-	// Should have applied one of the timeouts (the last one to complete)
-	assert.True(t, app.shutdownTimeout > 0)
+	// Any applied value should be one of the requested timeouts.
+	assert.Contains(t, []time.Duration{
+		0,
+		time.Second,
+		2 * time.Second,
+		3 * time.Second,
+		4 * time.Second,
+		5 * time.Second,
+		6 * time.Second,
+		7 * time.Second,
+		8 * time.Second,
+		9 * time.Second,
+	}, app.shutdownTimeout)
 }
 
 func TestEndpoint_Struct(t *testing.T) {
@@ -461,14 +541,34 @@ func TestEndpoint_Struct(t *testing.T) {
 }
 
 func TestApplication_Endpoints_Basic(t *testing.T) {
-	// Skip this test for now since it requires a proper governor
-	// and causes nil pointer dereference issues
-	t.Skip("Skipping endpoint test due to governor initialization complexity")
+	app, err := newApplication()
+	require.NoError(t, err)
+
+	endpoints := app.Endpoints()
+	assert.NotNil(t, endpoints)
+	assert.Empty(t, endpoints)
 }
 
 func TestApplication_Endpoints_WithInternalServers(t *testing.T) {
-	// Skip this test since it requires governor setup
-	t.Skip("Skipping endpoint test with internal servers")
+	mainServer := &blockingAppServer{
+		endpts: []yserver.Endpoint{
+			stubAppEndpoint{
+				scheme:   "grpc",
+				address:  "127.0.0.1:9000",
+				metadata: nil,
+				kind:     constant.ServerKindRPC,
+			},
+		},
+	}
+
+	app, err := newApplication(WithServer(mainServer))
+	require.NoError(t, err)
+
+	endpoints := app.Endpoints()
+	require.Len(t, endpoints, 1)
+	assert.Equal(t, "127.0.0.1:9000", endpoints[0].Address())
+	assert.Equal(t, "grpc", endpoints[0].Scheme())
+	assert.Equal(t, string(constant.ServerKindRPC), endpoints[0].Metadata()[registry.MDServerKind])
 }
 
 func TestApplication_StopServers_Hooks(t *testing.T) {
@@ -563,7 +663,7 @@ func TestApplication_MutexSafety(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			app.register()
-			app.deregister()
+			_ = app.deregister(context.Background())
 		}()
 	}
 
@@ -705,18 +805,72 @@ func TestApplication_RunStop_Integration(t *testing.T) {
 	}
 }
 
+func TestApplication_Stop_UsesShutdownTimeout(t *testing.T) {
+	mainServer := &blockingAppServer{}
+	internalServer := &blockingInternalServer{}
+
+	app, err := newApplication(
+		WithServer(mainServer),
+		WithInternalServer(internalServer),
+		WithShutdownTimeout(30*time.Millisecond),
+	)
+	require.NoError(t, err)
+
+	start := time.Now()
+	err = app.Stop()
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Less(t, elapsed, 250*time.Millisecond)
+	if assert.NotNil(t, mainServer.stopCtx) {
+		assert.ErrorIs(t, mainServer.stopCtx.Err(), context.DeadlineExceeded)
+	}
+	if assert.NotNil(t, internalServer.stopCtx) {
+		assert.ErrorIs(t, internalServer.stopCtx.Err(), context.DeadlineExceeded)
+	}
+}
+
 func TestApplication_Endpoints_Integration(t *testing.T) {
 	// Create a real governor for testing Endpoints functionality
 	gov, err := governor.NewServer()
 	assert.NoError(t, err)
+	t.Cleanup(func() { _ = gov.Stop() })
 	app, err := newApplication(WithGovernor(gov))
 	assert.NoError(t, err)
 
 	// Test Endpoints with real governor
 	endpoints := app.Endpoints()
 	assert.NotNil(t, endpoints)
+	require.Len(t, endpoints, 1)
 
 	// The endpoints should be accessible since governor is initialized
-	// At minimum, it should not panic
 	assert.IsType(t, []registry.Endpoint{}, endpoints)
+	assert.Equal(t, string(constant.ServerKindGovernor), endpoints[0].Metadata()[registry.MDServerKind])
+}
+
+func TestApplication_Endpoints_WithServerAndGovernor(t *testing.T) {
+	gov, err := governor.NewServer()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = gov.Stop() })
+
+	mainServer := &blockingAppServer{
+		endpts: []yserver.Endpoint{
+			stubAppEndpoint{
+				scheme:   "grpc",
+				address:  "127.0.0.1:9001",
+				metadata: map[string]string{"version": "v1"},
+				kind:     constant.ServerKindRPC,
+			},
+		},
+	}
+
+	app, err := newApplication(WithServer(mainServer), WithGovernor(gov))
+	require.NoError(t, err)
+
+	endpoints := app.Endpoints()
+	require.Len(t, endpoints, 2)
+	assert.Equal(t, string(constant.ServerKindRPC), endpoints[0].Metadata()[registry.MDServerKind])
+	assert.Equal(t, "v1", endpoints[0].Metadata()["version"])
+	assert.Equal(t, string(constant.ServerKindGovernor), endpoints[1].Metadata()[registry.MDServerKind])
 }

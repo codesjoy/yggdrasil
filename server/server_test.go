@@ -285,7 +285,7 @@ func TestStop(t *testing.T) {
 		state:   serverStateRunning,
 	}
 
-	err := s.Stop()
+	err := s.Stop(context.Background())
 	assert.NoError(t, err)
 	assert.Equal(t, serverStateClosing, s.state)
 }
@@ -297,7 +297,7 @@ func TestStopFromInitState(t *testing.T) {
 		state:   serverStateInit,
 	}
 
-	err := s.Stop()
+	err := s.Stop(context.Background())
 	assert.NoError(t, err)
 	assert.Equal(t, serverStateClosing, s.state)
 }
@@ -309,7 +309,7 @@ func TestStopFromClosingState(t *testing.T) {
 		state:   serverStateClosing,
 	}
 
-	err := s.Stop()
+	err := s.Stop(context.Background())
 	assert.NoError(t, err)
 	assert.Equal(t, serverStateClosing, s.state)
 }
@@ -446,7 +446,7 @@ func (m *mockRestServer) Serve() error {
 	return nil
 }
 
-func (m *mockRestServer) Stop() error {
+func (m *mockRestServer) Stop(context.Context) error {
 	return nil
 }
 
@@ -529,9 +529,65 @@ func (m *mockSlowServer) Handle() error {
 	return nil
 }
 
-func (m *mockSlowServer) Stop() error {
+func (m *mockSlowServer) Stop(context.Context) error {
 	time.Sleep(m.delay)
 	return nil
+}
+
+type mockBlockingServer struct {
+	stopCtx context.Context
+}
+
+func (m *mockBlockingServer) Info() remote.ServerInfo {
+	return remote.ServerInfo{Protocol: "mock"}
+}
+
+func (m *mockBlockingServer) Start() error {
+	return nil
+}
+
+func (m *mockBlockingServer) Handle() error {
+	return nil
+}
+
+func (m *mockBlockingServer) Stop(ctx context.Context) error {
+	m.stopCtx = ctx
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+type mockBlockingRestServer struct {
+	stopCtx context.Context
+}
+
+func (m *mockBlockingRestServer) GetAddress() string {
+	return ""
+}
+
+func (m *mockBlockingRestServer) GetAttributes() map[string]string {
+	return nil
+}
+
+func (m *mockBlockingRestServer) Info() rest.ServerInfo {
+	return m
+}
+
+func (m *mockBlockingRestServer) RPCHandle(string, string, rest.HandlerFunc) {}
+
+func (m *mockBlockingRestServer) RawHandle(string, string, http.HandlerFunc) {}
+
+func (m *mockBlockingRestServer) Start() error {
+	return nil
+}
+
+func (m *mockBlockingRestServer) Serve() error {
+	return nil
+}
+
+func (m *mockBlockingRestServer) Stop(ctx context.Context) error {
+	m.stopCtx = ctx
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 func TestStopParallel(t *testing.T) {
@@ -545,7 +601,7 @@ func TestStopParallel(t *testing.T) {
 	}
 
 	start := time.Now()
-	err := s.Stop()
+	err := s.Stop(context.Background())
 	elapsed := time.Since(start)
 
 	assert.NoError(t, err)
@@ -559,6 +615,33 @@ func TestStopParallel(t *testing.T) {
 		200*time.Millisecond,
 		"Stop() took too long, expected parallel execution",
 	)
+}
+
+func TestStopTimeout(t *testing.T) {
+	blockingRPC := &mockBlockingServer{}
+	blockingREST := &mockBlockingRestServer{}
+	s := &server{
+		servers:    []remote.Server{blockingRPC},
+		restEnable: true,
+		restSvr:    blockingREST,
+		state:      serverStateRunning,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := s.Stop(ctx)
+	elapsed := time.Since(start)
+
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Less(t, elapsed, 250*time.Millisecond)
+	if assert.NotNil(t, blockingRPC.stopCtx) {
+		assert.ErrorIs(t, blockingRPC.stopCtx.Err(), context.DeadlineExceeded)
+	}
+	if assert.NotNil(t, blockingREST.stopCtx) {
+		assert.ErrorIs(t, blockingREST.stopCtx.Err(), context.DeadlineExceeded)
+	}
 }
 
 // Mock failing server
@@ -636,7 +719,7 @@ func TestServe_SignalHandling(t *testing.T) {
 		}
 
 		// Stop the server
-		if err := s.Stop(); err != nil {
+		if err := s.Stop(context.Background()); err != nil {
 			t.Errorf("Stop() error = %v", err)
 		}
 
@@ -707,7 +790,7 @@ func TestServe_SignalHandling(t *testing.T) {
 		}
 
 		// Stop the server
-		if err := s.Stop(); err != nil {
+		if err := s.Stop(context.Background()); err != nil {
 			t.Errorf("Stop() error = %v", err)
 		}
 

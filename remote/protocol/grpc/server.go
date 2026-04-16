@@ -248,17 +248,36 @@ func (s *server) newTransport(c net.Conn) transport2.ServerTransport {
 	return st
 }
 
-func (s *server) Stop() error {
+func (s *server) Stop(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	s.mu.Lock()
 	if !s.serve {
-		s.stopped = true
+		if !s.stopped {
+			s.stopped = true
+			s.conns = nil
+			close(s.stoppedCh)
+		}
+		stoppedCh := s.stoppedCh
 		s.mu.Unlock()
-		return nil
+		select {
+		case <-stoppedCh:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
+	stoppedCh := s.stoppedCh
 	if s.stopped {
 		s.mu.Unlock()
-		<-s.stoppedCh
-		return nil
+		select {
+		case <-stoppedCh:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	s.stopped = true
 	s.mu.Unlock()
@@ -266,24 +285,34 @@ func (s *server) Stop() error {
 	if s.lis != nil {
 		_ = s.lis.Close()
 	}
+	s.mu.Lock()
 	if !s.drain {
 		for st := range s.conns {
 			st.Drain()
 		}
 		s.drain = true
 	}
+	s.mu.Unlock()
 
-	// Wait for serving threads to be ready to exit.  Only then can we be sure no
-	// new conns will be created.
+	go s.waitForTransportShutdown()
+
+	select {
+	case <-stoppedCh:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *server) waitForTransportShutdown() {
 	s.serveWG.Wait()
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	for len(s.conns) != 0 {
 		s.cv.Wait()
 	}
 	s.conns = nil
 	close(s.stoppedCh)
-	s.mu.Unlock()
-	return nil
 }
 
 func (s *server) Info() remote.ServerInfo {

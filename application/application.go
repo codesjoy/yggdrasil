@@ -142,8 +142,8 @@ func (app *application) Stop() error {
 		defer cancel()
 
 		err = errors.Join(err, app.runHooks(ctx, stageBeforeStop))
-		app.deregister()
-		err = errors.Join(err, app.stopServers())
+		err = errors.Join(err, app.deregister(ctx))
+		err = errors.Join(err, app.stopServers(ctx))
 		err = errors.Join(err, app.runHooks(ctx, stageCleanup))
 		err = errors.Join(err, app.runHooks(ctx, stageAfterStop))
 	})
@@ -203,22 +203,22 @@ func (app *application) register() {
 	slog.Info("application has been registered")
 }
 
-func (app *application) deregister() {
+func (app *application) deregister(ctx context.Context) error {
 	if app.registry == nil {
-		return
+		return nil
 	}
 	app.mu.Lock()
 	if app.registryState != registryStateDone {
 		app.mu.Unlock()
-		return
+		return nil
 	}
 	app.registryState = registryStateCancel
 	app.mu.Unlock()
-	ctx, cancel := context.WithTimeout(context.TODO(), defaultShutdownTimeout)
-	defer cancel()
 	if err := app.registry.Deregister(ctx, app); err != nil {
 		slog.Error("fault to deregister application", slog.Any("error", err))
+		return err
 	}
+	return nil
 }
 
 func (app *application) startServers() error {
@@ -258,13 +258,13 @@ func (app *application) startServers() error {
 	return eg.Wait()
 }
 
-func (app *application) stopServers() error {
+func (app *application) stopServers(ctx context.Context) error {
 	slog.Info("stopping servers")
 	eg := errgroup.Group{}
 	if app.server != nil {
 		eg.Go(func() error {
 			slog.Info("stopping main server")
-			if err := app.server.Stop(); err != nil {
+			if err := app.server.Stop(ctx); err != nil {
 				slog.Error("failed to stop main server", slog.Any("error", err))
 				return err
 			}
@@ -274,21 +274,26 @@ func (app *application) stopServers() error {
 	}
 
 	for idx, svr := range app.internalSvr {
-		slog.Info("stopping internal server", slog.Int("index", idx))
-		if err := svr.Stop(); err != nil {
-			slog.Error(
-				"failed to stop internal server",
-				slog.Int("index", idx),
-				slog.Any("error", err),
-			)
-			return err
-		}
-		slog.Info("internal server stopped", slog.Int("index", idx))
+		idx := idx
+		svr := svr
+		eg.Go(func() error {
+			slog.Info("stopping internal server", slog.Int("index", idx))
+			if err := svr.Stop(ctx); err != nil {
+				slog.Error(
+					"failed to stop internal server",
+					slog.Int("index", idx),
+					slog.Any("error", err),
+				)
+				return err
+			}
+			slog.Info("internal server stopped", slog.Int("index", idx))
+			return nil
+		})
 	}
 	if app.governor != nil {
 		eg.Go(func() error {
 			slog.Info("stopping governor")
-			if err := app.governor.Stop(); err != nil {
+			if err := app.governor.Shutdown(ctx); err != nil {
 				slog.Error("failed to stop governor", slog.Any("error", err))
 				return err
 			}
@@ -345,7 +350,7 @@ func (app *application) Endpoints() []registry.Endpoint {
 	endpoints := make([]registry.Endpoint, 0)
 	if app.server != nil {
 		for _, item := range app.server.Endpoints() {
-			attr := maps.Clone(item.Metadata())
+			attr := cloneEndpointMetadata(item.Metadata())
 			attr[registry.MDServerKind] = string(item.Kind())
 			endpoints = append(endpoints, endpoint{
 				address: item.Address(),
@@ -354,15 +359,24 @@ func (app *application) Endpoints() []registry.Endpoint {
 			})
 		}
 	}
-	governorInfo := app.governor.Info()
-	attr := maps.Clone(governorInfo.Attr)
-	attr[registry.MDServerKind] = string(constant.ServerKindGovernor)
-	endpoints = append(endpoints, endpoint{
-		address: governorInfo.Address,
-		scheme:  governorInfo.Scheme,
-		Attr:    attr,
-	})
+	if app.governor != nil {
+		governorInfo := app.governor.Info()
+		attr := cloneEndpointMetadata(governorInfo.Attr)
+		attr[registry.MDServerKind] = string(constant.ServerKindGovernor)
+		endpoints = append(endpoints, endpoint{
+			address: governorInfo.Address,
+			scheme:  governorInfo.Scheme,
+			Attr:    attr,
+		})
+	}
 	return endpoints
+}
+
+func cloneEndpointMetadata(src map[string]string) map[string]string {
+	if cloned := maps.Clone(src); cloned != nil {
+		return cloned
+	}
+	return map[string]string{}
 }
 
 func (app *application) getShutdownTimeout() time.Duration {

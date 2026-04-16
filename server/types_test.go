@@ -15,6 +15,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -100,7 +101,7 @@ func (m *MockServer) Serve(startFlag chan<- struct{}) error {
 	return nil
 }
 
-func (m *MockServer) Stop() error {
+func (m *MockServer) Stop(context.Context) error {
 	m.stopCalled = true
 	return nil
 }
@@ -202,7 +203,7 @@ func TestServerInterface(t *testing.T) {
 	assert.Equal(t, endpoint, endpoints[0])
 
 	// Test Stop
-	err = server.Stop()
+	err = server.Stop(context.Background())
 	assert.NoError(t, err)
 	assert.True(t, server.stopCalled)
 }

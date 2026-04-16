@@ -15,6 +15,7 @@
 package rest
 
 import (
+	"context"
 	"net/http"
 )
 
@@ -33,6 +34,6 @@ type Server interface {
 	RawHandle(method, path string, h http.HandlerFunc)
 	Start() error
 	Serve() error
-	Stop() error
+	Stop(context.Context) error
 	Info() ServerInfo
 }
