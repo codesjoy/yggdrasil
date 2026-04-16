@@ -19,18 +19,149 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/codesjoy/pkg/utils/xsync"
 	"github.com/codesjoy/yggdrasil/v2/balancer"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/remote"
+	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
+	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/http"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
 	"github.com/codesjoy/yggdrasil/v2/stats"
+	ygstatus "github.com/codesjoy/yggdrasil/v2/status"
 	"github.com/codesjoy/yggdrasil/v2/stream"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/code"
+	stpb "google.golang.org/genproto/googleapis/rpc/status"
 )
+
+type controlledResolver struct {
+	mu              sync.Mutex
+	watcher         resolver.Client
+	onAdd           func(resolver.Client)
+	resolveNowCount int
+}
+
+func newControlledResolver(onAdd func(resolver.Client)) *controlledResolver {
+	return &controlledResolver{onAdd: onAdd}
+}
+
+func (r *controlledResolver) AddWatch(_ string, watcher resolver.Client) error {
+	r.mu.Lock()
+	r.watcher = watcher
+	onAdd := r.onAdd
+	r.mu.Unlock()
+	if onAdd != nil {
+		onAdd(watcher)
+	}
+	return nil
+}
+
+func (r *controlledResolver) DelWatch(_ string, watcher resolver.Client) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.watcher == watcher {
+		r.watcher = nil
+	}
+	return nil
+}
+
+func (*controlledResolver) Type() string {
+	return "controlled_resolver"
+}
+
+func (r *controlledResolver) ResolveNow() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.resolveNowCount++
+}
+
+func (r *controlledResolver) ResolveNowCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.resolveNowCount
+}
+
+func (r *controlledResolver) PushState(state resolver.State) {
+	r.mu.Lock()
+	watcher := r.watcher
+	r.mu.Unlock()
+	if watcher != nil {
+		watcher.UpdateState(state)
+	}
+}
+
+type invokeStatusResult struct {
+	reply stpb.Status
+	err   error
+}
+
+func reserveTCPAddr(t *testing.T) string {
+	t.Helper()
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := lis.Addr().String()
+	require.NoError(t, lis.Close())
+	return addr
+}
+
+func grpcUnaryStatusHandle(ss remote.ServerStream) {
+	var (
+		reply any
+		err   error
+	)
+	defer func() {
+		ss.Finish(reply, err)
+	}()
+
+	err = ss.Start(false, false)
+	if err != nil {
+		return
+	}
+
+	var req stpb.Status
+	err = ss.RecvMsg(&req)
+	if err != nil {
+		return
+	}
+
+	req.Message += ":ok"
+	reply = &req
+}
+
+func startGRPCTestServerAtAddr(t *testing.T, addr string) func() {
+	t.Helper()
+
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "remote", "protocol", "grpc", "network"), "tcp"))
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "remote", "protocol", "grpc", "address"), addr))
+
+	builder := remote.GetServerBuilder("grpc")
+	require.NotNil(t, builder)
+
+	svr, err := builder(grpcUnaryStatusHandle)
+	require.NoError(t, err)
+	require.NoError(t, svr.Start())
+
+	done := make(chan error, 1)
+	go func() {
+		done <- svr.Handle()
+	}()
+
+	return func() {
+		require.NoError(t, svr.Stop(context.Background()))
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(2 * time.Second):
+			t.Fatal("grpc server did not stop in time")
+		}
+	}
+}
 
 func init() {
 	// Register mock balancer builder
@@ -51,6 +182,12 @@ func init() {
 		"mock_protocol",
 		func(ctx context.Context, s string, e resolver.Endpoint, h stats.Handler, f remote.OnStateChange) (remote.Client, error) {
 			return newMockRemoteClient(e.Name(), remote.Ready), nil
+		},
+	)
+	remote.RegisterClientBuilder(
+		"blocking_protocol",
+		func(ctx context.Context, s string, e resolver.Endpoint, h stats.Handler, f remote.OnStateChange) (remote.Client, error) {
+			return newMockRemoteClient(e.Name(), remote.Connecting), nil
 		},
 	)
 }
@@ -464,6 +601,301 @@ func TestClose(t *testing.T) {
 	mb.mu.Unlock()
 }
 
+func TestNewStream_CloseUnblocksBlockedPicker(t *testing.T) {
+	appName := "test_stream_close_unblocks"
+	require.NoError(t, setupConfig(appName, map[string]interface{}{
+		"remote": map[string]interface{}{
+			"endpoints": []resolver.BaseEndpoint{{
+				Address:  "addr",
+				Protocol: "blocking_protocol",
+			}},
+		},
+	}))
+
+	cli, err := NewClient(context.Background(), appName)
+	require.NoError(t, err)
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := cli.NewStream(context.Background(), &stream.Desc{}, "/test/method")
+		errCh <- err
+	}()
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("expected NewStream to block before Close, got %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	require.NoError(t, cli.Close())
+
+	select {
+	case err := <-errCh:
+		if err != ErrClientClosing {
+			t.Fatalf("expected ErrClientClosing, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("NewStream did not unblock after Close")
+	}
+}
+
+func TestNewStream_StaticRemoteClientBuildFailureReturnsImmediateError(t *testing.T) {
+	appName := "test_static_remote_build_failure"
+	require.NoError(t, setupConfig(appName, map[string]interface{}{
+		"remote": map[string]interface{}{
+			"endpoints": []resolver.BaseEndpoint{{
+				Address:  "addr",
+				Protocol: "missing_static_protocol",
+			}},
+		},
+	}))
+
+	cli, err := NewClient(context.Background(), appName)
+	require.NoError(t, err)
+	defer cli.Close() // nolint:errcheck
+
+	_, err = cli.NewStream(context.Background(), &stream.Desc{}, "/test/method")
+	require.Error(t, err)
+
+	st, ok := ygstatus.CoverError(err)
+	require.True(t, ok)
+	require.Equal(t, code.Code_UNAVAILABLE, st.Code())
+	require.Contains(t, err.Error(), "missing_static_protocol")
+}
+
+func TestNewStream_ResolverRemoteClientBuildFailureReturnsImmediateError(t *testing.T) {
+	appName := "test_dynamic_remote_build_failure"
+	resolverName := "resolver_dynamic_remote_build_failure"
+	resolverType := "resolver_dynamic_remote_build_failure_type"
+
+	resolver.RegisterBuilder(resolverType, func(name string) (resolver.Resolver, error) {
+		r := newMockResolver()
+		r.updateFunc = func(watcher resolver.Client) {
+			watcher.UpdateState(resolver.BaseState{
+				Endpoints: []resolver.Endpoint{resolver.BaseEndpoint{
+					Address:  "addr",
+					Protocol: "missing_dynamic_protocol",
+				}},
+			})
+		}
+		return r, nil
+	})
+
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "resolver", resolverName, "type"), resolverType))
+	require.NoError(t, setupConfig(appName, map[string]interface{}{
+		"resolver": resolverName,
+	}))
+
+	cli, err := NewClient(context.Background(), appName)
+	require.NoError(t, err)
+	defer cli.Close() // nolint:errcheck
+
+	_, err = cli.NewStream(context.Background(), &stream.Desc{}, "/test/method")
+	require.Error(t, err)
+
+	st, ok := ygstatus.CoverError(err)
+	require.True(t, ok)
+	require.Equal(t, code.Code_UNAVAILABLE, st.Code())
+	require.Contains(t, err.Error(), "missing_dynamic_protocol")
+}
+
+func TestNewClient_StaticGRPCLateDependencyStart_FailFastFalseRecovers(t *testing.T) {
+	addr := reserveTCPAddr(t)
+	appName := "test_static_grpc_late_start_failfast_false"
+
+	require.NoError(t, setupConfig(appName, map[string]interface{}{
+		"remote": map[string]interface{}{
+			"endpoints": []resolver.BaseEndpoint{{
+				Address:  addr,
+				Protocol: "grpc",
+			}},
+		},
+	}))
+
+	cli, err := NewClient(context.Background(), appName)
+	require.NoError(t, err)
+	defer cli.Close() // nolint:errcheck
+
+	resultCh := make(chan invokeStatusResult, 1)
+	go func() {
+		var reply stpb.Status
+		err := cli.Invoke(
+			context.Background(),
+			"/late.Test/Unary",
+			&stpb.Status{Code: int32(code.Code_OK), Message: "ping"},
+			&reply,
+		)
+		resultCh <- invokeStatusResult{reply: reply, err: err}
+	}()
+
+	select {
+	case result := <-resultCh:
+		t.Fatalf("expected invoke to wait for dependency recovery, got err=%v reply=%+v", result.err, result.reply)
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	stop := startGRPCTestServerAtAddr(t, addr)
+	defer stop()
+
+	select {
+	case result := <-resultCh:
+		require.NoError(t, result.err)
+		require.Equal(t, "ping:ok", result.reply.Message)
+	case <-time.After(5 * time.Second):
+		t.Fatal("invoke did not recover after dependency started")
+	}
+}
+
+func TestNewClient_StaticGRPCLateDependencyStart_FailFastTrueRecovers(t *testing.T) {
+	addr := reserveTCPAddr(t)
+	appName := "test_static_grpc_late_start_failfast_true"
+
+	require.NoError(t, setupConfig(appName, map[string]interface{}{
+		"fastFail": true,
+		"remote": map[string]interface{}{
+			"endpoints": []resolver.BaseEndpoint{{
+				Address:  addr,
+				Protocol: "grpc",
+			}},
+		},
+	}))
+
+	cli, err := NewClient(context.Background(), appName)
+	require.NoError(t, err)
+	defer cli.Close() // nolint:errcheck
+
+	var reply stpb.Status
+	err = cli.Invoke(
+		context.Background(),
+		"/late.Test/Unary",
+		&stpb.Status{Code: int32(code.Code_OK), Message: "ping"},
+		&reply,
+	)
+	require.Error(t, err)
+
+	st, ok := ygstatus.CoverError(err)
+	require.True(t, ok)
+	require.Equal(t, code.Code_UNAVAILABLE, st.Code())
+
+	stop := startGRPCTestServerAtAddr(t, addr)
+	defer stop()
+
+	require.Eventually(t, func() bool {
+		reply = stpb.Status{}
+		err := cli.Invoke(
+			context.Background(),
+			"/late.Test/Unary",
+			&stpb.Status{Code: int32(code.Code_OK), Message: "ping"},
+			&reply,
+		)
+		return err == nil && reply.Message == "ping:ok"
+	}, 5*time.Second, 50*time.Millisecond)
+}
+
+func TestNewStream_EmptyInitialResolverStateReturnsUnavailableUntilEndpointsArrive(t *testing.T) {
+	appName := "test_empty_initial_resolver_state_unavailable"
+	resolverName := "empty_initial_wait_resolver"
+	resolverType := "empty_initial_wait_resolver_type"
+	ctrl := newControlledResolver(func(w resolver.Client) {
+		w.UpdateState(resolver.BaseState{})
+	})
+
+	resolver.RegisterBuilder(resolverType, func(string) (resolver.Resolver, error) {
+		return ctrl, nil
+	})
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "resolver", resolverName, "type"), resolverType))
+	require.NoError(t, setupConfig(appName, map[string]interface{}{
+		"resolver": resolverName,
+		"fastFail": true,
+	}))
+
+	cli, err := NewClient(context.Background(), appName)
+	require.NoError(t, err)
+	defer cli.Close() // nolint:errcheck
+
+	c := cli.(*client)
+	require.Eventually(t, func() bool {
+		return c.resolvedEvent.HasFired()
+	}, time.Second, 10*time.Millisecond)
+
+	_, err = cli.NewStream(context.Background(), &stream.Desc{}, "/test/method")
+	require.Error(t, err)
+
+	st, ok := ygstatus.CoverError(err)
+	require.True(t, ok)
+	require.Equal(t, code.Code_UNAVAILABLE, st.Code())
+
+	ctrl.PushState(resolver.BaseState{
+		Endpoints: []resolver.Endpoint{
+			resolver.BaseEndpoint{Address: "addr", Protocol: "mock_protocol"},
+		},
+	})
+
+	require.Eventually(t, func() bool {
+		st, err := cli.NewStream(context.Background(), &stream.Desc{}, "/test/method")
+		return err == nil && st != nil
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestNewStream_EmptyInitialResolverStateReturnsUnavailableBeforeDeadline(t *testing.T) {
+	appName := "test_empty_initial_resolver_state_unavailable_before_deadline"
+	resolverName := "empty_initial_deadline_resolver"
+	resolverType := "empty_initial_deadline_resolver_type"
+	ctrl := newControlledResolver(func(w resolver.Client) {
+		w.UpdateState(resolver.BaseState{})
+	})
+
+	resolver.RegisterBuilder(resolverType, func(string) (resolver.Resolver, error) {
+		return ctrl, nil
+	})
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "resolver", resolverName, "type"), resolverType))
+	require.NoError(t, setupConfig(appName, map[string]interface{}{
+		"resolver": resolverName,
+		"fastFail": true,
+	}))
+
+	cli, err := NewClient(context.Background(), appName)
+	require.NoError(t, err)
+	defer cli.Close() // nolint:errcheck
+
+	c := cli.(*client)
+	require.Eventually(t, func() bool {
+		return c.resolvedEvent.HasFired()
+	}, time.Second, 10*time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+	defer cancel()
+
+	_, err = cli.NewStream(ctx, &stream.Desc{}, "/test/method")
+	require.Error(t, err)
+
+	st, ok := ygstatus.CoverError(err)
+	require.True(t, ok)
+	require.Equal(t, code.Code_UNAVAILABLE, st.Code())
+}
+
+func TestBalancerClient_NewRemoteClient_NilStateListenerSafe(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cli := &client{
+		ctx:                 ctx,
+		remoteClientManager: newRemoteClientManager(ctx, "nil-state-listener", stats.NoOpHandler),
+	}
+	bc := &balancerClient{
+		cli:        cli,
+		serializer: xsync.NewSerializer(ctx),
+	}
+
+	rc, err := bc.NewRemoteClient(
+		resolver.BaseEndpoint{Address: "127.0.0.1:8080", Protocol: "http"},
+		balancer.NewRemoteClientOptions{},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, rc)
+	require.NoError(t, cli.remoteClientManager.Close())
+}
+
 func TestBalancerClient_UpdateState(t *testing.T) {
 	cli := &client{}
 	cli.pickerSnap.Store(&pickerSnap{
@@ -474,7 +906,7 @@ func TestBalancerClient_UpdateState(t *testing.T) {
 	bc := &balancerClient{cli: cli}
 
 	picker := newMockPicker()
-	state := balancer.State{Picker: picker}
+	state := balancer.State{ConnectivityState: remote.Ready, Picker: picker}
 
 	bc.UpdateState(state)
 
@@ -482,6 +914,73 @@ func TestBalancerClient_UpdateState(t *testing.T) {
 	if snap.picker != picker {
 		t.Error("expected picker to be updated")
 	}
+	if got := remote.State(cli.channelState.Load()); got != remote.Ready {
+		t.Fatalf("expected ready connectivity state, got %v", got)
+	}
+}
+
+func TestBalancerClient_StateListenerResolveNowOnTransientFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ctrl := newControlledResolver(nil)
+	cli := &client{resolver: ctrl}
+	bc := &balancerClient{
+		cli:          cli,
+		serializer:   xsync.NewSerializer(ctx),
+		remoteStates: make(map[string]remote.State),
+	}
+
+	done := make(chan struct{}, 1)
+	listener := bc.createStateListener(func(remote.ClientState) {
+		done <- struct{}{}
+	})
+	listener(remote.ClientState{
+		Endpoint:        resolver.BaseEndpoint{Address: "127.0.0.1:8080", Protocol: "grpc"},
+		State:           remote.TransientFailure,
+		ConnectionError: errors.New("dial failed"),
+	})
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("state listener did not run")
+	}
+	require.Eventually(t, func() bool {
+		return ctrl.ResolveNowCount() == 1
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestBalancerClient_StateListenerResolveNowOnReadyToIdle(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ctrl := newControlledResolver(nil)
+	cli := &client{resolver: ctrl}
+	bc := &balancerClient{
+		cli:          cli,
+		serializer:   xsync.NewSerializer(ctx),
+		remoteStates: make(map[string]remote.State),
+	}
+
+	done := make(chan struct{}, 2)
+	listener := bc.createStateListener(func(remote.ClientState) {
+		done <- struct{}{}
+	})
+	endpoint := resolver.BaseEndpoint{Address: "127.0.0.1:8080", Protocol: "grpc"}
+	listener(remote.ClientState{Endpoint: endpoint, State: remote.Ready})
+	listener(remote.ClientState{Endpoint: endpoint, State: remote.Idle})
+
+	for range 2 {
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("state listener did not run")
+		}
+	}
+	require.Eventually(t, func() bool {
+		return ctrl.ResolveNowCount() == 1
+	}, time.Second, 10*time.Millisecond)
 }
 
 func TestBalancerClient_NewRemoteClient(t *testing.T) {

@@ -41,7 +41,10 @@ type clientConn struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	mu          sync.RWMutex
+	mu sync.RWMutex
+	// HTTP is connectionless from the client's perspective. READY here means
+	// the client object is open and can issue requests, not that the endpoint
+	// has been health-checked.
 	state       remote.State
 	endpoint    resolver.Endpoint
 	serviceName string

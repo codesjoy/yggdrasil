@@ -17,13 +17,17 @@ package balancer
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
+	ygstatus "github.com/codesjoy/yggdrasil/v2/status"
 	"github.com/codesjoy/yggdrasil/v2/stream"
+	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
 // mockRemoteClient is a mock implementation of remote.Client
@@ -33,6 +37,7 @@ type mockRemoteClient struct {
 	scheme    string
 	closed    bool
 	connected bool
+	connects  int
 	mu        sync.Mutex
 }
 
@@ -79,6 +84,7 @@ func (m *mockRemoteClient) Connect() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.connected = true
+	m.connects++
 }
 
 func (m *mockRemoteClient) IsClosed() bool {
@@ -93,16 +99,26 @@ func (m *mockRemoteClient) IsConnected() bool {
 	return m.connected
 }
 
+func (m *mockRemoteClient) ConnectCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.connects
+}
+
 // mockBalancerClient is a mock implementation of balancer.Client
 type mockBalancerClient struct {
-	mu           sync.Mutex
-	state        State
-	stateUpdates int
-	remoteClient *mockRemoteClient
+	mu            sync.Mutex
+	state         State
+	stateUpdates  int
+	remoteClients map[string]*mockRemoteClient
+	remoteErrs    map[string]error
 }
 
 func newMockBalancerClient() *mockBalancerClient {
-	return &mockBalancerClient{}
+	return &mockBalancerClient{
+		remoteClients: make(map[string]*mockRemoteClient),
+		remoteErrs:    make(map[string]error),
+	}
 }
 
 func (m *mockBalancerClient) UpdateState(state State) {
@@ -118,8 +134,15 @@ func (m *mockBalancerClient) NewRemoteClient(
 ) (remote.Client, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.remoteClient = newMockRemoteClient(endpoint.Name(), remote.Ready)
-	return m.remoteClient, nil
+	if err, ok := m.remoteErrs[endpoint.Name()]; ok {
+		return nil, err
+	}
+	if rc, ok := m.remoteClients[endpoint.Name()]; ok {
+		return rc, nil
+	}
+	rc := newMockRemoteClient(endpoint.Name(), remote.Ready)
+	m.remoteClients[endpoint.Name()] = rc
+	return rc, nil
 }
 
 func (m *mockBalancerClient) GetStateUpdates() int {
@@ -132,6 +155,22 @@ func (m *mockBalancerClient) GetState() State {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.state
+}
+
+func (m *mockBalancerClient) GetRemoteClient(name string) *mockRemoteClient {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.remoteClients[name]
+}
+
+func (m *mockBalancerClient) SetRemoteClientErr(name string, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err == nil {
+		delete(m.remoteErrs, name)
+		return
+	}
+	m.remoteErrs[name] = err
 }
 
 // mockEndpoint is a mock implementation of resolver.Endpoint
@@ -218,6 +257,32 @@ func TestRRBalancer_UpdateState(t *testing.T) {
 	if cli.GetStateUpdates() == 0 {
 		t.Fatal("expected client UpdateState to be called")
 	}
+	if cli.GetState().ConnectivityState != remote.Ready {
+		t.Fatalf("expected ready connectivity state, got %v", cli.GetState().ConnectivityState)
+	}
+}
+
+func TestRRBalancer_UpdateState_RemovedClientClosed(t *testing.T) {
+	cli := newMockBalancerClient()
+	balancer, _ := newRoundRobin("test", "default", cli)
+
+	endpoint1 := newMockEndpoint("endpoint1", "localhost:8080", "grpc")
+	endpoint2 := newMockEndpoint("endpoint2", "localhost:8081", "grpc")
+	balancer.UpdateState(newMockState([]resolver.Endpoint{endpoint1, endpoint2}))
+
+	removedClient := cli.GetRemoteClient("endpoint2")
+	if removedClient == nil {
+		t.Fatal("expected endpoint2 client to exist")
+	}
+
+	balancer.UpdateState(newMockState([]resolver.Endpoint{endpoint1}))
+
+	if !removedClient.IsClosed() {
+		t.Fatal("expected removed client to be closed")
+	}
+	if cli.GetRemoteClient("endpoint1") == nil {
+		t.Fatal("expected remaining client to stay registered")
+	}
 }
 
 func TestRRBalancer_Close(t *testing.T) {
@@ -239,6 +304,39 @@ func TestRRBalancer_Close(t *testing.T) {
 	updates := cli.GetStateUpdates()
 	if updates < 2 {
 		t.Fatalf("expected at least 2 state updates, got %d", updates)
+	}
+}
+
+func TestRRBalancer_UpdateState_AllRemoteClientBuildsFailPublishesErrorPicker(t *testing.T) {
+	cli := newMockBalancerClient()
+	cli.SetRemoteClientErr("endpoint1", errors.New("dial endpoint1"))
+	cli.SetRemoteClientErr("endpoint2", errors.New("dial endpoint2"))
+
+	balancer, _ := newRoundRobin("test", "default", cli)
+	balancer.UpdateState(newMockState([]resolver.Endpoint{
+		newMockEndpoint("endpoint1", "localhost:8080", "grpc"),
+		newMockEndpoint("endpoint2", "localhost:8081", "grpc"),
+	}))
+
+	_, err := cli.GetState().Picker.Next(RPCInfo{Ctx: context.Background(), Method: "test"})
+	if err == nil {
+		t.Fatal("expected picker error")
+	}
+	st, ok := ygstatus.CoverError(err)
+	if !ok {
+		t.Fatalf("expected status error, got %T", err)
+	}
+	if st.Code() != code.Code_UNAVAILABLE {
+		t.Fatalf("expected unavailable, got %v", st.Code())
+	}
+	if !strings.Contains(err.Error(), "endpoint1: dial endpoint1") {
+		t.Fatalf("expected endpoint1 error in %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "endpoint2: dial endpoint2") {
+		t.Fatalf("expected endpoint2 error in %q", err.Error())
+	}
+	if cli.GetState().ConnectivityState != remote.TransientFailure {
+		t.Fatalf("expected transient failure connectivity state, got %v", cli.GetState().ConnectivityState)
 	}
 }
 
@@ -412,11 +510,45 @@ func TestRRBalancer_UpdateRemoteClientState(t *testing.T) {
 
 	// Update remote client state
 	rrBal := balancer.(*rrBalancer)
-	rrBal.UpdateRemoteClientState(remote.ClientState{State: remote.Ready})
+	rrBal.UpdateRemoteClientState(remote.ClientState{
+		Endpoint: newMockEndpoint("endpoint1", "localhost:8080", "grpc"),
+		State:    remote.Ready,
+	})
 
 	// Should trigger another state update
 	if cli.GetStateUpdates() <= initialUpdates {
 		t.Fatal("expected state update after UpdateRemoteClientState")
+	}
+}
+
+func TestRRBalancer_UpdateRemoteClientState_TransientFailureToIdleReconnectsWithoutPublishingState(t *testing.T) {
+	cli := newMockBalancerClient()
+	balancer, _ := newRoundRobin("test", "default", cli)
+	rrBal := balancer.(*rrBalancer)
+
+	client := newMockRemoteClient("endpoint1", remote.TransientFailure)
+	rrBal.mu.Lock()
+	rrBal.remotesClient = map[string]*remoteClientState{
+		"endpoint1": {
+			client:  client,
+			state:   remote.TransientFailure,
+			lastErr: errors.New("dial failed"),
+		},
+	}
+	rrBal.lastConnectionErr = errors.New("dial failed")
+	rrBal.mu.Unlock()
+
+	initialUpdates := cli.GetStateUpdates()
+	rrBal.UpdateRemoteClientState(remote.ClientState{
+		Endpoint: newMockEndpoint("endpoint1", "localhost:8080", "grpc"),
+		State:    remote.Idle,
+	})
+
+	if client.ConnectCount() != 1 {
+		t.Fatalf("expected one reconnect attempt, got %d", client.ConnectCount())
+	}
+	if cli.GetStateUpdates() != initialUpdates {
+		t.Fatal("expected no published state update for transient failure to idle transition")
 	}
 }
 
@@ -446,11 +578,11 @@ func TestRRBalancer_BuildPicker_OnlyReadyClients(t *testing.T) {
 
 	// Manually add clients with different states
 	rrBal.mu.Lock()
-	rrBal.remotesClient = map[string]remote.Client{
-		"ready1":     newMockRemoteClient("ready1", remote.Ready),
-		"ready2":     newMockRemoteClient("ready2", remote.Ready),
-		"idle":       newMockRemoteClient("idle", remote.Idle),
-		"connecting": newMockRemoteClient("connecting", remote.Connecting),
+	rrBal.remotesClient = map[string]*remoteClientState{
+		"ready1":     {client: newMockRemoteClient("ready1", remote.Ready), state: remote.Ready},
+		"ready2":     {client: newMockRemoteClient("ready2", remote.Ready), state: remote.Ready},
+		"idle":       {client: newMockRemoteClient("idle", remote.Idle), state: remote.Idle},
+		"connecting": {client: newMockRemoteClient("connecting", remote.Connecting), state: remote.Connecting},
 	}
 	picker := rrBal.buildPicker()
 	rrBal.mu.Unlock()
@@ -458,6 +590,25 @@ func TestRRBalancer_BuildPicker_OnlyReadyClients(t *testing.T) {
 	// Picker should only have ready clients
 	if len(picker.endpoint) != 2 {
 		t.Fatalf("expected 2 ready endpoints, got %d", len(picker.endpoint))
+	}
+}
+
+func TestRRBalancer_UpdateState_ZeroAddressesPublishesTransientFailure(t *testing.T) {
+	cli := newMockBalancerClient()
+	balancer, _ := newRoundRobin("test", "default", cli)
+
+	balancer.UpdateState(newMockState(nil))
+
+	state := cli.GetState()
+	if state.ConnectivityState != remote.TransientFailure {
+		t.Fatalf("expected transient failure, got %v", state.ConnectivityState)
+	}
+	_, err := state.Picker.Next(RPCInfo{Ctx: context.Background(), Method: "test"})
+	if err == nil {
+		t.Fatal("expected zero-address picker error")
+	}
+	if !strings.Contains(err.Error(), "produced zero addresses") {
+		t.Fatalf("expected zero-address error, got %q", err.Error())
 	}
 }
 

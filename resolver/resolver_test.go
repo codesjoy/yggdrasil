@@ -98,6 +98,12 @@ func (m *mockClient) GetStates() []State {
 	return m.states
 }
 
+func clearResolverCache(name string) {
+	mu.Lock()
+	defer mu.Unlock()
+	delete(resolver, name)
+}
+
 func TestBaseEndpoint_Name(t *testing.T) {
 	endpoint := BaseEndpoint{
 		Address:  "localhost:8080",
@@ -470,10 +476,8 @@ func TestGet_WithDefault(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clear the resolver cache by removing it from the map
-			mu.Lock()
-			delete(resolver, tt.resolverName)
-			mu.Unlock()
+			clearResolverCache(tt.resolverName)
+			t.Cleanup(func() { clearResolverCache(tt.resolverName) })
 
 			// Reset config for this specific resolver
 			_ = config.Set(config.Join(config.KeyBase, "resolver", tt.resolverName, "type"), "")
@@ -491,5 +495,92 @@ func TestGet_WithDefault(t *testing.T) {
 				t.Errorf("Get() nil = %v, wantNil %v", got == nil, tt.wantNil)
 			}
 		})
+	}
+}
+
+func TestGet_ReturnsCachedResolverInstance(t *testing.T) {
+	typeName := "cached_instance_resolver"
+	resolverName := "cached-instance"
+	clearResolverCache(resolverName)
+	t.Cleanup(func() { clearResolverCache(resolverName) })
+
+	builderCalls := 0
+	RegisterBuilder(typeName, func(name string) (Resolver, error) {
+		builderCalls++
+		return newMockResolver(name), nil
+	})
+
+	requireConfig := func(key string, val any) {
+		t.Helper()
+		if err := config.Set(key, val); err != nil {
+			t.Fatalf("config.Set(%s) failed: %v", key, err)
+		}
+	}
+
+	requireConfig(config.Join(config.KeyBase, "resolver", resolverName, "type"), typeName)
+
+	r1, err := Get(resolverName)
+	if err != nil {
+		t.Fatalf("first Get failed: %v", err)
+	}
+	r2, err := Get(resolverName)
+	if err != nil {
+		t.Fatalf("second Get failed: %v", err)
+	}
+
+	if r1 != r2 {
+		t.Fatal("expected Get to return cached resolver instance")
+	}
+	if builderCalls != 1 {
+		t.Fatalf("expected builder to be called once, got %d", builderCalls)
+	}
+}
+
+func TestGet_ConfigChangeDoesNotRebuildCachedResolver(t *testing.T) {
+	typeName := "configurable_resolver"
+	resolverName := "configurable-resolver"
+	clearResolverCache(resolverName)
+	t.Cleanup(func() { clearResolverCache(resolverName) })
+
+	builderCalls := 0
+	RegisterBuilder(typeName, func(name string) (Resolver, error) {
+		builderCalls++
+		marker := config.Get(config.Join(config.KeyBase, "resolver", name, "marker")).String("")
+		return newMockResolver(marker), nil
+	})
+
+	requireConfig := func(key string, val any) {
+		t.Helper()
+		if err := config.Set(key, val); err != nil {
+			t.Fatalf("config.Set(%s) failed: %v", key, err)
+		}
+	}
+
+	requireConfig(config.Join(config.KeyBase, "resolver", resolverName, "type"), typeName)
+	requireConfig(config.Join(config.KeyBase, "resolver", resolverName, "marker"), "v1")
+
+	r1, err := Get(resolverName)
+	if err != nil {
+		t.Fatalf("first Get failed: %v", err)
+	}
+
+	requireConfig(config.Join(config.KeyBase, "resolver", resolverName, "marker"), "v2")
+
+	r2, err := Get(resolverName)
+	if err != nil {
+		t.Fatalf("second Get failed: %v", err)
+	}
+
+	if r1 != r2 {
+		t.Fatal("expected resolver to stay cached after config change")
+	}
+	if r1.Type() != "v1" {
+		t.Fatalf("expected first resolver type v1, got %q", r1.Type())
+	}
+	if r2.Type() != "v1" {
+		t.Fatalf("expected cached resolver type to remain v1, got %q", r2.Type())
+	}
+	if builderCalls != 1 {
+		t.Fatalf("expected builder to be called once, got %d", builderCalls)
 	}
 }

@@ -25,8 +25,9 @@ import (
 
 // ClientState is the state of the client.
 type ClientState struct {
-	Endpoint resolver.Endpoint
-	State    State
+	Endpoint        resolver.Endpoint
+	State           State
+	ConnectionError error
 }
 
 // OnStateChange is the callback function when the state of the client changes.

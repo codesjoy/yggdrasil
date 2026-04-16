@@ -39,6 +39,13 @@ type pickerSnap struct {
 	blockingCh chan struct{}
 }
 
+func (c *client) done() <-chan struct{} {
+	if c.ctx == nil {
+		return nil
+	}
+	return c.ctx.Done()
+}
+
 // updatePicker is called by UpdateState calls from the LB policy. It
 // unblocks all blocked pick.
 func (c *client) updatePicker(p balancer.Picker) {
@@ -53,6 +60,7 @@ func (c *client) pick(failFast bool, info *balancer.RPCInfo) (balancer.PickResul
 	var ch chan struct{}
 
 	var lastPickErr error
+	clientDone := c.done()
 
 	for {
 		pg := c.pickerSnap.Load()
@@ -67,6 +75,8 @@ func (c *client) pick(failFast bool, info *balancer.RPCInfo) (balancer.PickResul
 			// - cp.picker is nil (the previous if condition), or
 			// - we have already called pick on the current picker.
 			select {
+			case <-clientDone:
+				return nil, ErrClientClosing
 			case <-info.Ctx.Done():
 				var errStr string
 				if lastPickErr != nil {
