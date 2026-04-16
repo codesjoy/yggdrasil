@@ -36,6 +36,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/internal/backoff"
 	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
+	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
 	"github.com/codesjoy/yggdrasil/v2/stats"
 	"github.com/codesjoy/yggdrasil/v2/stream"
@@ -125,6 +126,7 @@ type client struct {
 	streamBackoff backoff.Strategy
 	stateChange   chan resolver.State
 	resolvedEvent *xsync.Event
+	channelState  atomic.Int32
 
 	remoteClientManager *remoteClientManager
 	closed              atomic.Bool
@@ -143,6 +145,7 @@ func NewClient(ctx context.Context, appName string) (_ Client, err error) {
 		resolvedEvent: xsync.NewEvent(),
 	}
 	cli.ctx, cli.cancel = context.WithCancel(ctx)
+	cli.channelState.Store(int32(remote.Idle))
 
 	cli.remoteClientManager = newRemoteClientManager(cli.ctx, appName, statsHandler)
 	watchRegistered := false
@@ -289,8 +292,12 @@ func (c *client) watchUpdateState() {
 }
 
 func (c *client) updateState(state resolver.State) {
-	defer c.resolvedEvent.Fire()
 	c.balancer.UpdateState(state)
+	c.resolvedEvent.Fire()
+}
+
+func (c *client) updateConnectivityState(state remote.State) {
+	c.channelState.Store(int32(state))
 }
 
 func (c *client) updateStaticState(cfg config.Values) error {
@@ -318,7 +325,11 @@ func (c *client) initResolverAndBalancer(cfg config.Values) error {
 	b, err := balancer.New(
 		c.appName,
 		balancerName,
-		&balancerClient{cli: c, serializer: xsync.NewSerializer(c.ctx)},
+		&balancerClient{
+			cli:          c,
+			serializer:   xsync.NewSerializer(c.ctx),
+			remoteStates: make(map[string]remote.State),
+		},
 	)
 	if err != nil {
 		return err
@@ -488,4 +499,12 @@ func (c *client) waitForResolved(ctx context.Context) error {
 	case <-c.ctx.Done():
 		return ErrClientClosing
 	}
+}
+
+func (c *client) resolveNow() {
+	rn, ok := c.resolver.(resolver.ResolveNower)
+	if !ok {
+		return
+	}
+	rn.ResolveNow()
 }

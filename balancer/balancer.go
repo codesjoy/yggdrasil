@@ -67,7 +67,8 @@ type Balancer interface {
 
 // State is the state of the balancer
 type State struct {
-	Picker Picker
+	ConnectivityState remote.State
+	Picker            Picker
 }
 
 // NewRemoteClientOptions is the options for NewRemoteClient

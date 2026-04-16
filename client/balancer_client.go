@@ -27,13 +27,15 @@ import (
 )
 
 type balancerClient struct {
-	cli        *client
-	serializer *xsync.Serializer
+	cli          *client
+	serializer   *xsync.Serializer
+	remoteStates map[string]remote.State
 }
 
 // UpdateState updates the state of the client
 func (bc *balancerClient) UpdateState(state balancer.State) {
 	bc.cli.updatePicker(state.Picker)
+	bc.cli.updateConnectivityState(state.ConnectivityState)
 }
 
 // NewRemoteClient creates a new remote client using centralized ConnManager
@@ -52,11 +54,44 @@ func (bc *balancerClient) NewRemoteClient(
 }
 
 func (bc *balancerClient) createStateListener(f func(remote.ClientState)) func(remote.ClientState) {
+	if f == nil {
+		return func(remote.ClientState) {}
+	}
+	run := func(state remote.ClientState) {
+		prevState := bc.rememberRemoteState(state)
+		bc.maybeResolveNow(prevState, state)
+		f(state)
+	}
+	if bc.serializer == nil {
+		return run
+	}
 	return func(state remote.ClientState) {
 		if err := bc.serializer.Submit(func(_ context.Context) {
-			f(state)
+			run(state)
 		}); err != nil {
 			slog.Error("createStateListener failed", slog.Any("error", err))
 		}
+	}
+}
+
+func (bc *balancerClient) rememberRemoteState(state remote.ClientState) remote.State {
+	if state.Endpoint == nil {
+		return remote.Shutdown
+	}
+	if bc.remoteStates == nil {
+		bc.remoteStates = make(map[string]remote.State)
+	}
+	name := state.Endpoint.Name()
+	prevState := bc.remoteStates[name]
+	bc.remoteStates[name] = state.State
+	return prevState
+}
+
+func (bc *balancerClient) maybeResolveNow(prevState remote.State, state remote.ClientState) {
+	switch {
+	case state.State == remote.TransientFailure && state.ConnectionError != nil:
+		bc.cli.resolveNow()
+	case state.State == remote.Idle && prevState == remote.Ready:
+		bc.cli.resolveNow()
 	}
 }

@@ -100,6 +100,12 @@ type Resolver interface {
 	Type() string
 }
 
+// ResolveNower is implemented by resolvers that can trigger an immediate
+// re-resolution outside the normal watch/update flow.
+type ResolveNower interface {
+	ResolveNow()
+}
+
 const (
 	// DefaultResolverName is the default resolver name
 	DefaultResolverName = "default"

@@ -263,7 +263,7 @@ func (cc *clientConn) Close() error {
 	}
 	curTr := cc.transport
 	cc.transport = nil
-	cc.changeStateUnlock(remote.Shutdown)
+	cc.changeStateUnlock(remote.Shutdown, nil)
 	cc.mu.Unlock()
 	if curTr != nil {
 		curTr.GracefulClose()
@@ -286,11 +286,15 @@ func (cc *clientConn) Connect() {
 	cc.resetTransport()
 }
 
-func (cc *clientConn) changeStateUnlock(s remote.State) {
+func (cc *clientConn) changeStateUnlock(s remote.State, connErr error) {
 	state := cc.state
 	cc.state = s
-	if state != s && s != remote.Shutdown {
-		cc.onStateChange(remote.ClientState{Endpoint: cc.endpoint, State: s})
+	if state != s && s != remote.Shutdown && cc.onStateChange != nil {
+		cc.onStateChange(remote.ClientState{
+			Endpoint:        cc.endpoint,
+			State:           s,
+			ConnectionError: connErr,
+		})
 	}
 }
 
@@ -334,7 +338,7 @@ func (cc *clientConn) connect(opts transport.ConnectOptions, connectDeadline tim
 		}
 		cc.transport = t
 		cc.backoffIdx = 0
-		cc.changeStateUnlock(remote.Ready)
+		cc.changeStateUnlock(remote.Ready, nil)
 		cc.mu.Unlock()
 		return nil
 	case <-connClosed.Done():
@@ -361,11 +365,14 @@ func (cc *clientConn) resetTransport() {
 		return
 	}
 	backoffIdx := cc.backoffIdx
-	cc.changeStateUnlock(remote.Connecting)
+	cc.changeStateUnlock(remote.Connecting, nil)
 	cc.mu.Unlock()
 
 	backoffFor := cc.bs.Backoff(backoffIdx)
 	dialDuration := minConnectTimeout
+	if cc.cfg.MinConnectTimeout > 0 {
+		dialDuration = cc.cfg.MinConnectTimeout
+	}
 	if dialDuration < backoffFor {
 		dialDuration = backoffFor
 	}
@@ -377,7 +384,7 @@ func (cc *clientConn) resetTransport() {
 	remotelg.GetLogger().Error("fault to connect server", slog.Any("error", err))
 	cc.mu.Lock()
 	cc.backoffIdx++
-	cc.changeStateUnlock(remote.TransientFailure)
+	cc.changeStateUnlock(remote.TransientFailure, err)
 	cc.mu.Unlock()
 
 	timer := time.NewTimer(backoffFor)
@@ -388,20 +395,23 @@ func (cc *clientConn) resetTransport() {
 		return
 	}
 	cc.mu.Lock()
-	cc.changeStateUnlock(remote.Idle)
+	cc.changeStateUnlock(remote.Idle, nil)
 	cc.mu.Unlock()
 }
 
 func (cc *clientConn) onClose() {
 	cc.mu.Lock()
-	cc.transport = nil
 	if cc.state == remote.Shutdown {
 		cc.mu.Unlock()
 		return
 	}
-	cc.changeStateUnlock(remote.Idle)
+	if cc.transport == nil && cc.state == remote.Connecting {
+		cc.mu.Unlock()
+		return
+	}
+	cc.transport = nil
+	cc.changeStateUnlock(remote.Idle, nil)
 	cc.mu.Unlock()
-	cc.resetTransport()
 }
 
 func (cc *clientConn) onGoAway(r transport.GoAwayReason) {

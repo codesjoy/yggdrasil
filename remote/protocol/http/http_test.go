@@ -17,6 +17,7 @@ package protocolhttp
 import (
 	"bytes"
 	"context"
+	"net"
 	"net/http"
 	"testing"
 	"time"
@@ -36,9 +37,26 @@ import (
 
 func startHTTPTestServer(t *testing.T, handle remote.MethodHandle) (addr string, stop func()) {
 	t.Helper()
+	addr = reserveHTTPTestAddr(t)
+	stop = startHTTPTestServerAtAddr(t, addr, handle)
+	return addr, stop
+}
+
+func reserveHTTPTestAddr(t *testing.T) string {
+	t.Helper()
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := lis.Addr().String()
+	require.NoError(t, lis.Close())
+	return addr
+}
+
+func startHTTPTestServerAtAddr(t *testing.T, addr string, handle remote.MethodHandle) func() {
+	t.Helper()
 	_ = config.Set(
 		config.Join(config.KeyBase, "remote", "protocol", scheme, "server", "address"),
-		"127.0.0.1:0",
+		addr,
 	)
 	_ = config.Set(
 		config.Join(config.KeyBase, "remote", "protocol", scheme, "server", "network"),
@@ -57,7 +75,7 @@ func startHTTPTestServer(t *testing.T, handle remote.MethodHandle) (addr string,
 		close(done)
 	}()
 
-	stop = func() {
+	return func() {
 		_ = svr.Stop(context.Background())
 		select {
 		case <-done:
@@ -65,7 +83,6 @@ func startHTTPTestServer(t *testing.T, handle remote.MethodHandle) (addr string,
 			t.Fatalf("server did not stop")
 		}
 	}
-	return addr, stop
 }
 
 func newHTTPTestClient(t *testing.T, addr string) remote.Client {
@@ -157,6 +174,60 @@ func TestHTTPUnaryErrorMapping(t *testing.T) {
 	h, _ := cs.Header()
 	_, ok := h["content-type"]
 	require.False(t, ok)
+}
+
+func TestHTTPClientStateRemainsReadyAcrossRequestFailures(t *testing.T) {
+	addr, stop := startHTTPTestServer(t, func(ss remote.ServerStream) {
+		require.NoError(t, ss.Start(false, false))
+		ss.Finish(&stpb.Status{Code: int32(code.Code_OK), Message: "ok"}, nil)
+	})
+
+	cli := newHTTPTestClient(t, addr)
+	require.Equal(t, remote.Ready, cli.State())
+
+	stop()
+	defer cli.Close() // nolint:errcheck
+
+	cs, err := cli.NewStream(context.Background(), nil, "/test/echo")
+	require.NoError(t, err)
+
+	req := &stpb.Status{Code: int32(code.Code_OK), Message: "hello"}
+	resp := &stpb.Status{}
+	require.NoError(t, cs.SendMsg(req))
+	err = cs.RecvMsg(resp)
+	require.Error(t, err)
+	require.Equal(t, remote.Ready, cli.State())
+}
+
+func TestHTTPClientRecoversWhenServerStartsLater(t *testing.T) {
+	addr := reserveHTTPTestAddr(t)
+	cli := newHTTPTestClient(t, addr)
+	defer cli.Close()
+
+	cs, err := cli.NewStream(context.Background(), nil, "/test/echo")
+	require.NoError(t, err)
+	require.NoError(t, cs.SendMsg(&stpb.Status{Code: int32(code.Code_OK), Message: "hello"}))
+
+	var reply stpb.Status
+	err = cs.RecvMsg(&reply)
+	require.Error(t, err)
+	require.Equal(t, remote.Ready, cli.State())
+
+	stop := startHTTPTestServerAtAddr(t, addr, func(ss remote.ServerStream) {
+		require.NoError(t, ss.Start(false, false))
+		var in stpb.Status
+		require.NoError(t, ss.RecvMsg(&in))
+		in.Message += ":ok"
+		ss.Finish(&in, nil)
+	})
+	t.Cleanup(stop)
+
+	cs, err = cli.NewStream(context.Background(), nil, "/test/echo")
+	require.NoError(t, err)
+	require.NoError(t, cs.SendMsg(&stpb.Status{Code: int32(code.Code_OK), Message: "hello"}))
+	require.NoError(t, cs.RecvMsg(&reply))
+	require.Equal(t, "hello:ok", reply.Message)
+	require.Equal(t, remote.Ready, cli.State())
 }
 
 func TestHTTPStopUsesContextDeadline(t *testing.T) {

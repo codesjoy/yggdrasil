@@ -275,7 +275,49 @@ func TestPick_NoAvailableInstance_FailFast(t *testing.T) {
 		blockingCh: make(chan struct{}),
 	})
 
-	// Initial picker returns ErrNoAvailableInstance
+	picker1 := newMockPicker()
+	picker1.AddResult(nil, balancer.ErrNoAvailableInstance)
+	cli.updatePicker(picker1)
+
+	resultCh := make(chan balancer.PickResult)
+	errCh := make(chan error)
+	go func() {
+		result, err := cli.pick(true, &balancer.RPCInfo{
+			Ctx:    context.Background(),
+			Method: "/test/method",
+		})
+		resultCh <- result
+		errCh <- err
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+
+	mockClient := newMockRemoteClient("test", remote.Ready)
+	picker2 := newMockPicker()
+	picker2.AddResult(newMockPickResult(mockClient), nil)
+	cli.updatePicker(picker2)
+
+	select {
+	case result := <-resultCh:
+		err := <-errCh
+		if err != nil {
+			t.Fatalf("expected no error after picker update, got %v", err)
+		}
+		if result == nil || result.RemoteClient() != mockClient {
+			t.Fatal("expected ready client after picker update")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("pick did not complete in time")
+	}
+}
+
+func TestPick_NoAvailableInstance_WaitsForPicker(t *testing.T) {
+	cli := &client{}
+	cli.pickerSnap.Store(&pickerSnap{
+		picker:     nil,
+		blockingCh: make(chan struct{}),
+	})
+
 	picker1 := newMockPicker()
 	picker1.AddResult(nil, balancer.ErrNoAvailableInstance)
 	cli.updatePicker(picker1)
@@ -288,18 +330,14 @@ func TestPick_NoAvailableInstance_FailFast(t *testing.T) {
 
 	resultCh := make(chan balancer.PickResult)
 	errCh := make(chan error)
-
-	// Start pick which should block
 	go func() {
-		result, err := cli.pick(true, info)
+		result, err := cli.pick(false, info)
 		resultCh <- result
 		errCh <- err
 	}()
 
-	// Wait for pick to block
 	time.Sleep(10 * time.Millisecond)
 
-	// Update picker with valid result
 	mockClient := newMockRemoteClient("test", remote.Ready)
 	picker2 := newMockPicker()
 	picker2.AddResult(newMockPickResult(mockClient), nil)
@@ -316,6 +354,42 @@ func TestPick_NoAvailableInstance_FailFast(t *testing.T) {
 		}
 		if result.RemoteClient() != mockClient {
 			t.Fatal("expected correct remote client")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("pick did not complete in time")
+	}
+}
+
+func TestPick_ClientCloseUnblocksWaiter(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cli := &client{ctx: ctx}
+	cli.pickerSnap.Store(&pickerSnap{
+		picker:     nil,
+		blockingCh: make(chan struct{}),
+	})
+
+	resultCh := make(chan balancer.PickResult)
+	errCh := make(chan error)
+	go func() {
+		result, err := cli.pick(false, &balancer.RPCInfo{
+			Ctx:    context.Background(),
+			Method: "/test/method",
+		})
+		resultCh <- result
+		errCh <- err
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+	cancel()
+
+	select {
+	case result := <-resultCh:
+		err := <-errCh
+		if result != nil {
+			t.Fatal("expected nil result")
+		}
+		if err != ErrClientClosing {
+			t.Fatalf("expected ErrClientClosing, got %v", err)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("pick did not complete in time")
