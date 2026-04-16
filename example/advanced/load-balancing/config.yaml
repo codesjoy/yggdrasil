@@ -8,23 +8,10 @@ yggdrasil:
         endpoints:
           - address: "127.0.0.1:55884"
             protocol: "grpc"
-            weight: 1
           - address: "127.0.0.1:55885"
             protocol: "grpc"
-            weight: 1
           - address: "127.0.0.1:55886"
             protocol: "grpc"
-            weight: 1
-      health_check:
-        enabled: true
-        interval: 10s
-        timeout: 3s
-      retry:
-        max_attempts: 3
-        backoff:
-          initial: 100ms
-          max: 1s
-          multiplier: 2
   interceptor:
     unary_client: "logging"
     stream_client: "logging"

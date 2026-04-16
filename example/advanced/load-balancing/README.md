@@ -84,13 +84,10 @@ The client is configured with multiple endpoints:
 endpoints:
   - address: "127.0.0.1:55884"
     protocol: "grpc"
-    weight: 1
   - address: "127.0.0.1:55885"
     protocol: "grpc"
-    weight: 1
   - address: "127.0.0.1:55886"
     protocol: "grpc"
-    weight: 1
 ```
 
 ### 3. Load Balancer
@@ -132,32 +129,8 @@ Verify that requests are evenly distributed across instances.
 
 **Q: Requests are not distributed evenly?**
 
-A: Check that all instances are running and healthy. The load balancer only distributes to healthy instances.
+A: Check that all instances are running and that the client can establish connections to them. This example uses built-in round-robin over the configured endpoints.
 
-**Q: How to test health check?**
+**Q: How to handle instance failure or a dependency starting late?**
 
-A: The health check is configured in the client config:
-```yaml
-health_check:
-  enabled: true
-  interval: 10s
-  timeout: 3s
-```
-
-**Q: How to configure different weights?**
-
-A: Adjust the weight in the endpoint configuration:
-```yaml
-endpoints:
-  - address: "127.0.0.1:55884"
-    weight: 3
-  - address: "127.0.0.1:55885"
-    weight: 1
-```
-
-**Q: How to handle instance failure?**
-
-A: The load balancer automatically handles failed instances:
-- Health check detects unhealthy instances
-- Failed instances are excluded from the pool
-- Requests are redistributed to healthy instances
+A: The balancer only picks clients in the `READY` state. In practice this relies on the transport reporting connection state changes, which the built-in gRPC client does and will reconnect in the background after transient connect failures. HTTP clients are connectionless and do not self-demote on request failures, so this example uses gRPC endpoints and does not configure a separate health-check or weighted-balancing policy.

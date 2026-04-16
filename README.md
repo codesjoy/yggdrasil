@@ -200,8 +200,8 @@ Yggdrasil adopts a modular architecture with clearly separated concerns:
 - **Server**: Multi-protocol server implementation (gRPC, HTTP/REST)
 - **Client**: Connection pooling, load balancing, and fault tolerance
 - **Registry**: Service registration and discovery
-- **Resolver**: Address resolution and health checking
-- **Balancer**: Load balancing strategies (round-robin, weighted, etc.)
+- **Resolver**: Address resolution
+- **Balancer**: Built-in round-robin load balancing
 - **Interceptor**: Middleware for logging, tracing, metrics, etc.
 - **Config**: Multi-source configuration management
 - **Logger**: Structured logging with multiple handlers
@@ -217,7 +217,7 @@ Yggdrasil adopts a modular architecture with clearly separated concerns:
 ### Core Concepts
 
 - **Service Registration**: Automatic service registration with support for health checks
-- **Load Balancing**: Various strategies including round-robin and weighted
+- **Load Balancing**: Built-in round-robin with custom balancer extension points. Readiness-based endpoint filtering depends on the transport reporting connection state; this currently applies to stateful transports such as gRPC, whose clients reconnect in the background after transient connect failures. HTTP clients are connectionless and remain `READY` while open.
 - **Interceptor**: Chainable client and server middleware
 - **Metadata**: Context propagation for tracing and authentication
 - **Streaming**: Supports unary, client streaming, server streaming, and bidirectional streaming
