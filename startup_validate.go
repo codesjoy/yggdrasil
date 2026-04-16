@@ -85,6 +85,12 @@ func validateStartup(opts *options) error {
 	if opts != nil &&
 		(len(opts.serviceDesc) > 0 || len(opts.restServiceDesc) > 0 || len(opts.restRawHandleDesc) > 0) {
 		protocols := config.Get(config.Join(config.KeyBase, "server", "protocol")).StringSlice()
+		if len(opts.serviceDesc) > 0 && len(protocols) == 0 {
+			addErr(
+				"rpc services registered without any server protocol",
+				errors.New("set yggdrasil.server.protocol to at least one protocol"),
+			)
+		}
 		for _, protocol := range protocols {
 			if remote.GetServerBuilder(protocol) == nil {
 				addErr(
@@ -93,6 +99,14 @@ func validateStartup(opts *options) error {
 					slog.String("protocol", protocol),
 				)
 			}
+		}
+
+		restEnabled := config.GetBool(config.Join(config.KeyBase, "rest", "enable"), false)
+		if (len(opts.restServiceDesc) > 0 || len(opts.restRawHandleDesc) > 0) && !restEnabled {
+			addErr(
+				"rest handlers registered while rest server is disabled",
+				errors.New("set yggdrasil.rest.enable=true"),
+			)
 		}
 	}
 

@@ -66,9 +66,12 @@ const defaultShutdownTimeout = time.Second * 30
 
 const (
 	registryStateInit = iota
+	registryStateRegistering
 	registryStateDone
 	registryStateCancel
 )
+
+var errGovernorRequired = errors.New("application governor is required")
 
 type application struct {
 	runOnce  sync.Once
@@ -134,6 +137,10 @@ func (app *application) Init(opts ...Option) error {
 func (app *application) Stop() error {
 	var err error
 	app.stopOnce.Do(func() {
+		app.optsMu.Lock()
+		app.running = false
+		app.optsMu.Unlock()
+
 		timeout := app.shutdownTimeout
 		if timeout <= 0 {
 			timeout = defaultShutdownTimeout
@@ -155,12 +162,18 @@ func (app *application) Stop() error {
 
 // Run runs the application
 func (app *application) Run() error {
+	if app.governor == nil {
+		return errGovernorRequired
+	}
+
 	var err error
 	app.runOnce.Do(func() {
+		cleanupSignals := app.waitSignals()
+		defer cleanupSignals()
+
 		app.optsMu.Lock()
 		app.running = true
 		app.optsMu.Unlock()
-		app.waitSignals()
 		if err = app.startServers(); err != nil {
 			return
 		}
@@ -178,29 +191,49 @@ func (app *application) runHooks(ctx context.Context, k Stage) error {
 	return nil
 }
 
-func (app *application) register() {
+func (app *application) register() error {
 	if app.registry == nil {
-		return
+		return nil
 	}
 	app.mu.Lock()
-	if app.registryState != registryStateInit {
+	switch app.registryState {
+	case registryStateDone, registryStateCancel, registryStateRegistering:
 		app.mu.Unlock()
-		return
+		return nil
 	}
-	app.registryState = registryStateDone
+	app.registryState = registryStateRegistering
 	app.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := app.registry.Register(ctx, app); err != nil {
+		app.mu.Lock()
+		if app.registryState == registryStateRegistering {
+			app.registryState = registryStateInit
+		}
+		app.mu.Unlock()
 		slog.Error("fault to register application", slog.Any("error", err))
-		go func() {
-			if stopErr := app.Stop(); stopErr != nil {
-				slog.Error("fault to stop after registration failure", slog.Any("error", stopErr))
-			}
-		}()
-		return
+		return err
 	}
+
+	app.mu.Lock()
+	state := app.registryState
+	if state == registryStateRegistering {
+		app.registryState = registryStateDone
+	}
+	app.mu.Unlock()
+
+	if state == registryStateCancel {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := app.registry.Deregister(ctx, app); err != nil {
+			slog.Error("fault to deregister application after concurrent stop", slog.Any("error", err))
+			return err
+		}
+		return nil
+	}
+
 	slog.Info("application has been registered")
+	return nil
 }
 
 func (app *application) deregister(ctx context.Context) error {
@@ -208,11 +241,17 @@ func (app *application) deregister(ctx context.Context) error {
 		return nil
 	}
 	app.mu.Lock()
-	if app.registryState != registryStateDone {
+	switch app.registryState {
+	case registryStateRegistering:
+		app.registryState = registryStateCancel
+		app.mu.Unlock()
+		return nil
+	case registryStateDone:
+		app.registryState = registryStateCancel
+	default:
 		app.mu.Unlock()
 		return nil
 	}
-	app.registryState = registryStateCancel
 	app.mu.Unlock()
 	if err := app.registry.Deregister(ctx, app); err != nil {
 		slog.Error("fault to deregister application", slog.Any("error", err))
@@ -222,25 +261,51 @@ func (app *application) deregister(ctx context.Context) error {
 }
 
 func (app *application) startServers() error {
+	if app.governor == nil {
+		return errGovernorRequired
+	}
 	if err := app.runHooks(context.Background(), stageBeforeStart); err != nil {
 		return err
 	}
 	eg := errgroup.Group{}
 	svrStarCh := make(chan struct{}, 1)
+	var stopOnce sync.Once
+	stopAsync := func() {
+		stopOnce.Do(func() {
+			go func() {
+				if err := app.Stop(); err != nil {
+					slog.Error("fault to stop application after serve failure", slog.Any("error", err))
+				}
+			}()
+		})
+	}
+
 	if app.server != nil {
 		eg.Go(func() error {
-			return app.server.Serve(svrStarCh)
+			if err := app.server.Serve(svrStarCh); err != nil {
+				stopAsync()
+				return fmt.Errorf("main server: %w", err)
+			}
+			return nil
 		})
 	} else {
 		svrStarCh <- struct{}{}
 	}
 	eg.Go(func() error {
-		return app.governor.Serve()
+		if err := app.governor.Serve(); err != nil {
+			stopAsync()
+			return fmt.Errorf("governor: %w", err)
+		}
+		return nil
 	})
 	for _, item := range app.internalSvr {
 		svr := item
 		eg.Go(func() error {
-			return svr.Serve()
+			if err := svr.Serve(); err != nil {
+				stopAsync()
+				return fmt.Errorf("internal server: %w", err)
+			}
+			return nil
 		})
 	}
 
@@ -252,7 +317,10 @@ func (app *application) startServers() error {
 			return nil
 		}
 		// Servers started successfully, register the service
-		app.register()
+		if err := app.register(); err != nil {
+			stopAsync()
+			return fmt.Errorf("register application: %w", err)
+		}
 		return nil
 	})
 	return eg.Wait()
@@ -386,22 +454,44 @@ func (app *application) getShutdownTimeout() time.Duration {
 	return app.shutdownTimeout
 }
 
-func (app *application) waitSignals() {
+func (app *application) waitSignals() func() {
 	sig := make(chan os.Signal, 2)
+	done := make(chan struct{})
+	var cleanupOnce sync.Once
 	signal.Notify(sig, shutdownSignals...)
+
+	cleanup := func() {
+		cleanupOnce.Do(func() {
+			signal.Stop(sig)
+			close(done)
+		})
+	}
+
 	go func() {
-		s := <-sig
-		go func() {
-			<-time.After(app.getShutdownTimeout())
-			os.Exit(128 + int(s.(syscall.Signal)))
-		}()
-		go func() {
-			if err := app.Stop(); err != nil {
-				slog.Error("fault to stop", slog.Any("error", err))
+		select {
+		case <-done:
+			return
+		case s := <-sig:
+			go func() {
+				if err := app.Stop(); err != nil {
+					slog.Error("fault to stop", slog.Any("error", err))
+				}
+			}()
+
+			timer := time.NewTimer(app.getShutdownTimeout())
+			defer timer.Stop()
+			select {
+			case <-done:
 				return
+			case <-timer.C:
+				if sig, ok := s.(syscall.Signal); ok {
+					os.Exit(128 + int(sig))
+				}
+				os.Exit(1)
 			}
-		}()
+		}
 	}()
+	return cleanup
 }
 
 // endpoint application endpoint

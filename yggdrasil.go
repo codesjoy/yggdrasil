@@ -21,7 +21,6 @@ import (
 	"io"
 	"log/slog"
 	"sync"
-	"sync/atomic"
 
 	"github.com/codesjoy/yggdrasil/v2/application"
 	"github.com/codesjoy/yggdrasil/v2/client"
@@ -37,12 +36,26 @@ import (
 	"go.opentelemetry.io/otel"
 )
 
+type lifecycleState uint32
+
+const (
+	lifecycleStateNew lifecycleState = iota
+	lifecycleStateInitialized
+	lifecycleStateRunning
+	lifecycleStateStopped
+)
+
 var (
-	app, _      = application.New()
-	appRunning  atomic.Bool
-	initialized atomic.Bool
-	initMu      sync.Mutex
-	opts        = &options{
+	errApplicationAlreadyRunning = errors.New("application is already running")
+	errApplicationNotInitialized = errors.New("please initialize yggdrasil before serve")
+	errRestartUnsupported        = errors.New("restarting yggdrasil in the same process is not supported")
+)
+
+var (
+	app, _   = application.New()
+	initMu   sync.Mutex
+	state    = lifecycleStateNew
+	opts     = &options{
 		serviceDesc:     map[*server.ServiceDesc]interface{}{},
 		restServiceDesc: map[*server.RestServiceDesc]restServiceDesc{},
 	}
@@ -63,8 +76,15 @@ func Init(appName string, ops ...Option) (err error) {
 	initMu.Lock()
 	defer initMu.Unlock()
 
-	if initialized.Load() {
+	return initLocked(appName, ops...)
+}
+
+func initLocked(appName string, ops ...Option) (err error) {
+	switch state {
+	case lifecycleStateInitialized, lifecycleStateRunning:
 		return nil
+	case lifecycleStateStopped:
+		return errRestartUnsupported
 	}
 	if err = applyOpt(opts, ops...); err != nil {
 		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
@@ -91,75 +111,110 @@ func Init(appName string, ops ...Option) (err error) {
 	initRegistry(opts)
 	initTracer(opts)
 	initMeter(opts)
-	initialized.Store(true)
+	state = lifecycleStateInitialized
 	return nil
 }
 
 // Serve serves the application.
 func Serve(ops ...Option) (err error) {
-	if !appRunning.CompareAndSwap(false, true) {
-		return errors.New("application had already running")
-	}
-	defer func() {
-		if err != nil {
-			appRunning.Store(false)
-		}
-	}()
-	if !initialized.Load() {
-		return errors.New("please initialize the yggdrasil before serve")
+	initMu.Lock()
+	switch state {
+	case lifecycleStateNew:
+		initMu.Unlock()
+		return errApplicationNotInitialized
+	case lifecycleStateRunning:
+		initMu.Unlock()
+		return errApplicationAlreadyRunning
+	case lifecycleStateStopped:
+		initMu.Unlock()
+		return errRestartUnsupported
 	}
 	if err = applyOpt(opts, ops...); err != nil {
+		initMu.Unlock()
 		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
 		return err
 	}
 	dropServeStageConfigSources(opts)
 	if err = validateStartup(opts); err != nil {
+		initMu.Unlock()
 		slog.Error("startup validation failed", slog.Any("error", err))
 		return err
 	}
 	if err = initServer(opts); err != nil {
+		initMu.Unlock()
 		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
 		return err
 	}
 	if err = app.Init(opts.getAppOpts()...); err != nil {
+		initMu.Unlock()
 		return err
 	}
+	state = lifecycleStateRunning
+	initMu.Unlock()
+
 	if err = app.Run(); err != nil {
+		initMu.Lock()
+		state = lifecycleStateStopped
+		initMu.Unlock()
 		slog.Error("the application was ended forcefully", slog.Any("error", err))
 		return err
 	}
+	initMu.Lock()
+	state = lifecycleStateStopped
+	initMu.Unlock()
 	return nil
 }
 
 // Run runs the application.
 func Run(appName string, ops ...Option) (err error) {
-	if !appRunning.CompareAndSwap(false, true) {
-		return errors.New("application had already running")
+	initMu.Lock()
+	switch state {
+	case lifecycleStateRunning:
+		initMu.Unlock()
+		return errApplicationAlreadyRunning
+	case lifecycleStateStopped:
+		initMu.Unlock()
+		return errRestartUnsupported
 	}
-	defer func() {
-		if err != nil {
-			appRunning.Store(false)
+	if state == lifecycleStateNew {
+		if err = initLocked(appName, ops...); err != nil {
+			initMu.Unlock()
+			return err
 		}
-	}()
-	if err = Init(appName, ops...); err != nil {
-		return err
 	}
 	if err = initServer(opts); err != nil {
+		initMu.Unlock()
 		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
 		return err
 	}
 	if err = app.Init(opts.getAppOpts()...); err != nil {
+		initMu.Unlock()
 		return err
 	}
+	state = lifecycleStateRunning
+	initMu.Unlock()
+
 	if err = app.Run(); err != nil {
+		initMu.Lock()
+		state = lifecycleStateStopped
+		initMu.Unlock()
 		slog.Error("fault to run yggdrasil application", slog.Any("error", err))
 		return err
 	}
+	initMu.Lock()
+	state = lifecycleStateStopped
+	initMu.Unlock()
 	return nil
 }
 
 // Stop stops the application.
 func Stop() error {
+	initMu.Lock()
+	if state != lifecycleStateNew {
+		state = lifecycleStateStopped
+	}
+	initMu.Unlock()
+
 	var err error
 	if stopErr := app.Stop(); stopErr != nil {
 		err = errors.Join(err, stopErr)

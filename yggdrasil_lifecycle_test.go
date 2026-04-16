@@ -29,12 +29,10 @@ func resetLifecycleStateForTest(t *testing.T) {
 	t.Helper()
 
 	initMu.Lock()
-	oldInitialized := initialized.Load()
-	oldAppRunning := appRunning.Load()
+	oldState := state
 	oldOpts := opts
 	oldApp := app
-	initialized.Store(false)
-	appRunning.Store(false)
+	state = lifecycleStateNew
 	app, _ = application.New()
 	opts = &options{
 		serviceDesc:     map[*server.ServiceDesc]interface{}{},
@@ -44,8 +42,7 @@ func resetLifecycleStateForTest(t *testing.T) {
 
 	t.Cleanup(func() {
 		initMu.Lock()
-		initialized.Store(oldInitialized)
-		appRunning.Store(oldAppRunning)
+		state = oldState
 		app = oldApp
 		opts = oldOpts
 		initMu.Unlock()
@@ -59,29 +56,45 @@ func TestInitFailureAllowsRetry(t *testing.T) {
 		return errors.New("inject init error")
 	})
 	require.Error(t, err)
-	assert.False(t, initialized.Load())
+	assert.Equal(t, lifecycleStateNew, state)
 
 	err = Init("retry-app")
 	require.NoError(t, err)
-	assert.True(t, initialized.Load())
+	assert.Equal(t, lifecycleStateInitialized, state)
 }
 
-func TestServeRollbackAppRunningOnValidationError(t *testing.T) {
+func TestServeRequiresInitialization(t *testing.T) {
 	resetLifecycleStateForTest(t)
 
 	err := Serve()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "please initialize")
-	assert.False(t, appRunning.Load())
+	assert.Equal(t, lifecycleStateNew, state)
 }
 
-func TestRunRollbackAppRunningWhenInitFails(t *testing.T) {
+func TestRunKeepsNewStateWhenInitFails(t *testing.T) {
 	resetLifecycleStateForTest(t)
 
 	err := Run("run-fail-app", func(*options) error {
 		return errors.New("inject run init error")
 	})
 	require.Error(t, err)
-	assert.False(t, appRunning.Load())
-	assert.False(t, initialized.Load())
+	assert.Equal(t, lifecycleStateNew, state)
+}
+
+func TestRestartUnsupportedAfterStop(t *testing.T) {
+	resetLifecycleStateForTest(t)
+
+	require.NoError(t, Init("stop-app"))
+	require.NoError(t, Stop())
+	assert.Equal(t, lifecycleStateStopped, state)
+
+	err := Init("stop-app")
+	require.ErrorIs(t, err, errRestartUnsupported)
+
+	err = Run("stop-app")
+	require.ErrorIs(t, err, errRestartUnsupported)
+
+	err = Serve()
+	require.ErrorIs(t, err, errRestartUnsupported)
 }

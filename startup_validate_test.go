@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/codesjoy/yggdrasil/v2/config"
+	"github.com/codesjoy/yggdrasil/v2/server"
 )
 
 func TestValidateStartup_Strict_FailsOnMissingTracerBuilder(t *testing.T) {
@@ -89,6 +90,46 @@ func TestValidateStartup_Strict_FailsOnMissingClientInterceptor_ByAppName(t *tes
 	})
 
 	if err := validateStartup(nil); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestValidateStartup_Strict_FailsWhenRPCServiceHasNoProtocol(t *testing.T) {
+	_ = config.Set("yggdrasil.startup.validate.strict", true)
+	_ = config.Set("yggdrasil.server.protocol", []string{})
+
+	t.Cleanup(func() {
+		_ = config.Set("yggdrasil.startup.validate.strict", false)
+		_ = config.Set("yggdrasil.server.protocol", []string{})
+	})
+
+	err := validateStartup(&options{
+		serviceDesc: map[*server.ServiceDesc]interface{}{
+			&server.ServiceDesc{ServiceName: "test.service"}: struct{}{},
+		},
+		restServiceDesc: map[*server.RestServiceDesc]restServiceDesc{},
+	})
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestValidateStartup_Strict_FailsWhenRESTHandlersRegisteredButDisabled(t *testing.T) {
+	_ = config.Set("yggdrasil.startup.validate.strict", true)
+	_ = config.Set("yggdrasil.rest.enable", false)
+
+	t.Cleanup(func() {
+		_ = config.Set("yggdrasil.startup.validate.strict", false)
+		_ = config.Set("yggdrasil.rest.enable", false)
+	})
+
+	err := validateStartup(&options{
+		serviceDesc: map[*server.ServiceDesc]interface{}{},
+		restServiceDesc: map[*server.RestServiceDesc]restServiceDesc{
+			&server.RestServiceDesc{}: {ss: struct{}{}},
+		},
+	})
+	if err == nil {
 		t.Fatalf("expected error")
 	}
 }

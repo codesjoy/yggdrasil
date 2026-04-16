@@ -590,6 +590,62 @@ func (m *mockBlockingRestServer) Stop(ctx context.Context) error {
 	return ctx.Err()
 }
 
+type mockRuntimeErrorServer struct {
+	stopCalled bool
+	handleErr  error
+}
+
+func (m *mockRuntimeErrorServer) Info() remote.ServerInfo {
+	return remote.ServerInfo{Protocol: "mock"}
+}
+
+func (m *mockRuntimeErrorServer) Start() error {
+	return nil
+}
+
+func (m *mockRuntimeErrorServer) Handle() error {
+	return m.handleErr
+}
+
+func (m *mockRuntimeErrorServer) Stop(context.Context) error {
+	m.stopCalled = true
+	return nil
+}
+
+type mockRuntimeErrorRestServer struct {
+	serveErr   error
+	stopCalled bool
+}
+
+func (m *mockRuntimeErrorRestServer) GetAddress() string {
+	return "127.0.0.1:8080"
+}
+
+func (m *mockRuntimeErrorRestServer) GetAttributes() map[string]string {
+	return nil
+}
+
+func (m *mockRuntimeErrorRestServer) Info() rest.ServerInfo {
+	return m
+}
+
+func (m *mockRuntimeErrorRestServer) RPCHandle(string, string, rest.HandlerFunc) {}
+
+func (m *mockRuntimeErrorRestServer) RawHandle(string, string, http.HandlerFunc) {}
+
+func (m *mockRuntimeErrorRestServer) Start() error {
+	return nil
+}
+
+func (m *mockRuntimeErrorRestServer) Serve() error {
+	return m.serveErr
+}
+
+func (m *mockRuntimeErrorRestServer) Stop(context.Context) error {
+	m.stopCalled = true
+	return nil
+}
+
 func TestStopParallel(t *testing.T) {
 	s := &server{
 		servers: []remote.Server{
@@ -674,6 +730,55 @@ func TestServePartialFailure(t *testing.T) {
 	s.mu.RLock()
 	assert.Equal(t, serverStateClosing, s.state)
 	s.mu.RUnlock()
+}
+
+func TestNewServerTwiceDoesNotPanic(t *testing.T) {
+	assert.NotPanics(t, func() {
+		first, err := NewServer()
+		assert.NoError(t, err)
+		assert.NotNil(t, first)
+
+		second, err := NewServer()
+		assert.NoError(t, err)
+		assert.NotNil(t, second)
+	})
+}
+
+func TestServeReturnsRuntimeServerHandleErrorAndStops(t *testing.T) {
+	runtimeServer := &mockRuntimeErrorServer{handleErr: errors.New("handle failed")}
+	s := &server{
+		servers:        []remote.Server{runtimeServer},
+		state:          serverStateInit,
+		services:       make(map[string]*ServiceInfo),
+		servicesDesc:   make(map[string][]methodInfo),
+		restRouterDesc: []restRouterInfo{},
+	}
+
+	startFlag := make(chan struct{}, 1)
+	err := s.Serve(startFlag)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "handle failed")
+	assert.True(t, runtimeServer.stopCalled)
+}
+
+func TestServeReturnsRuntimeRestServeErrorAndStops(t *testing.T) {
+	restServer := &mockRuntimeErrorRestServer{serveErr: errors.New("rest failed")}
+	s := &server{
+		state:          serverStateInit,
+		restEnable:     true,
+		restSvr:        restServer,
+		services:       make(map[string]*ServiceInfo),
+		servicesDesc:   make(map[string][]methodInfo),
+		restRouterDesc: []restRouterInfo{},
+	}
+
+	startFlag := make(chan struct{}, 1)
+	err := s.Serve(startFlag)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "rest failed")
+	assert.True(t, restServer.stopCalled)
 }
 
 // TestServe_SignalHandling tests that the startFlag channel is properly closed
