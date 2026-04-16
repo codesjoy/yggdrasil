@@ -50,6 +50,8 @@ const (
 
 var svr *server
 
+var governorRouteOnce sync.Once
+
 type serverInfo struct {
 	scheme   string
 	address  string
@@ -111,29 +113,35 @@ func NewServer() (Server, error) {
 	if err := svr.initRemoteServer(); err != nil {
 		return nil, err
 	}
-	governor.HandleFunc("/services", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-		encoder := json.NewEncoder(w)
-		if r.URL.Query().Get("pretty") == "true" {
-			encoder.SetIndent("", "    ")
-		}
-		result := map[string]interface{}{
-			"appName":  instance.Name(),
-			"services": svr.servicesDesc,
-		}
-		_ = encoder.Encode(result)
-	})
-	governor.HandleFunc("/rest", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-		encoder := json.NewEncoder(w)
-		if r.URL.Query().Get("pretty") == "true" {
-			encoder.SetIndent("", "    ")
-		}
-		result := map[string]interface{}{
-			"appName": instance.Name(),
-			"routers": svr.restRouterDesc,
-		}
-		_ = encoder.Encode(result)
+	governorRouteOnce.Do(func() {
+		governor.HandleFunc("/services", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(200)
+			encoder := json.NewEncoder(w)
+			if r.URL.Query().Get("pretty") == "true" {
+				encoder.SetIndent("", "    ")
+			}
+			result := map[string]interface{}{
+				"appName": instance.Name(),
+			}
+			if svr != nil {
+				result["services"] = svr.servicesDesc
+			}
+			_ = encoder.Encode(result)
+		})
+		governor.HandleFunc("/rest", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(200)
+			encoder := json.NewEncoder(w)
+			if r.URL.Query().Get("pretty") == "true" {
+				encoder.SetIndent("", "    ")
+			}
+			result := map[string]interface{}{
+				"appName": instance.Name(),
+			}
+			if svr != nil {
+				result["routers"] = svr.restRouterDesc
+			}
+			_ = encoder.Encode(result)
+		})
 	})
 
 	return svr, nil
@@ -282,6 +290,8 @@ func (s *server) Stop(ctx context.Context) error {
 }
 
 func (s *server) Serve(startFlag chan<- struct{}) (err error) {
+	runtimeErrCh := make(chan error, len(s.servers)+1)
+
 	defer func() {
 		if err != nil {
 			_ = s.Stop(context.Background())
@@ -309,12 +319,12 @@ func (s *server) Serve(startFlag chan<- struct{}) (err error) {
 	s.mu.Unlock()
 
 	for _, svr := range s.servers {
-		if err = s.serve(svr); err != nil {
+		if err = s.serve(svr, runtimeErrCh); err != nil {
 			return err
 		}
 	}
 
-	if err = s.restServe(); err != nil {
+	if err = s.restServe(runtimeErrCh); err != nil {
 		return err
 	}
 
@@ -323,11 +333,25 @@ func (s *server) Serve(startFlag chan<- struct{}) (err error) {
 		startFlag <- struct{}{}
 	}
 
-	// Wait for all server goroutines to complete
-	// This will unblock when Stop() is called and all servers finish
-	s.serverWG.Wait()
+	done := make(chan struct{})
+	go func() {
+		s.serverWG.Wait()
+		close(done)
+	}()
 
-	return nil
+	for {
+		select {
+		case err = <-runtimeErrCh:
+			return err
+		case <-done:
+			select {
+			case err = <-runtimeErrCh:
+				return err
+			default:
+				return nil
+			}
+		}
+	}
 }
 
 func (s *server) Endpoints() []Endpoint {
@@ -483,7 +507,7 @@ func (s *server) registerRest(sd *RestServiceDesc, ss interface{}, prefix ...str
 	}
 }
 
-func (s *server) serve(svr remote.Server) error {
+func (s *server) serve(svr remote.Server, runtimeErrCh chan<- error) error {
 	err := svr.Start()
 	if err != nil {
 		slog.Error(
@@ -501,18 +525,22 @@ func (s *server) serve(svr remote.Server) error {
 	s.serverWG.Add(1)
 	go func() {
 		defer s.serverWG.Done()
-		if err = svr.Handle(); err != nil {
+		if handleErr := svr.Handle(); handleErr != nil && !errors.Is(handleErr, http.ErrServerClosed) {
 			slog.Error(
 				"the server exits abnormally",
 				slog.String("protocol", svr.Info().Protocol),
-				slog.Any("error", err),
+				slog.Any("error", handleErr),
+			)
+			s.reportServeRuntimeError(
+				runtimeErrCh,
+				fmt.Errorf("server %s exited abnormally: %w", svr.Info().Protocol, handleErr),
 			)
 		}
 	}()
 	return nil
 }
 
-func (s *server) restServe() error {
+func (s *server) restServe(runtimeErrCh chan<- error) error {
 	if !s.restEnable {
 		return nil
 	}
@@ -525,11 +553,22 @@ func (s *server) restServe() error {
 	s.serverWG.Add(1)
 	go func() {
 		defer s.serverWG.Done()
-		if err = s.restSvr.Serve(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("fault to serve rest server", slog.Any("error", err))
+		if serveErr := s.restSvr.Serve(); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			slog.Error("fault to serve rest server", slog.Any("error", serveErr))
+			s.reportServeRuntimeError(runtimeErrCh, fmt.Errorf("rest server exited abnormally: %w", serveErr))
 		}
 	}()
 	return nil
+}
+
+func (s *server) reportServeRuntimeError(ch chan<- error, err error) {
+	if err == nil {
+		return
+	}
+	select {
+	case ch <- err:
+	default:
+	}
 }
 
 func (s *server) handleStream(ss remote.ServerStream) {

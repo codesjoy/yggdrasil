@@ -114,6 +114,58 @@ func (b *blockingAppServer) Endpoints() []yserver.Endpoint {
 	return b.endpts
 }
 
+type runningAppServer struct {
+	stopCtx context.Context
+	stopCh  chan struct{}
+	stopOnce sync.Once
+}
+
+func (r *runningAppServer) RegisterService(*yserver.ServiceDesc, interface{}) {}
+
+func (r *runningAppServer) RegisterRestService(*yserver.RestServiceDesc, interface{}, ...string) {}
+
+func (r *runningAppServer) RegisterRestRawHandlers(...*yserver.RestRawHandlerDesc) {}
+
+func (r *runningAppServer) Serve(startFlag chan<- struct{}) error {
+	if startFlag != nil {
+		startFlag <- struct{}{}
+	}
+	if r.stopCh == nil {
+		return nil
+	}
+	<-r.stopCh
+	return nil
+}
+
+func (r *runningAppServer) Stop(ctx context.Context) error {
+	r.stopCtx = ctx
+	r.stopOnce.Do(func() {
+		if r.stopCh == nil {
+			r.stopCh = make(chan struct{})
+		}
+		close(r.stopCh)
+	})
+	return nil
+}
+
+func (r *runningAppServer) Endpoints() []yserver.Endpoint {
+	return nil
+}
+
+type failingInternalServer struct {
+	serveErr error
+	stopCtx  context.Context
+}
+
+func (f *failingInternalServer) Serve() error {
+	return f.serveErr
+}
+
+func (f *failingInternalServer) Stop(ctx context.Context) error {
+	f.stopCtx = ctx
+	return nil
+}
+
 type stubAppEndpoint struct {
 	scheme   string
 	address  string
@@ -242,7 +294,8 @@ func TestApplication_Register_Success(t *testing.T) {
 	app, _ := newApplication(WithRegistry(mockReg))
 
 	// Test successful registration
-	app.register()
+	err := app.register()
+	assert.NoError(t, err)
 	assert.True(t, mockReg.registered)
 	assert.Equal(t, registryStateDone, app.registryState)
 }
@@ -251,7 +304,8 @@ func TestApplication_Register_NilRegistry(t *testing.T) {
 	app, _ := newApplication()
 
 	// Test registration with nil registry (should not panic)
-	app.register()
+	err := app.register()
+	assert.NoError(t, err)
 	assert.Equal(t, registryStateInit, app.registryState)
 }
 
@@ -266,14 +320,24 @@ func TestApplication_Register_AlreadyRegistered(t *testing.T) {
 	app.registryState = registryStateDone
 
 	// Test registering again (should not call Register)
-	app.register()
+	err := app.register()
+	assert.NoError(t, err)
 	// mockReg.registered should still be false since Register wasn't called
 	assert.False(t, mockReg.registered)
 }
 
 func TestApplication_Register_Error(t *testing.T) {
-	// Skip this test as registration errors trigger app.Stop() which requires governor setup
-	t.Skip("Skipping registration error test due to governor dependency complexity")
+	mockReg := createMockRegistry()
+	mockReg.On("Register", mock.Anything, mock.Anything).Return(errors.New("register error"))
+	mockReg.On("Type").Return("test-registry")
+
+	app, err := newApplication(WithRegistry(mockReg))
+	require.NoError(t, err)
+
+	err = app.register()
+	assert.Error(t, err)
+	assert.False(t, mockReg.deregistered)
+	assert.Equal(t, registryStateInit, app.registryState)
 }
 
 func TestApplication_Deregister_Success(t *testing.T) {
@@ -285,11 +349,12 @@ func TestApplication_Deregister_Success(t *testing.T) {
 	app, _ := newApplication(WithRegistry(mockReg))
 
 	// First register
-	app.register()
+	err := app.register()
+	require.NoError(t, err)
 	assert.Equal(t, registryStateDone, app.registryState)
 
 	// Then deregister
-	err := app.deregister(context.Background())
+	err = app.deregister(context.Background())
 	assert.NoError(t, err)
 	assert.True(t, mockReg.deregistered)
 	assert.Equal(t, registryStateCancel, app.registryState)
@@ -326,10 +391,11 @@ func TestApplication_Deregister_Error(t *testing.T) {
 	app, _ := newApplication(WithRegistry(mockReg))
 
 	// First register
-	app.register()
+	err := app.register()
+	require.NoError(t, err)
 
 	// Then deregister with error
-	err := app.deregister(context.Background())
+	err = app.deregister(context.Background())
 	assert.Error(t, err)
 	assert.True(t, mockReg.deregistered)
 	assert.Equal(t, registryStateCancel, app.registryState)
@@ -359,7 +425,8 @@ func TestApplication_WaitSignals_Setup(t *testing.T) {
 	app, _ := newApplication(WithShutdownTimeout(time.Millisecond * 100))
 
 	// Test waitSignals setup (this mainly tests that it doesn't panic)
-	app.waitSignals()
+	cleanup := app.waitSignals()
+	defer cleanup()
 
 	// Give a moment for the signal handler goroutine to start
 	time.Sleep(time.Millisecond * 10)
@@ -622,8 +689,9 @@ func TestConstants(t *testing.T) {
 	assert.Equal(t, time.Second*30, defaultShutdownTimeout)
 
 	assert.Equal(t, 0, registryStateInit)
-	assert.Equal(t, 1, registryStateDone)
-	assert.Equal(t, 2, registryStateCancel)
+	assert.Equal(t, 1, registryStateRegistering)
+	assert.Equal(t, 2, registryStateDone)
+	assert.Equal(t, 3, registryStateCancel)
 }
 
 func TestShutdownSignals(t *testing.T) {
@@ -743,10 +811,19 @@ func TestApplication_WaitSignals_MoreCoverage(t *testing.T) {
 	app, _ := newApplication(WithShutdownTimeout(time.Millisecond * 50))
 
 	// Test waitSignals setup again with different timeout
-	app.waitSignals()
+	cleanup := app.waitSignals()
+	defer cleanup()
 
 	// Give a moment for the signal handler goroutine to start
 	time.Sleep(time.Millisecond * 5)
+}
+
+func TestApplication_Run_RequiresGovernor(t *testing.T) {
+	app, err := newApplication()
+	require.NoError(t, err)
+
+	err = app.Run()
+	require.ErrorIs(t, err, errGovernorRequired)
 }
 
 func TestApplication_Init_MoreScenarios(t *testing.T) {
@@ -802,6 +879,28 @@ func TestApplication_RunStop_Integration(t *testing.T) {
 		assert.NoError(t, runErr)
 	case <-time.After(time.Second * 5):
 		t.Fatal("Run did not complete within timeout")
+	}
+}
+
+func TestApplication_Run_InternalServerFailureTriggersStop(t *testing.T) {
+	gov, err := governor.NewServer()
+	require.NoError(t, err)
+
+	mainServer := &runningAppServer{stopCh: make(chan struct{})}
+	internalServer := &failingInternalServer{serveErr: errors.New("internal failure")}
+
+	app, err := newApplication(
+		WithGovernor(gov),
+		WithServer(mainServer),
+		WithInternalServer(internalServer),
+	)
+	require.NoError(t, err)
+
+	err = app.Run()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "internal server")
+	if assert.NotNil(t, mainServer.stopCtx) {
+		assert.NotNil(t, mainServer.stopCtx.Done())
 	}
 }
 
