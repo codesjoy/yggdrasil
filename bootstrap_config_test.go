@@ -191,6 +191,70 @@ func TestInit_LoadOrderBootstrapDeclaredAndOptionSource(t *testing.T) {
 	assert.Equal(t, "option-source", config.GetString("app.startup_order"))
 }
 
+func TestInit_BootstrapInterpolatesContentAndDeclaredFilePath(t *testing.T) {
+	resetLifecycleStateForTest(t)
+	withTestFlagSet(t)
+	dir := t.TempDir()
+	chdir(t, dir)
+
+	overridePath := filepath.Join(dir, "config.override.yaml")
+	require.NoError(
+		t,
+		os.WriteFile(overridePath, []byte("app:\n  override_value: from-override\n"), 0o600),
+	)
+
+	t.Setenv("TEST_BOOTSTRAP_VALUE", "from-bootstrap")
+	t.Setenv("TEST_BOOTSTRAP_OVERRIDE_PATH", overridePath)
+
+	bootstrapPath := filepath.Join(dir, "config.yaml")
+	require.NoError(
+		t,
+		os.WriteFile(
+			bootstrapPath,
+			[]byte(
+				"app:\n"+
+					"  bootstrap_value: ${TEST_BOOTSTRAP_VALUE}\n"+
+					"yggdrasil:\n"+
+					"  config:\n"+
+					"    sources:\n"+
+					"      - type: file\n"+
+					"        config:\n"+
+					"          path: ${TEST_BOOTSTRAP_OVERRIDE_PATH}\n"+
+					"          watch: false\n",
+			),
+			0o600,
+		),
+	)
+
+	err := Init("bootstrap-interpolate")
+	require.NoError(t, err)
+	assert.Equal(t, "from-bootstrap", config.GetString("app.bootstrap_value"))
+	assert.Equal(t, "from-override", config.GetString("app.override_value"))
+}
+
+func TestInit_BootstrapMissingEnvPlaceholderFails(t *testing.T) {
+	resetLifecycleStateForTest(t)
+	withTestFlagSet(t)
+	dir := t.TempDir()
+	chdir(t, dir)
+
+	bootstrapPath := filepath.Join(dir, "config.yaml")
+	require.NoError(
+		t,
+		os.WriteFile(
+			bootstrapPath,
+			[]byte("app:\n  bootstrap_value: ${TEST_BOOTSTRAP_MISSING}\n"),
+			0o600,
+		),
+	)
+	os.Args = []string{"yggdrasil-test", "--yggdrasil-config=" + bootstrapPath}
+
+	err := Init("bootstrap-missing-env")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), bootstrapPath)
+	assert.Contains(t, err.Error(), "TEST_BOOTSTRAP_MISSING")
+}
+
 func TestDropServeStageConfigSources(t *testing.T) {
 	source1 := &mockConfigSource{name: "s1", priority: source.PriorityMemory}
 	source2 := &mockConfigSource{name: "s2", priority: source.PriorityMemory}

@@ -65,6 +65,18 @@ app:
     name: "mydb"
 ```
 
+**字符串模板示例**:
+
+```yaml
+app:
+  database:
+    dsn: "postgres://app:${APP_DATABASE_PASSWORD}@db:5432/mydb?sslmode=disable"
+  upstream:
+    health_url: "${APP_BASE_URL}/healthz"
+```
+
+`${VAR}` 只用于字符串模板拼装，例如 DSN、URL、路径或请求头。缺失环境变量会在加载时报错。
+
 ### 2. 环境变量配置源
 
 从环境变量加载配置，支持前缀过滤。
@@ -72,11 +84,7 @@ app:
 **创建环境变量配置源**:
 
 ```go
-src, err := env.NewSource("APP_", config.PriorityLocal)
-if err != nil {
-    return err
-}
-
+src := env.NewSource([]string{"APP_"}, nil)
 config.LoadSource(src)
 ```
 
@@ -93,6 +101,13 @@ export APP_DATABASE_HOST=db.example.com
 - 格式: `{PREFIX}{SECTION}_{KEY}`
 - 示例: `APP_SERVER_HOST` → `app.server.host`
 - 大小写不敏感
+- 适用于完整配置项覆盖，例如 `server.port`、`database.password`、`feature.enabled`
+
+**使用边界**:
+
+- 完整配置项覆盖使用 `env source`
+- 字符串模板拼装使用 `${VAR}`
+- 不要对同一个字段同时使用两种方式
 
 ### 3. 命令行配置源
 
@@ -101,11 +116,7 @@ export APP_DATABASE_HOST=db.example.com
 **创建命令行配置源**:
 
 ```go
-src, err := flag.NewSource("config", config.PriorityFlag)
-if err != nil {
-    return err
-}
-
+src := flag.NewSource()
 config.LoadSource(src)
 ```
 
@@ -338,6 +349,8 @@ config.LoadSource(file.NewSource(configFile, false))
 export APP_DATABASE_PASSWORD=secret-password
 ```
 
+如果敏感信息只需要替换整个配置项，优先使用 `env source`；只有在必须拼装字符串时，才在文本配置里写 `${APP_DATABASE_PASSWORD}`。
+
 ### 4. 配置验证
 
 在启动时和配置更新时都进行验证：
@@ -417,13 +430,18 @@ config.LoadSource(file.NewSource("config.toml", false))
 
 **Q: 如何在配置中使用环境变量？**
 
-A: 在配置文件中使用 `${VAR}` 语法（需要额外支持）：
+A: 分两种场景：
+
+- 覆盖完整配置项时，使用 `env source`
+- 在字符串中拼装环境变量时，使用 `${VAR}`
 
 ```yaml
 app:
   database:
-    password: "${APP_DATABASE_PASSWORD}"
+    dsn: "postgres://app:${APP_DATABASE_PASSWORD}@db:5432/mydb?sslmode=disable"
 ```
+
+`port`、`enabled` 这类非字符串标量不要用 `${VAR}` 注入，继续使用 `env source`。
 
 ## 相关文档
 

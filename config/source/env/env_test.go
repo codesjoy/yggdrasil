@@ -188,6 +188,27 @@ func TestEnv_ParseArray(t *testing.T) {
 	}
 }
 
+func TestEnv_Read_DoesNotInterpolatePlaceholders(t *testing.T) {
+	t.Setenv("TESTENV_LITERAL_VALUE", "${TESTENV_UNSET_PLACEHOLDER}")
+
+	src := NewSource(nil, []string{"TESTENV"})
+	data, err := src.Read()
+	if err != nil {
+		t.Error(err)
+	}
+
+	var actual map[string]interface{}
+	if err := json.Unmarshal(data.Data(), &actual); err != nil {
+		t.Error(err)
+	}
+
+	assert.Equal(
+		t,
+		"${TESTENV_UNSET_PLACEHOLDER}",
+		actual["literal"].(map[string]interface{})["value"],
+	)
+}
+
 func containsKey(m map[string]interface{}, s string) bool {
 	for k := range m {
 		if k == s {

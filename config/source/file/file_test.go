@@ -241,6 +241,61 @@ func TestFile_Read_CustomParser(t *testing.T) {
 	assert.Equal(t, "value2", result["key2"])
 }
 
+func TestFile_Read_InterpolatesEnvPlaceholders(t *testing.T) {
+	t.Setenv("TEST_FILE_DSN_PASSWORD", "dsn-secret")
+	t.Setenv("TEST_FILE_BASE_URL", "https://config.example.com")
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "config.yaml")
+	require.NoError(
+		t,
+		os.WriteFile(
+			testFile,
+			[]byte(
+				"app:\n"+
+					"  database:\n"+
+					"    dsn: postgres://app:${TEST_FILE_DSN_PASSWORD}@db:5432/service?sslmode=disable\n"+
+					"  upstream:\n"+
+					"    url: ${TEST_FILE_BASE_URL}/v1/health\n",
+			),
+			0o600,
+		),
+	)
+
+	src := NewSource(testFile, false)
+	data, err := src.Read()
+	require.NoError(t, err)
+
+	var result map[string]any
+	err = yaml.Unmarshal(data.Data(), &result)
+	require.NoError(t, err)
+
+	app := result["app"].(map[string]interface{})
+	database := app["database"].(map[string]interface{})
+	upstream := app["upstream"].(map[string]interface{})
+	assert.Equal(
+		t,
+		"postgres://app:dsn-secret@db:5432/service?sslmode=disable",
+		database["dsn"],
+	)
+	assert.Equal(t, "https://config.example.com/v1/health", upstream["url"])
+}
+
+func TestFile_Read_MissingEnvPlaceholder(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "config.yaml")
+	require.NoError(
+		t,
+		os.WriteFile(testFile, []byte("app:\n  token: ${TEST_FILE_MISSING_TOKEN}\n"), 0o600),
+	)
+
+	src := NewSource(testFile, false)
+	_, err := src.Read()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), testFile)
+	assert.Contains(t, err.Error(), "TEST_FILE_MISSING_TOKEN")
+}
+
 // TestFile_Watch tests file watching functionality
 func TestFile_Watch(t *testing.T) {
 	if testing.Short() {
@@ -284,6 +339,43 @@ func TestFile_Watch(t *testing.T) {
 		err = yaml.Unmarshal(data.Data(), &result)
 		require.NoError(t, err)
 		assert.Equal(t, "modified", result["key"])
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for file change event")
+	}
+}
+
+func TestFile_Watch_ReinterpolatesEnvPlaceholders(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping watch test in short mode")
+	}
+
+	t.Setenv("TEST_FILE_WATCH_TOKEN", "first")
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "config.yaml")
+	content := []byte("app:\n  token: ${TEST_FILE_WATCH_TOKEN}\n")
+	require.NoError(t, os.WriteFile(testFile, content, 0o600))
+
+	src := NewSource(testFile, true)
+	watcher, err := src.Watch()
+	require.NoError(t, err)
+	require.NotNil(t, watcher)
+	defer func() {
+		_ = src.Close()
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+	require.NoError(t, os.Setenv("TEST_FILE_WATCH_TOKEN", "second"))
+	require.NoError(t, os.WriteFile(testFile, content, 0o600))
+
+	select {
+	case data := <-watcher:
+		require.NotNil(t, data)
+		var result map[string]any
+		err = yaml.Unmarshal(data.Data(), &result)
+		require.NoError(t, err)
+		app := result["app"].(map[string]interface{})
+		assert.Equal(t, "second", app["token"])
 	case <-time.After(5 * time.Second):
 		t.Fatal("timeout waiting for file change event")
 	}

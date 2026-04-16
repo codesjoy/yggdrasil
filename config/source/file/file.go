@@ -16,12 +16,15 @@
 package file
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +32,7 @@ import (
 	"github.com/codesjoy/pkg/utils/xgo"
 	"github.com/fsnotify/fsnotify"
 	"github.com/mitchellh/mapstructure"
+	"github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
 
 	"github.com/codesjoy/yggdrasil/v2/config/source"
@@ -85,8 +89,47 @@ func (f *file) Read() (source.Data, error) {
 	if err != nil {
 		return nil, err
 	}
+	if bytes.Contains(b, []byte("${")) && isStructuredTextParser(f.parser) {
+		var parsed map[string]any
+		if err := f.parser(b, &parsed); err != nil {
+			return nil, err
+		}
+		parsed, err = expandStringValues(fmt.Sprintf("file %q", f.path), parsed)
+		if err != nil {
+			return nil, err
+		}
+		return source.NewMapSourceData(source.PriorityFile, parsed), nil
+	}
+	b, err = source.ExpandEnvPlaceholders(fmt.Sprintf("file %q", f.path), b)
+	if err != nil {
+		return nil, err
+	}
 	cs := source.NewBytesSourceData(source.PriorityFile, b, f.parser)
 	return cs, nil
+}
+
+func isStructuredTextParser(parser source.Parser) bool {
+	if parser == nil {
+		return false
+	}
+
+	ptr := reflect.ValueOf(parser).Pointer()
+	return ptr == reflect.ValueOf(json.Unmarshal).Pointer() ||
+		ptr == reflect.ValueOf(yaml.Unmarshal).Pointer() ||
+		ptr == reflect.ValueOf(toml.Unmarshal).Pointer()
+}
+
+func expandStringValues(scope string, value map[string]any) (map[string]any, error) {
+	expanded, err := source.ExpandEnvPlaceholdersInValue(scope, value)
+	if err != nil {
+		return nil, err
+	}
+
+	result, ok := expanded.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("expanded %s is not a map", scope)
+	}
+	return result, nil
 }
 
 func (f *file) Name() string {
