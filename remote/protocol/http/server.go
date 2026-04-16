@@ -104,7 +104,10 @@ func (s *server) Handle() error {
 	return svr.Serve(lis)
 }
 
-func (s *server) Stop() error {
+func (s *server) Stop(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -113,7 +116,7 @@ func (s *server) Stop() error {
 	s.closed = true
 	svr := s.httpSvr
 	s.mu.Unlock()
-	return svr.Shutdown(context.Background())
+	return svr.Shutdown(ctx)
 }
 
 func (s *server) Info() remote.ServerInfo {

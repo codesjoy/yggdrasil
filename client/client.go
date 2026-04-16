@@ -131,7 +131,7 @@ type client struct {
 }
 
 // NewClient creates a new client.
-func NewClient(ctx context.Context, appName string) (Client, error) {
+func NewClient(ctx context.Context, appName string) (_ Client, err error) {
 	cfgKey := config.Join(config.KeyBase, "client", fmt.Sprintf("{%s}", appName))
 	cfg := config.ValueToValues(config.Get(cfgKey))
 	statsHandler := stats.GetClientHandler()
@@ -145,9 +145,33 @@ func NewClient(ctx context.Context, appName string) (Client, error) {
 	cli.ctx, cli.cancel = context.WithCancel(ctx)
 
 	cli.remoteClientManager = newRemoteClientManager(cli.ctx, appName, statsHandler)
+	watchRegistered := false
+	defer func() {
+		if err == nil {
+			return
+		}
+		if watchRegistered && cli.resolver != nil {
+			if cleanupErr := cli.resolver.DelWatch(cli.appName, cli); cleanupErr != nil {
+				slog.Error("failed to clean up resolver watch", slog.Any("error", cleanupErr))
+			}
+		}
+		if cli.balancer != nil {
+			if cleanupErr := cli.balancer.Close(); cleanupErr != nil {
+				slog.Error("failed to clean up balancer", slog.Any("error", cleanupErr))
+			}
+		}
+		if cli.remoteClientManager != nil {
+			if cleanupErr := cli.remoteClientManager.Close(); cleanupErr != nil {
+				slog.Error("failed to clean up remote client manager", slog.Any("error", cleanupErr))
+			}
+		}
+		if cli.cancel != nil {
+			cli.cancel()
+		}
+	}()
 
 	boCfg := backoff.Config{}
-	if err := cfg.Get(config.Join("backoff")).Scan(&boCfg); err != nil {
+	if err = cfg.Get(config.Join("backoff")).Scan(&boCfg); err != nil {
 		return nil, err
 	}
 	cli.streamBackoff = backoff.Exponential{Config: boCfg}
@@ -156,17 +180,18 @@ func NewClient(ctx context.Context, appName string) (Client, error) {
 		picker:     nil,
 		blockingCh: make(chan struct{}),
 	})
-	if err := cli.initResolverAndBalancer(cfg); err != nil {
+	if err = cli.initResolverAndBalancer(cfg); err != nil {
 		return nil, err
 	}
 	cli.initInterceptor()
 	if cli.resolver != nil {
-		xgo.Go(cli.watchUpdateState)
-		if err := cli.resolver.AddWatch(cli.appName, cli); err != nil {
+		if err = cli.resolver.AddWatch(cli.appName, cli); err != nil {
 			return nil, err
 		}
+		watchRegistered = true
+		xgo.Go(cli.watchUpdateState)
 	} else {
-		if err := cli.updateStaticState(cfg); err != nil {
+		if err = cli.updateStaticState(cfg); err != nil {
 			return nil, err
 		}
 	}
@@ -212,8 +237,6 @@ func (c *client) Close() error {
 	}
 	// Cancel context to stop watchUpdateState goroutine
 	c.cancel()
-	// Close stateChange channel
-	close(c.stateChange)
 	// Close all connections through centralized manager
 	if err := c.remoteClientManager.Close(); err != nil {
 		multiErr = errors.Join(multiErr, err)
@@ -223,29 +246,34 @@ func (c *client) Close() error {
 
 // UpdateState implements resolver.ClientConn interface
 func (c *client) UpdateState(state resolver.State) {
-	// Check if client is closing
 	select {
 	case <-c.ctx.Done():
+		return
+	case c.stateChange <- state:
 		return
 	default:
 	}
 
 	// Try to send the state, if channel is full, drain it first then send
 	select {
-	case c.stateChange <- state:
+	case <-c.ctx.Done():
 		return
 	default:
-		// Channel is full, try to drain the old value
-		select {
-		case <-c.stateChange:
-		default:
-		}
-		// Now try to send again
-		select {
-		case c.stateChange <- state:
-		case <-c.ctx.Done():
-			// Client is closing, ignore the update
-		}
+	}
+
+	// Channel is full, try to drain the old value.
+	select {
+	case <-c.ctx.Done():
+		return
+	case <-c.stateChange:
+	default:
+	}
+
+	// Now try to send again.
+	select {
+	case <-c.ctx.Done():
+	case c.stateChange <- state:
+	default:
 	}
 }
 
@@ -254,10 +282,7 @@ func (c *client) watchUpdateState() {
 		select {
 		case <-c.ctx.Done():
 			return
-		case state, ok := <-c.stateChange:
-			if !ok {
-				return
-			}
+		case state := <-c.stateChange:
 			c.updateState(state)
 		}
 	}

@@ -27,7 +27,7 @@ type MethodHandle func(ServerStream)
 type Server interface {
 	Start() error
 	Handle() error
-	Stop() error
+	Stop(context.Context) error
 	Info() ServerInfo
 }
 

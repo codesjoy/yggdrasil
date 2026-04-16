@@ -15,7 +15,9 @@
 package protocolhttp
 
 import (
+	"bytes"
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -56,7 +58,7 @@ func startHTTPTestServer(t *testing.T, handle remote.MethodHandle) (addr string,
 	}()
 
 	stop = func() {
-		_ = svr.Stop()
+		_ = svr.Stop(context.Background())
 		select {
 		case <-done:
 		case <-time.After(2 * time.Second):
@@ -155,4 +157,81 @@ func TestHTTPUnaryErrorMapping(t *testing.T) {
 	h, _ := cs.Header()
 	_, ok := h["content-type"]
 	require.False(t, ok)
+}
+
+func TestHTTPStopUsesContextDeadline(t *testing.T) {
+	_ = config.Set(
+		config.Join(config.KeyBase, "remote", "protocol", scheme, "server", "address"),
+		"127.0.0.1:0",
+	)
+	_ = config.Set(
+		config.Join(config.KeyBase, "remote", "protocol", scheme, "server", "network"),
+		"tcp",
+	)
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	svr, err := newServer(func(ss remote.ServerStream) {
+		require.NoError(t, ss.Start(false, false))
+		close(started)
+		<-release
+		ss.Finish(&stpb.Status{Code: int32(code.Code_OK), Message: "ok"}, nil)
+	})
+	require.NoError(t, err)
+	require.NoError(t, svr.Start())
+
+	done := make(chan struct{})
+	go func() {
+		_ = svr.Handle()
+		close(done)
+	}()
+
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"http://"+svr.Info().Address+"/test/block",
+		bytes.NewReader([]byte(`{"code":0,"message":"block"}`)),
+	)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	reqDone := make(chan struct{})
+	go func() {
+		resp, err := http.DefaultClient.Do(req)
+		if err == nil && resp != nil {
+			_ = resp.Body.Close()
+		}
+		close(reqDone)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("request did not reach handler")
+	}
+
+	stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err = svr.Stop(stopCtx)
+	elapsed := time.Since(start)
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Less(t, elapsed, 250*time.Millisecond)
+
+	close(release)
+
+	select {
+	case <-reqDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("request did not complete after release")
+	}
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("server did not stop after request release")
+	}
 }

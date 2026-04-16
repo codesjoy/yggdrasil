@@ -15,6 +15,8 @@
 package server
 
 import (
+	"context"
+
 	"github.com/codesjoy/yggdrasil/v2/internal/constant"
 )
 
@@ -32,6 +34,6 @@ type Server interface {
 	RegisterRestService(sd *RestServiceDesc, ss interface{}, prefix ...string)
 	RegisterRestRawHandlers(sd ...*RestRawHandlerDesc)
 	Serve(startFlag chan<- struct{}) error
-	Stop() error
+	Stop(context.Context) error
 	Endpoints() []Endpoint
 }

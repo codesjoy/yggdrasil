@@ -122,7 +122,7 @@ func (m *remoteClientManager) Remove(name string) error {
 	m.mu.Unlock()
 
 	// Close outside of lock to avoid blocking other operations
-	return conn.Close()
+	return conn.Client.Close()
 }
 
 // Close closes all managed connections
@@ -136,7 +136,7 @@ func (m *remoteClientManager) Close() error {
 	m.closed = true
 	clients := make([]remote.Client, 0, len(m.remoteClients))
 	for _, conn := range m.remoteClients {
-		clients = append(clients, conn)
+		clients = append(clients, conn.Client)
 	}
 	m.remoteClients = nil
 	m.mu.Unlock()

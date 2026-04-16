@@ -135,10 +135,11 @@ func TestRemoteClientManager_Remove(t *testing.T) {
 	stateListener := func(state remote.ClientState) {}
 
 	// Create client
-	_, err := manager.GetOrCreate(endpoint, stateListener)
+	client, err := manager.GetOrCreate(endpoint, stateListener)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
+	underlying := client.(*rcWrapper).Client.(*mockRemoteClient)
 
 	// Remove client
 	err = manager.Remove(endpoint.Name())
@@ -153,6 +154,9 @@ func TestRemoteClientManager_Remove(t *testing.T) {
 
 	if exists {
 		t.Fatal("expected client to be removed")
+	}
+	if !underlying.IsClosed() {
+		t.Fatal("expected underlying client to be closed")
 	}
 }
 
@@ -176,8 +180,10 @@ func TestRemoteClientManager_Close(t *testing.T) {
 	stateListener := func(state remote.ClientState) {}
 
 	// Create multiple clients
-	_, _ = manager.GetOrCreate(endpoint1, stateListener)
-	_, _ = manager.GetOrCreate(endpoint2, stateListener)
+	client1, _ := manager.GetOrCreate(endpoint1, stateListener)
+	client2, _ := manager.GetOrCreate(endpoint2, stateListener)
+	underlying1 := client1.(*rcWrapper).Client.(*mockRemoteClient)
+	underlying2 := client2.(*rcWrapper).Client.(*mockRemoteClient)
 
 	// Close manager
 	err := manager.Close()
@@ -193,6 +199,9 @@ func TestRemoteClientManager_Close(t *testing.T) {
 	// Verify clients map is nil
 	if manager.remoteClients != nil {
 		t.Fatal("expected remoteClients to be nil after close")
+	}
+	if !underlying1.IsClosed() || !underlying2.IsClosed() {
+		t.Fatal("expected all underlying clients to be closed")
 	}
 }
 
@@ -253,6 +262,7 @@ func TestRcWrapper_Close(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
+	underlying := client.(*rcWrapper).Client.(*mockRemoteClient)
 
 	// Close through wrapper
 	err = client.Close()
@@ -267,6 +277,9 @@ func TestRcWrapper_Close(t *testing.T) {
 
 	if exists {
 		t.Fatal("expected client to be removed from manager")
+	}
+	if !underlying.IsClosed() {
+		t.Fatal("expected underlying client to be closed")
 	}
 }
 

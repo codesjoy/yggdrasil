@@ -259,6 +259,8 @@ type mockResolver struct {
 	watchers   map[string]resolver.Client
 	addCount   int
 	delCount   int
+	addErr     error
+	delErr     error
 	updateFunc func(resolver.Client)
 }
 
@@ -271,6 +273,9 @@ func newMockResolver() *mockResolver {
 func (m *mockResolver) AddWatch(appName string, watcher resolver.Client) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.addErr != nil {
+		return m.addErr
+	}
 	m.watchers[appName] = watcher
 	m.addCount++
 	if m.updateFunc != nil {
@@ -282,6 +287,9 @@ func (m *mockResolver) AddWatch(appName string, watcher resolver.Client) error {
 func (m *mockResolver) DelWatch(appName string, watcher resolver.Client) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.delErr != nil {
+		return m.delErr
+	}
 	if _, ok := m.watchers[appName]; ok {
 		delete(m.watchers, appName)
 		m.delCount++

@@ -220,9 +220,10 @@ func (s *ServeMux) Serve() error {
 }
 
 // Stop stops the server.
-func (s *ServeMux) Stop() error {
-	ctx, cancel := context.WithTimeout(context.Background(), s.cfg.ShutdownTimeout)
-	defer cancel()
+func (s *ServeMux) Stop(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	return s.svr.Shutdown(ctx)
 }
 

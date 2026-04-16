@@ -67,10 +67,6 @@ func TestRawUnaryCall(t *testing.T) {
 }
 
 func TestRawServerStreamCall(t *testing.T) {
-	t.Skip(
-		"low-level server-stream integration currently completes with OK status before payload delivery; raw codec is covered by unary, client-stream, and bidi tests",
-	)
-
 	cc := newRawTestClientConn(t, "", rawTestMethodHandle)
 
 	cs, err := cc.NewStream(
@@ -291,7 +287,7 @@ func newRawTestClientConn(
 
 	t.Cleanup(func() {
 		_ = cc.Close()
-		require.NoError(t, srv.Stop())
+		require.NoError(t, srv.Stop(context.Background()))
 		select {
 		case err := <-serveErrCh:
 			require.NoError(t, err)
@@ -314,6 +310,9 @@ func sanitizeServiceName(name string) string {
 }
 
 func isSuccessfulStreamEnd(err error) bool {
+	if err == nil {
+		return false
+	}
 	if err == io.EOF {
 		return true
 	}
