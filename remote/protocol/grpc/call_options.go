@@ -71,6 +71,7 @@ func (o forceCodecCallOption) apply(c *callInfo) error {
 	if o.codec == nil {
 		return xerror.New(code.Code_INTERNAL, "grpc: forced codec cannot be nil")
 	}
+	c.forceCodec = true
 	c.codec = o.codec
 	return nil
 }

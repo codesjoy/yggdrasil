@@ -28,11 +28,14 @@ package encoding
 import (
 	"io"
 	"strings"
+
+	grpcencoding "google.golang.org/grpc/encoding"
+	gmem "google.golang.org/grpc/mem"
 )
 
 // Identity specifies the optional encoding for uncompressed streams.
 // It is intended for grpc internal use only.
-const Identity = "identity"
+const Identity = grpcencoding.Identity
 
 // Compressor is used for compressing and decompressing when sending or
 // receiving messages.
@@ -60,8 +63,6 @@ type Compressor interface {
 	// later release.
 }
 
-var registeredCompressor = make(map[string]Compressor)
-
 // RegisterCompressor registers the compressor with gRPC by its name.  It can
 // be activated when sending an RPC via grpc.UseCompressor().  It will be
 // automatically accessed when receiving a message based on the content coding
@@ -72,12 +73,12 @@ var registeredCompressor = make(map[string]Compressor)
 // an init() function), and is not thread-safe.  If multiple Compressors are
 // registered with the same name, the one registered last will take effect.
 func RegisterCompressor(c Compressor) {
-	registeredCompressor[c.Name()] = c
+	grpcencoding.RegisterCompressor(c)
 }
 
 // GetCompressor returns Compressor for the given compressor name.
 func GetCompressor(name string) Compressor {
-	return registeredCompressor[name]
+	return grpcencoding.GetCompressor(name)
 }
 
 // Codec defines the interface gRPC uses to encode and decode messages.  Note
@@ -94,7 +95,11 @@ type Codec interface {
 	Name() string
 }
 
-var registeredCodecs = make(map[string]Codec)
+type codecV2 interface {
+	Codec
+	MarshalV2(v interface{}) (gmem.BufferSlice, error)
+	UnmarshalV2(data gmem.BufferSlice, v interface{}) error
+}
 
 // RegisterCodec registers the provided Codec for use with all gRPC clients and
 // servers.
@@ -117,8 +122,7 @@ func RegisterCodec(codec Codec) {
 	if codec.Name() == "" {
 		panic("cannot register Codec with empty string result for Name()")
 	}
-	contentSubtype := strings.ToLower(codec.Name())
-	registeredCodecs[contentSubtype] = codec
+	grpcencoding.RegisterCodecV2(asGRPCCodecV2(codec))
 }
 
 // GetCodec gets a registered Codec by content-subtype, or nil if no Codec is
@@ -126,5 +130,85 @@ func RegisterCodec(codec Codec) {
 //
 // The content-subtype is expected to be lowercase.
 func GetCodec(contentSubtype string) Codec {
-	return registeredCodecs[contentSubtype]
+	contentSubtype = strings.ToLower(contentSubtype)
+	if codec := grpcencoding.GetCodec(contentSubtype); codec != nil {
+		return codec
+	}
+	if codec := grpcencoding.GetCodecV2(contentSubtype); codec != nil {
+		return grpcCodecV1Bridge{codec: codec}
+	}
+	return nil
+}
+
+func asGRPCCodecV2(codec Codec) grpcencoding.CodecV2 {
+	if codec == nil {
+		return nil
+	}
+	return grpcCodecBridge{codec: codec}
+}
+
+type grpcCodecBridge struct {
+	codec Codec
+}
+
+func (b grpcCodecBridge) Name() string {
+	return b.codec.Name()
+}
+
+func (b grpcCodecBridge) Marshal(v interface{}) (gmem.BufferSlice, error) {
+	if codec, ok := b.codec.(codecV2); ok {
+		return codec.MarshalV2(v)
+	}
+	data, err := b.codec.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) == 0 {
+		return nil, nil
+	}
+	buf := data
+	return gmem.BufferSlice{gmem.NewBuffer(&buf, nil)}, nil
+}
+
+func (b grpcCodecBridge) Unmarshal(data gmem.BufferSlice, v interface{}) error {
+	if codec, ok := b.codec.(codecV2); ok {
+		return codec.UnmarshalV2(data, v)
+	}
+	if len(data) == 0 {
+		return b.codec.Unmarshal(nil, v)
+	}
+	if len(data) == 1 {
+		return b.codec.Unmarshal(data[0].ReadOnlyData(), v)
+	}
+	return b.codec.Unmarshal(data.Materialize(), v)
+}
+
+type grpcCodecV1Bridge struct {
+	codec grpcencoding.CodecV2
+}
+
+func (b grpcCodecV1Bridge) Name() string {
+	return b.codec.Name()
+}
+
+func (b grpcCodecV1Bridge) Marshal(v interface{}) ([]byte, error) {
+	data, err := b.codec.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	defer data.Free()
+	if len(data) == 0 {
+		return nil, nil
+	}
+	return data.Materialize(), nil
+}
+
+func (b grpcCodecV1Bridge) Unmarshal(data []byte, v interface{}) error {
+	if len(data) == 0 {
+		return b.codec.Unmarshal(nil, v)
+	}
+	buf := data
+	bufferSlice := gmem.BufferSlice{gmem.NewBuffer(&buf, nil)}
+	defer bufferSlice.Free()
+	return b.codec.Unmarshal(bufferSlice, v)
 }

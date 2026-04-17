@@ -30,7 +30,6 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/remote"
-	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/gzip"
 	jsonrawenc "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/jsonraw"
 	rawenc "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/raw"
 	"github.com/codesjoy/yggdrasil/v2/resolver"

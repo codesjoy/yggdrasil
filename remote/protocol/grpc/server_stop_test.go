@@ -16,74 +16,114 @@ package grpc
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	stpb "google.golang.org/genproto/googleapis/rpc/status"
 
-	"github.com/codesjoy/yggdrasil/v2/metadata"
-	"github.com/codesjoy/yggdrasil/v2/remote/peer"
-	transport2 "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/transport"
-	"github.com/codesjoy/yggdrasil/v2/status"
+	"github.com/codesjoy/yggdrasil/v2/config"
+	"github.com/codesjoy/yggdrasil/v2/remote"
+	"github.com/codesjoy/yggdrasil/v2/resolver"
+	"github.com/codesjoy/yggdrasil/v2/stats"
+	"github.com/codesjoy/yggdrasil/v2/stream"
 )
 
-type blockingServerTransport struct {
-	drained bool
-}
+func blockingStopTestMethodHandle(entered chan<- struct{}, release <-chan struct{}) remote.MethodHandle {
+	return func(ss remote.ServerStream) {
+		var (
+			reply any
+			err   error
+		)
+		defer func() {
+			ss.Finish(reply, err)
+		}()
 
-func (b *blockingServerTransport) HandleStreams(context.Context, func(*transport2.Stream)) {}
-
-func (b *blockingServerTransport) WriteHeader(*transport2.Stream, metadata.MD) error {
-	return nil
-}
-
-func (b *blockingServerTransport) Write(*transport2.Stream, []byte, []byte, *transport2.Options) error {
-	return nil
-}
-
-func (b *blockingServerTransport) WriteStatus(*transport2.Stream, *status.Status) error {
-	return nil
-}
-
-func (b *blockingServerTransport) Close() {}
-
-func (b *blockingServerTransport) Peer() *peer.Peer {
-	return &peer.Peer{}
-}
-
-func (b *blockingServerTransport) Drain() {
-	b.drained = true
+		if err = ss.Start(false, false); err != nil {
+			return
+		}
+		var req stpb.Status
+		if err = ss.RecvMsg(&req); err != nil {
+			return
+		}
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		<-release
+		reply = &stpb.Status{Message: req.Message}
+	}
 }
 
 func TestServerStopRespectsContextDeadline(t *testing.T) {
-	s := &server{
-		serve:     true,
-		stoppedCh: make(chan struct{}),
-		conns:     make(map[transport2.ServerTransport]bool),
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "remote", "protocol", scheme, "network"), "tcp"))
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "remote", "protocol", scheme, "address"), "127.0.0.1:0"))
+
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	srv, err := newServer(blockingStopTestMethodHandle(entered, release))
+	require.NoError(t, err)
+	require.NoError(t, srv.Start())
+
+	serveErrCh := make(chan error, 1)
+	go func() {
+		serveErrCh <- srv.Handle()
+	}()
+
+	endpoint := resolver.BaseEndpoint{
+		Address:  srv.Info().Address,
+		Protocol: scheme,
 	}
-	s.cv = sync.NewCond(&s.mu)
-	s.ctx, s.cancel = context.WithCancel(context.Background())
+	cli, err := newClient(
+		context.Background(),
+		"grpc-stop-deadline",
+		endpoint,
+		stats.NoOpHandler,
+		func(remote.ClientState) {},
+	)
+	require.NoError(t, err)
+	cc := cli.(*clientConn)
+	cc.Connect()
+	require.Eventually(t, func() bool {
+		return cc.State() == remote.Ready
+	}, 5*time.Second, 20*time.Millisecond)
 
-	st := &blockingServerTransport{}
-	s.conns[st] = true
+	cs, err := cc.NewStream(context.Background(), &stream.Desc{}, "/stop.Test/Unary")
+	require.NoError(t, err)
+	require.NoError(t, cs.SendMsg(&stpb.Status{Message: "ping"}))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	recvErrCh := make(chan error, 1)
+	go func() {
+		var reply stpb.Status
+		recvErrCh <- cs.RecvMsg(&reply)
+	}()
+
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("blocking rpc did not start in time")
+	}
+
+	stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
-
 	start := time.Now()
-	err := s.Stop(ctx)
+	err = srv.Stop(stopCtx)
 	elapsed := time.Since(start)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.True(t, st.drained)
 	require.Less(t, elapsed, 250*time.Millisecond)
 
-	s.removeConn(st)
-
+	close(release)
+	require.NoError(t, cc.Close())
 	select {
-	case <-s.stoppedCh:
+	case <-recvErrCh:
 	case <-time.After(2 * time.Second):
-		t.Fatal("grpc server did not finish stopping after connection removal")
+		t.Fatal("client recv did not finish in time")
+	}
+	select {
+	case err := <-serveErrCh:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("grpc server did not stop in time")
 	}
 }

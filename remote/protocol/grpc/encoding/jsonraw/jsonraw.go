@@ -19,6 +19,8 @@ import (
 	"fmt"
 
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
+
+	gmem "google.golang.org/grpc/mem"
 )
 
 // Name is the registered name of the json raw codec.
@@ -44,6 +46,27 @@ func (codec) Unmarshal(data []byte, v interface{}) error {
 		return fmt.Errorf("failed to unmarshal, message is %T, want *[]byte", v)
 	}
 	*b = data
+	return nil
+}
+
+func (codec) MarshalV2(v interface{}) (gmem.BufferSlice, error) {
+	b, ok := v.([]byte)
+	if !ok {
+		return nil, fmt.Errorf("failed to marshal, message is %T, want []byte", v)
+	}
+	if len(b) == 0 {
+		return nil, nil
+	}
+	data := b
+	return gmem.BufferSlice{gmem.NewBuffer(&data, nil)}, nil
+}
+
+func (codec) UnmarshalV2(data gmem.BufferSlice, v interface{}) error {
+	b, ok := v.(*[]byte)
+	if !ok {
+		return fmt.Errorf("failed to unmarshal, message is %T, want *[]byte", v)
+	}
+	*b = data.Materialize()
 	return nil
 }
 

@@ -25,57 +25,11 @@ import (
 	stpb "google.golang.org/genproto/googleapis/rpc/status"
 
 	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/internal/backoff"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
 	"github.com/codesjoy/yggdrasil/v2/stats"
 	"github.com/codesjoy/yggdrasil/v2/stream"
 )
-
-func newTestBackoffStrategy() backoff.Strategy {
-	return backoff.Exponential{Config: backoff.Config{
-		BaseDelay:  time.Millisecond,
-		Multiplier: 1.0,
-		Jitter:     0,
-		MaxDelay:   time.Millisecond,
-	}}
-}
-
-func TestClientConnOnCloseDoesNotReconnectAfterShutdown(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	cc := &clientConn{
-		ctx:  ctx,
-		cfg:  &Config{},
-		bs:   newTestBackoffStrategy(),
-		addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1},
-		onStateChange: func(remote.ClientState) {
-		},
-		state: remote.Shutdown,
-	}
-
-	cc.onClose()
-	assert.Equal(t, remote.Shutdown, cc.State())
-}
-
-func TestClientConnOnCloseMovesToIdle(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	cc := &clientConn{
-		ctx:  ctx,
-		cfg:  &Config{},
-		bs:   newTestBackoffStrategy(),
-		addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1},
-		onStateChange: func(remote.ClientState) {
-		},
-		state: remote.Ready,
-	}
-
-	cc.onClose()
-	assert.Equal(t, remote.Idle, cc.State())
-}
 
 func reserveClientConnTestAddr(t *testing.T) string {
 	t.Helper()
@@ -126,17 +80,11 @@ func TestClientConnReconnectsAfterExplicitReconnect(t *testing.T) {
 	require.NoError(t, err)
 
 	cc := cli.(*clientConn)
-	cc.bs = newTestBackoffStrategy()
 	cc.cfg.MinConnectTimeout = time.Millisecond
 	go cc.Connect()
 
 	require.Eventually(t, func() bool {
-		cc.mu.RLock()
-		defer cc.mu.RUnlock()
-		return cc.backoffIdx > 0
-	}, time.Second, 10*time.Millisecond)
-	require.Eventually(t, func() bool {
-		return cc.State() == remote.Idle
+		return cc.State() == remote.TransientFailure || cc.State() == remote.Idle
 	}, time.Second, 10*time.Millisecond)
 
 	srv, err := newServer(lateStartTestMethodHandle)
@@ -160,7 +108,7 @@ func TestClientConnReconnectsAfterExplicitReconnect(t *testing.T) {
 	}()
 
 	time.Sleep(20 * time.Millisecond)
-	require.Equal(t, remote.Idle, cc.State())
+	require.NotEqual(t, remote.Shutdown, cc.State())
 
 	go cc.Connect()
 	require.Eventually(t, func() bool {

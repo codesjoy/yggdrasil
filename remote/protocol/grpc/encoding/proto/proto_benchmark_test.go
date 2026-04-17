@@ -71,7 +71,10 @@ func BenchmarkProtoCodec(b *testing.B) {
 			protoStructs := setupBenchmarkProtoCodecInputs(s)
 			name := fmt.Sprintf("MinPayloadSize:%v/SetParallelism(%v)", s, p)
 			b.Run(name, func(b *testing.B) {
-				codec := &codec{}
+				codec := encoding.GetCodec(Name)
+				if codec == nil {
+					b.Fatal("proto codec is not registered")
+				}
 				b.SetParallelism(p)
 				b.RunParallel(func(pb *testing.PB) {
 					benchmarkProtoCodec(codec, protoStructs, pb, b)
@@ -81,7 +84,7 @@ func BenchmarkProtoCodec(b *testing.B) {
 	}
 }
 
-func benchmarkProtoCodec(codec *codec, protoStructs []proto.Message, pb *testing.PB, b *testing.B) {
+func benchmarkProtoCodec(codec encoding.Codec, protoStructs []proto.Message, pb *testing.PB, b *testing.B) {
 	counter := 0
 	for pb.Next() {
 		counter++
