@@ -61,13 +61,22 @@ func newCredentials(serviceName string, client bool) credentials.TransportCreden
 	if cfg.MinVersion != nil {
 		if v, ok := parseTLSVersion(*cfg.MinVersion); ok {
 			tlsCfg.MinVersion = v
+		} else {
+			slog.Warn("failed to parse tls min version", slog.String("value", *cfg.MinVersion))
+			return nil
 		}
 	}
 
 	if client {
-		applyClientConfig(tlsCfg, cfg.Client)
+		if err := applyClientConfig(tlsCfg, cfg.Client); err != nil {
+			slog.Warn("failed to build tls client config", slog.Any("error", err))
+			return nil
+		}
 	} else {
-		applyServerConfig(tlsCfg, cfg.Server)
+		if err := applyServerConfig(tlsCfg, cfg.Server); err != nil {
+			slog.Warn("failed to build tls server config", slog.Any("error", err))
+			return nil
+		}
 	}
 
 	tc, err := New(Config{Client: client, TLSConfig: tlsCfg})
@@ -142,7 +151,7 @@ func mergeSideCfg(dst *sideCfg, src sideCfg) {
 	}
 }
 
-func applyClientConfig(tlsCfg *tls.Config, cfg sideCfg) {
+func applyClientConfig(tlsCfg *tls.Config, cfg sideCfg) error {
 	if cfg.ServerName != "" {
 		tlsCfg.ServerName = cfg.ServerName
 	}
@@ -150,39 +159,46 @@ func applyClientConfig(tlsCfg *tls.Config, cfg sideCfg) {
 		tlsCfg.InsecureSkipVerify = *cfg.InsecureSkipVerify
 	}
 	if cfg.CAFile != "" {
-		if pool, ok := loadCertPool(cfg.CAFile); ok {
-			tlsCfg.RootCAs = pool
+		pool, err := loadCertPool(cfg.CAFile)
+		if err != nil {
+			return err
 		}
+		tlsCfg.RootCAs = pool
 	}
 	if cfg.CertFile != "" && cfg.KeyFile != "" {
-		if cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile); err == nil {
-			tlsCfg.Certificates = []tls.Certificate{cert}
-		} else {
-			slog.Warn("failed to load tls client certificate", slog.Any("error", err))
+		cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
+		if err != nil {
+			return fmt.Errorf("failed to load tls client certificate: %w", err)
 		}
+		tlsCfg.Certificates = []tls.Certificate{cert}
 	}
 	applySPIFFEVerify(tlsCfg, cfg)
+	return nil
 }
 
-func applyServerConfig(tlsCfg *tls.Config, cfg sideCfg) {
+func applyServerConfig(tlsCfg *tls.Config, cfg sideCfg) error {
 	if cfg.CertFile != "" && cfg.KeyFile != "" {
-		if cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile); err == nil {
-			tlsCfg.Certificates = []tls.Certificate{cert}
-		} else {
-			slog.Warn("failed to load tls server certificate", slog.Any("error", err))
+		cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
+		if err != nil {
+			return fmt.Errorf("failed to load tls server certificate: %w", err)
 		}
+		tlsCfg.Certificates = []tls.Certificate{cert}
 	}
 
 	if cfg.ClientCAFile != "" {
-		if pool, ok := loadCertPool(cfg.ClientCAFile); ok {
-			tlsCfg.ClientCAs = pool
+		pool, err := loadCertPool(cfg.ClientCAFile)
+		if err != nil {
+			return err
 		}
+		tlsCfg.ClientCAs = pool
 	}
 
 	switch {
 	case cfg.ClientAuth != nil:
 		if ca, ok := parseClientAuth(*cfg.ClientAuth); ok {
 			tlsCfg.ClientAuth = ca
+		} else {
+			return fmt.Errorf("invalid tls client auth mode %q", *cfg.ClientAuth)
 		}
 	case cfg.RequireClientCert != nil && *cfg.RequireClientCert:
 		if tlsCfg.ClientCAs != nil {
@@ -194,6 +210,7 @@ func applyServerConfig(tlsCfg *tls.Config, cfg sideCfg) {
 		tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
 	}
 	applySPIFFEVerify(tlsCfg, cfg)
+	return nil
 }
 
 func applySPIFFEVerify(tlsCfg *tls.Config, cfg sideCfg) {
@@ -280,17 +297,15 @@ func parseClientAuth(v string) (tls.ClientAuthType, bool) {
 	}
 }
 
-func loadCertPool(path string) (*x509.CertPool, bool) {
+func loadCertPool(path string) (*x509.CertPool, error) {
 	path = filepath.Clean(path)
 	b, err := os.ReadFile(path)
 	if err != nil {
-		slog.Warn("failed to read ca file", slog.Any("error", err), slog.String("path", path))
-		return nil, false
+		return nil, fmt.Errorf("failed to read ca file %q: %w", path, err)
 	}
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(b) {
-		slog.Warn("failed to parse ca pem", slog.String("path", path))
-		return nil, false
+		return nil, fmt.Errorf("failed to parse ca pem %q", path)
 	}
-	return pool, true
+	return pool, nil
 }
