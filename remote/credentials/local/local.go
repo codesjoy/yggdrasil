@@ -29,7 +29,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"strings"
 
 	"github.com/codesjoy/yggdrasil/v2/remote/credentials"
 )
@@ -70,22 +69,39 @@ func (c *localTC) Info() credentials.ProtocolInfo {
 }
 
 // getSecurityLevel returns the security level for a local connection.
-// It returns an reason if a connection is not local.
-func getSecurityLevel(network, addr string) (credentials.SecurityLevel, error) {
-	switch {
-	// Local TCP connection
-	case strings.HasPrefix(addr, "127."), strings.HasPrefix(addr, "[::1]:"):
-		return credentials.NoSecurity, nil
-	// UDS connection
-	case network == "unix":
-		return credentials.PrivacyAndIntegrity, nil
-	// Not a local connection and should fail
-	default:
-		return credentials.InvalidSecurityLevel, fmt.Errorf(
-			"local credentials rejected connection to non-local address %q",
-			addr,
-		)
+// It returns an error if a connection is not local.
+func getSecurityLevel(addr net.Addr) (credentials.SecurityLevel, error) {
+	if addr == nil {
+		return credentials.InvalidSecurityLevel, fmt.Errorf("local credentials rejected nil remote address")
 	}
+	switch a := addr.(type) {
+	case *net.UnixAddr:
+		return credentials.PrivacyAndIntegrity, nil
+	case *net.TCPAddr:
+		if a.IP != nil && a.IP.IsLoopback() {
+			return credentials.NoSecurity, nil
+		}
+	case *net.IPAddr:
+		if a.IP != nil && a.IP.IsLoopback() {
+			return credentials.NoSecurity, nil
+		}
+	}
+
+	host, _, err := net.SplitHostPort(addr.String())
+	if err == nil {
+		if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+			return credentials.NoSecurity, nil
+		}
+	}
+
+	if network := addr.Network(); network == "unix" || network == "unixpacket" {
+		return credentials.PrivacyAndIntegrity, nil
+	}
+
+	return credentials.InvalidSecurityLevel, fmt.Errorf(
+		"local credentials rejected connection to non-local address %q",
+		addr.String(),
+	)
 }
 
 func (*localTC) ClientHandshake(
@@ -93,7 +109,7 @@ func (*localTC) ClientHandshake(
 	_ string,
 	conn net.Conn,
 ) (net.Conn, credentials.AuthInfo, error) {
-	secLevel, err := getSecurityLevel(conn.RemoteAddr().Network(), conn.RemoteAddr().String())
+	secLevel, err := getSecurityLevel(conn.RemoteAddr())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -101,7 +117,7 @@ func (*localTC) ClientHandshake(
 }
 
 func (*localTC) ServerHandshake(conn net.Conn) (net.Conn, credentials.AuthInfo, error) {
-	secLevel, err := getSecurityLevel(conn.RemoteAddr().Network(), conn.RemoteAddr().String())
+	secLevel, err := getSecurityLevel(conn.RemoteAddr())
 	if err != nil {
 		return nil, nil, err
 	}

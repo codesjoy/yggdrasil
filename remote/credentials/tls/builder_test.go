@@ -323,6 +323,33 @@ func TestBuilderSPIFFEIDMismatchFails(t *testing.T) {
 	}
 }
 
+func TestBuilderReturnsNilOnInvalidFiles(t *testing.T) {
+	origKeyBase := config.KeyBase
+	config.KeyBase = "yggdrasil_test_tls_builder_invalid_files"
+	t.Cleanup(func() { config.KeyBase = origKeyBase })
+
+	key := config.Join(config.KeyBase, "remote", "credentials", "tls")
+	if err := config.Set(key, map[string]any{
+		"server": map[string]any{
+			"cert_file": "/tmp/missing-server-cert.pem",
+			"key_file":  "/tmp/missing-server-key.pem",
+		},
+		"client": map[string]any{
+			"ca_file": "/tmp/missing-client-ca.pem",
+		},
+	}); err != nil {
+		t.Fatalf("config.Set: %v", err)
+	}
+
+	b := credentials.GetBuilder("tls")
+	if got := b("svc", false); got != nil {
+		t.Fatalf("server builder returned %T, want nil", got)
+	}
+	if got := b("svc", true); got != nil {
+		t.Fatalf("client builder returned %T, want nil", got)
+	}
+}
+
 func newLeafCertWithURI(
 	t *testing.T,
 	caCert *x509.Certificate,

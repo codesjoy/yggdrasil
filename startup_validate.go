@@ -18,12 +18,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
 	xotel "github.com/codesjoy/yggdrasil/v2/otel"
 	"github.com/codesjoy/yggdrasil/v2/registry"
 	"github.com/codesjoy/yggdrasil/v2/remote"
+	"github.com/codesjoy/yggdrasil/v2/remote/credentials"
 	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
 	"github.com/codesjoy/yggdrasil/v2/remote/rest"
 	"github.com/codesjoy/yggdrasil/v2/remote/rest/middleware"
@@ -110,6 +112,43 @@ func validateStartup(opts *options) error {
 		}
 	}
 
+	validateCredential := func(protoName, serviceName string, client bool, key string) {
+		if protoName == "" {
+			return
+		}
+		builder := credentials.GetBuilder(protoName)
+		if builder == nil {
+			addErr(
+				"remote credentials builder not found",
+				fmt.Errorf("name=%s", protoName),
+				slog.String("name", protoName),
+				slog.String("key", key),
+			)
+			return
+		}
+		if builder(trimServiceConfigName(serviceName), client) == nil {
+			addErr(
+				"remote credentials config invalid",
+				fmt.Errorf("name=%s", protoName),
+				slog.String("name", protoName),
+				slog.String("key", key),
+			)
+		}
+	}
+
+	validateCredential(
+		config.GetString(config.Join(config.KeyBase, "remote", "protocol", "grpc", "creds_proto")),
+		"",
+		false,
+		config.Join(config.KeyBase, "remote", "protocol", "grpc", "creds_proto"),
+	)
+	validateCredential(
+		config.GetString(config.Join(config.KeyBase, "remote", "protocol", "grpc", "transport", "creds_proto")),
+		"",
+		true,
+		config.Join(config.KeyBase, "remote", "protocol", "grpc", "transport", "creds_proto"),
+	)
+
 	unaryNames := config.Get(config.Join(config.KeyBase, "interceptor", "unary_server")).
 		StringSlice()
 	for _, name := range unaryNames {
@@ -161,6 +200,14 @@ func validateStartup(opts *options) error {
 		if appName == "interceptor" {
 			continue
 		}
+		validateCredential(
+			config.GetString(
+				config.Join(config.KeyBase, "client", appName, "protocol_config", "grpc", "transport", "creds_proto"),
+			),
+			appName,
+			true,
+			config.Join(config.KeyBase, "client", appName, "protocol_config", "grpc", "transport", "creds_proto"),
+		)
 		unaryNames := config.Get(config.Join(config.KeyBase, "client", appName, "interceptor", "unary")).
 			StringSlice()
 		for _, name := range unaryNames {
@@ -226,4 +273,12 @@ func validateStartup(opts *options) error {
 	}
 
 	return multiErr
+}
+
+func trimServiceConfigName(name string) string {
+	name = strings.TrimSpace(name)
+	if len(name) >= 2 && strings.HasPrefix(name, "{") && strings.HasSuffix(name, "}") {
+		return name[1 : len(name)-1]
+	}
+	return name
 }

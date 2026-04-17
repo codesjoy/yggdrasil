@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/codesjoy/yggdrasil/v2/config"
+	_ "github.com/codesjoy/yggdrasil/v2/remote/credentials/tls"
 	"github.com/codesjoy/yggdrasil/v2/server"
 )
 
@@ -130,6 +131,38 @@ func TestValidateStartup_Strict_FailsWhenRESTHandlersRegisteredButDisabled(t *te
 		},
 	})
 	if err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestValidateStartup_Strict_FailsOnMissingRemoteCredentialsBuilder(t *testing.T) {
+	_ = config.Set("yggdrasil.startup.validate.strict", true)
+	_ = config.Set("yggdrasil.remote.protocol.grpc.creds_proto", "missing")
+
+	t.Cleanup(func() {
+		_ = config.Set("yggdrasil.startup.validate.strict", false)
+		_ = config.Set("yggdrasil.remote.protocol.grpc.creds_proto", "")
+	})
+
+	if err := validateStartup(nil); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestValidateStartup_Strict_FailsOnInvalidTLSCredentialsConfig(t *testing.T) {
+	_ = config.Set("yggdrasil.startup.validate.strict", true)
+	_ = config.Set("yggdrasil.remote.protocol.grpc.creds_proto", "tls")
+	_ = config.Set("yggdrasil.remote.credentials.tls.server.cert_file", "/tmp/missing-cert.pem")
+	_ = config.Set("yggdrasil.remote.credentials.tls.server.key_file", "/tmp/missing-key.pem")
+
+	t.Cleanup(func() {
+		_ = config.Set("yggdrasil.startup.validate.strict", false)
+		_ = config.Set("yggdrasil.remote.protocol.grpc.creds_proto", "")
+		_ = config.Set("yggdrasil.remote.credentials.tls.server.cert_file", "")
+		_ = config.Set("yggdrasil.remote.credentials.tls.server.key_file", "")
+	})
+
+	if err := validateStartup(nil); err == nil {
 		t.Fatalf("expected error")
 	}
 }
