@@ -26,34 +26,6 @@ import (
 	"sync"
 )
 
-// requestInfoKey is a struct to be used as the key to store RequestInfo in a
-// context.
-type requestInfoKey struct{}
-
-// NewRequestInfoContext creates a context with ri.
-func NewRequestInfoContext(ctx context.Context, ri interface{}) context.Context {
-	return context.WithValue(ctx, requestInfoKey{}, ri)
-}
-
-// RequestInfoFromContext extracts the RequestInfo from ctx.
-func RequestInfoFromContext(ctx context.Context) interface{} {
-	return ctx.Value(requestInfoKey{})
-}
-
-// clientHandshakeInfoKey is a struct used as the key to store
-// ClientHandshakeInfo in a context.
-type clientHandshakeInfoKey struct{}
-
-// ClientHandshakeInfoFromContext extracts the ClientHandshakeInfo from ctx.
-func ClientHandshakeInfoFromContext(ctx context.Context) ClientHandshakeInfo {
-	return ctx.Value(clientHandshakeInfoKey{}).(ClientHandshakeInfo)
-}
-
-// NewClientHandshakeInfoContext creates a context with chi.
-func NewClientHandshakeInfoContext(ctx context.Context, chi interface{}) context.Context {
-	return context.WithValue(ctx, clientHandshakeInfoKey{}, chi)
-}
-
 // SecurityLevel defines the protection level on an established connection.
 //
 // This API is experimental.
@@ -122,10 +94,6 @@ type AuthInfo interface {
 	AuthType() string
 }
 
-// ErrConnDispatched indicates that rawConn has been dispatched out of gRPC
-// and the caller should not close rawConn.
-var ErrConnDispatched = errors.New("credentials: rawConn is dispatched out of gRPC")
-
 // TransportCredentials defines the common interface for all the live gRPC wire
 // protocols and supported transport security protocols (e.g., TLS, SSL).
 type TransportCredentials interface {
@@ -139,9 +107,6 @@ type TransportCredentials interface {
 	// (io.EOF, context.DeadlineExceeded or err.Temporary() == true).  If the
 	// returned reason is a wrapper reason, implementations should make sure that
 	// the reason implements Temporary() to have the correct retry behaviors.
-	// Additionally, ClientHandshakeInfo data will be available via the context
-	// passed to this call.
-	//
 	// The second argument to this method is the `:authority` header value used
 	// while creating new streams on this connection after authentication
 	// succeeds. Implementations must use this as the server name during the
@@ -169,28 +134,6 @@ type TransportCredentials interface {
 	// throughout 1.x.
 	OverrideServerName(string) error
 	Name() string
-}
-
-// RequestInfo contains request data attached to the context passed to GetRequestMetadata calls.
-//
-// This API is experimental.
-type RequestInfo struct {
-	// The method passed to Invoke or NewStream for this RPC. (For proto methods, this has the format "/some.Service/Method")
-	Method string
-	// AuthInfo contains the information from a security handshake (TransportCredentials.ClientHandshake, TransportCredentials.ServerHandshake)
-	AuthInfo AuthInfo
-}
-
-// ClientHandshakeInfo holds data to be passed to ClientHandshake. This makes
-// it possible to pass arbitrary data to the handshaker from gRPC, resolver,
-// balancer etc. Individual credential implementations control the actual
-// format of the data that they are willing to receive.
-//
-// This API is experimental.
-type ClientHandshakeInfo struct {
-	// Attributes contains the attributes for the address. It could be provided
-	// by the gRPC, resolver, balancer etc.
-	Attributes map[string]interface{}
 }
 
 // CheckSecurityLevel checks if a connection's security level is greater than or equal to the specified one.

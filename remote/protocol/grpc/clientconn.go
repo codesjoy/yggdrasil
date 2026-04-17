@@ -32,9 +32,9 @@ import (
 	gmetadata "google.golang.org/grpc/metadata"
 
 	"github.com/codesjoy/yggdrasil/v2/config"
+	"github.com/codesjoy/yggdrasil/v2/internal/remotelog"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote"
-	remotelg "github.com/codesjoy/yggdrasil/v2/remote/logger"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
 	"github.com/codesjoy/yggdrasil/v2/stats"
@@ -115,7 +115,7 @@ func newClient(
 		"grpc",
 	)
 	if err := config.GetMulti(commKey, clientKey).Scan(cfg); err != nil {
-		remotelg.GetLogger().
+		remotelog.Logger().
 			Error("fault to load client config", slog.String("protocol", "grpc"), slog.Any("error", err))
 		return nil, err
 	}

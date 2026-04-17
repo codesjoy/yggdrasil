@@ -22,7 +22,7 @@ import (
 	"crypto/x509"
 	"net/url"
 
-	"github.com/codesjoy/yggdrasil/v2/remote/logger"
+	"github.com/codesjoy/yggdrasil/v2/internal/remotelog"
 )
 
 // SPIFFEIDFromState parses the SPIFFE ID from State. If the SPIFFE ID format
@@ -37,8 +37,16 @@ func SPIFFEIDFromState(state tls.ConnectionState) *url.URL {
 // SPIFFEIDFromCert parses the SPIFFE ID from x509.Certificate. If the SPIFFE
 // ID format is invalid, return nil with warning.
 func SPIFFEIDFromCert(cert *x509.Certificate) *url.URL {
+	uri, warn := parseSPIFFEID(cert)
+	if warn != "" {
+		remotelog.Logger().Warn(warn)
+	}
+	return uri
+}
+
+func parseSPIFFEID(cert *x509.Certificate) (*url.URL, string) {
 	if cert == nil || cert.URIs == nil {
-		return nil
+		return nil, ""
 	}
 	var spiffeID *url.URL
 	for _, uri := range cert.URIs {
@@ -48,23 +56,19 @@ func SPIFFEIDFromCert(cert *x509.Certificate) *url.URL {
 		}
 		// From this point, we assume the uri is intended for a SPIFFE ID.
 		if len(uri.String()) > 2048 {
-			logger.GetLogger().Warn("invalid SPIFFE ID: total ID length larger than 2048 bytes")
-			return nil
+			return nil, "invalid SPIFFE ID: total ID length larger than 2048 bytes"
 		}
 		if len(uri.Host) == 0 || len(uri.Path) == 0 {
-			logger.GetLogger().Warn("invalid SPIFFE ID: domain or workload ID is empty")
-			return nil
+			return nil, "invalid SPIFFE ID: domain or workload ID is empty"
 		}
 		if len(uri.Host) > 255 {
-			logger.GetLogger().Warn("invalid SPIFFE ID: domain length larger than 255 characters")
-			return nil
+			return nil, "invalid SPIFFE ID: domain length larger than 255 characters"
 		}
 		// A valid SPIFFE certificate can only have exactly one URI SAN field.
 		if len(cert.URIs) > 1 {
-			logger.GetLogger().Warn("invalid SPIFFE ID: multiple URI SANs")
-			return nil
+			return nil, "invalid SPIFFE ID: multiple URI SANs"
 		}
 		spiffeID = uri
 	}
-	return spiffeID
+	return spiffeID, ""
 }

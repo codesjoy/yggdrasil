@@ -27,10 +27,10 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/governor"
 	"github.com/codesjoy/yggdrasil/v2/internal/instance"
+	"github.com/codesjoy/yggdrasil/v2/internal/remotelog"
 	"github.com/codesjoy/yggdrasil/v2/logger"
 	xotel "github.com/codesjoy/yggdrasil/v2/otel"
 	"github.com/codesjoy/yggdrasil/v2/registry"
-	logger2 "github.com/codesjoy/yggdrasil/v2/remote/logger"
 	"github.com/codesjoy/yggdrasil/v2/server"
 
 	"go.opentelemetry.io/otel"
@@ -52,10 +52,10 @@ var (
 )
 
 var (
-	app, _   = application.New()
-	initMu   sync.Mutex
-	state    = lifecycleStateNew
-	opts     = &options{
+	app, _ = application.New()
+	initMu sync.Mutex
+	state  = lifecycleStateNew
+	opts   = &options{
 		serviceDesc:     map[*server.ServiceDesc]interface{}{},
 		restServiceDesc: map[*server.RestServiceDesc]restServiceDesc{},
 	}
@@ -335,7 +335,7 @@ func initLogger() error {
 	if err = remoteLoggerLv.UnmarshalText([]byte(remoteLoggerLvStr)); err != nil {
 		return err
 	}
-	logger2.InitLogger(remoteLoggerLv, h)
+	remotelog.Init(remoteLoggerLv, h)
 	return nil
 }
 
