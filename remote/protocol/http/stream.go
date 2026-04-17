@@ -31,6 +31,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/codesjoy/yggdrasil/v2/metadata"
+	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
 	"github.com/codesjoy/yggdrasil/v2/remote/peer"
 	"github.com/codesjoy/yggdrasil/v2/stats"
 	"github.com/codesjoy/yggdrasil/v2/status"
@@ -53,29 +54,22 @@ type httpClientStream struct {
 
 	mu sync.Mutex
 
-	reqMarshaler interface {
-		Marshal(any) ([]byte, error)
-		Unmarshal([]byte, any) error
-		ContentType(any) string
-	}
-	respMarshaler interface {
-		Marshal(any) ([]byte, error)
-		Unmarshal([]byte, any) error
-		ContentType(any) string
-	}
+	reqMarshaler  marshaler.Marshaler
+	respMarshaler marshaler.Marshaler
 
 	beginTime  time.Time
 	reqPayload any
 	reqBytes   []byte
 	reqSent    bool
 
-	respRecv     bool
-	header       metadata.MD
-	trailer      metadata.MD
-	respErr      error
-	headersReady chan struct{}
-	statsHandler stats.Handler
-	cache        *marshalerCache
+	respRecv           bool
+	header             metadata.MD
+	trailer            metadata.MD
+	respErr            error
+	headersReady       chan struct{}
+	statsHandler       stats.Handler
+	configuredInbound  marshaler.Marshaler
+	configuredOutbound marshaler.Marshaler
 }
 
 func (cs *httpClientStream) Header() (metadata.MD, error) {
@@ -124,9 +118,9 @@ func (cs *httpClientStream) SendMsg(m interface{}) error {
 	if cs.reqSent {
 		return xerror.New(code.Code_FAILED_PRECONDITION, "message already sent")
 	}
-	cs.reqMarshaler = cs.cache.getOutbound()
+	cs.reqMarshaler = cs.configuredOutbound
 	if cs.reqMarshaler == nil {
-		cs.reqMarshaler = marshalerForValue(m)
+		cs.reqMarshaler = marshaler.MarshalerForValue(m)
 	}
 	cs.reqPayload = m
 	cs.reqBytes, cs.respErr = cs.reqMarshaler.Marshal(m)
@@ -151,11 +145,11 @@ func (cs *httpClientStream) RecvMsg(m interface{}) error {
 	if cs.headersReady == nil {
 		cs.headersReady = make(chan struct{})
 	}
-	cs.respMarshaler = cs.cache.getInbound()
+	cs.respMarshaler = cs.configuredInbound
 	if cs.respMarshaler == nil {
-		cs.respMarshaler = marshalerForValue(m)
+		cs.respMarshaler = marshaler.MarshalerForValue(m)
 	}
-	reqBytes := append([]byte(nil), cs.reqBytes...)
+	reqBytes := cs.reqBytes
 	reqMarshaler := cs.reqMarshaler
 	respMarshaler := cs.respMarshaler
 	endpointAddr := cs.endpointAddr
@@ -350,31 +344,24 @@ type httpServerStream struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	method         string
-	req            *http.Request
-	w              http.ResponseWriter
-	localAddr      net.Addr
-	maxBodyBytes   int64
-	statsHandler   stats.Handler
-	beginTime      time.Time
-	remoteEndpoint string
-	localEndpoint  string
-	cache          *marshalerCache
+	method             string
+	req                *http.Request
+	w                  http.ResponseWriter
+	localAddr          net.Addr
+	maxBodyBytes       int64
+	statsHandler       stats.Handler
+	beginTime          time.Time
+	remoteEndpoint     string
+	localEndpoint      string
+	configuredInbound  marshaler.Marshaler
+	configuredOutbound marshaler.Marshaler
 
 	mu sync.Mutex
 
 	started bool
 
-	inbound interface {
-		Marshal(any) ([]byte, error)
-		Unmarshal([]byte, any) error
-		ContentType(any) string
-	}
-	outbound interface {
-		Marshal(any) ([]byte, error)
-		Unmarshal([]byte, any) error
-		ContentType(any) string
-	}
+	inbound  marshaler.Marshaler
+	outbound marshaler.Marshaler
 
 	reqBody []byte
 	recv    bool
@@ -399,22 +386,12 @@ func (ss *httpServerStream) Start(isClientStream, isServerStream bool) error {
 		return xerror.New(code.Code_FAILED_PRECONDITION, "stream already started")
 	}
 	ss.started = true
-	ss.inbound = ss.cache.getInbound()
+	ss.inbound = ss.configuredInbound
 	if ss.inbound == nil {
-		ss.inbound = marshalerFromContentType(ss.req.Header.Get("Content-Type"))
+		ss.inbound = selectInboundMarshaler(nil, ss.req.Header.Get("Content-Type"))
 	}
 	accept := ss.req.Header.Get("Accept")
-	if accept == "" {
-		ss.outbound = ss.inbound
-	} else {
-		ss.outbound = marshalerFromContentType(accept)
-		if ss.outbound == nil {
-			ss.outbound = ss.cache.getOutbound()
-			if ss.outbound == nil {
-				ss.outbound = ss.inbound
-			}
-		}
-	}
+	ss.outbound = selectOutboundMarshaler(ss.configuredOutbound, accept, ss.inbound)
 
 	limit := ss.maxBodyBytes
 	if limit <= 0 {
@@ -642,7 +619,7 @@ func (ss *httpServerStream) RecvMsg(m any) error {
 		return io.EOF
 	}
 	ss.recv = true
-	body := append([]byte(nil), ss.reqBody...)
+	body := ss.reqBody
 	inbound := ss.inbound
 	ss.mu.Unlock()
 	if len(body) == 0 {

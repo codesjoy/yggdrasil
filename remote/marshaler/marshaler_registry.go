@@ -17,15 +17,13 @@ package marshaler
 import (
 	"errors"
 	"log/slog"
-	"mime"
 	"net/http"
-
-	"google.golang.org/protobuf/encoding/protojson"
+	"strings"
 
 	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
 )
 
-// BuildMarshalerRegistry builds a marshaler registry from a list of MIME types.
+// BuildMarshalerRegistry builds a marshaler registry from a list of scheme names.
 func BuildMarshalerRegistry(scheme ...string) Registry {
 	scheme = internalutils.DedupStableStrings(scheme)
 	mr := NewRegistry()
@@ -37,20 +35,14 @@ func BuildMarshalerRegistry(scheme ...string) Registry {
 				slog.String("scheme", item),
 				slog.Any("error", err),
 			)
+			continue
 		}
 		_ = mr.Register(item, marshaler)
 	}
 	return mr
 }
 
-var defaultMarshaler = &JSONPb{
-	MarshalOptions: protojson.MarshalOptions{
-		EmitUnpopulated: true,
-	},
-	UnmarshalOptions: protojson.UnmarshalOptions{
-		DiscardUnknown: true,
-	},
-}
+var defaultMarshaler = NewJSONPbMarshalerWithConfig(nil)
 
 var (
 	acceptHeader      = http.CanonicalHeaderKey("Accept")
@@ -70,19 +62,14 @@ func NewRegistry() *MarshalerRegistry {
 
 // GetMarshaler returns the marshaler for the request.
 func (mr *MarshalerRegistry) GetMarshaler(r *http.Request) (inbound Marshaler, outbound Marshaler) {
-	for _, acceptVal := range r.Header[acceptHeader] {
-		if m, ok := mr.mimeMap[acceptVal]; ok {
+	for _, acceptVal := range headerValues(r.Header[acceptHeader]) {
+		if m := mr.lookup(acceptVal); m != nil {
 			outbound = m
 			break
 		}
 	}
-	for _, contentTypeVal := range r.Header[contentTypeHeader] {
-		contentType, _, err := mime.ParseMediaType(contentTypeVal)
-		if err != nil {
-			slog.Error("failed to parse Content-Type", slog.String("contentType", contentTypeVal))
-			continue
-		}
-		if m, ok := mr.mimeMap[contentType]; ok {
+	for _, contentTypeVal := range headerValues(r.Header[contentTypeHeader]) {
+		if m := mr.lookup(contentTypeVal); m != nil {
 			inbound = m
 			break
 		}
@@ -99,9 +86,49 @@ func (mr *MarshalerRegistry) GetMarshaler(r *http.Request) (inbound Marshaler, o
 // Register adds a marshaler for a case-sensitive MIME type string ("*" to match any
 // MIME type).
 func (mr *MarshalerRegistry) Register(mime string, marshaler Marshaler) error {
-	if len(mime) == 0 {
+	if marshaler == nil {
+		return errors.New("nil marshaler")
+	}
+	scheme := normalizeScheme(mime)
+	if scheme == "" {
 		return errors.New("empty MIME type")
 	}
-	mr.mimeMap[mime] = marshaler
+	if canonical := CanonicalContentTypeForScheme(scheme); canonical != "" {
+		mr.mimeMap[canonical] = marshaler
+	}
+	mr.mimeMap[scheme] = marshaler
 	return nil
+}
+
+func (mr *MarshalerRegistry) lookup(value string) Marshaler {
+	if value == "" {
+		return nil
+	}
+	normalized := NormalizeContentType(value)
+	if normalized != "" {
+		if m, ok := mr.mimeMap[normalized]; ok {
+			return m
+		}
+	}
+	alias := normalizeScheme(value)
+	if alias == "" {
+		return nil
+	}
+	return mr.mimeMap[alias]
+}
+
+func headerValues(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		for _, part := range strings.Split(value, ",") {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				out = append(out, part)
+			}
+		}
+	}
+	return out
 }

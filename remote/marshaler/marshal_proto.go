@@ -32,7 +32,7 @@ type ProtoMarshaller struct{}
 
 // ContentType always returns "application/octet-stream".
 func (*ProtoMarshaller) ContentType(_ interface{}) string {
-	return "application/octet-stream"
+	return ContentTypeProto
 }
 
 // Marshal marshals "value" into Proto

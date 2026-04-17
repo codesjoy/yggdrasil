@@ -34,6 +34,11 @@ func init() {
 
 // NewJSONPbMarshaler returns a new JSONPb marshaler.
 func NewJSONPbMarshaler() (Marshaler, error) {
+	return NewJSONPbMarshalerWithConfig(nil), nil
+}
+
+// NewJSONPbMarshalerWithConfig returns a JSONPb marshaler configured from cfg.
+func NewJSONPbMarshalerWithConfig(cfg *JSONPbConfig) *JSONPb {
 	s := &JSONPb{
 		MarshalOptions: protojson.MarshalOptions{
 			EmitUnpopulated: true,
@@ -42,7 +47,24 @@ func NewJSONPbMarshaler() (Marshaler, error) {
 			DiscardUnknown: true,
 		},
 	}
-	return s, nil
+	if cfg == nil {
+		return s
+	}
+	s.MarshalOptions = protojson.MarshalOptions{
+		Multiline:         cfg.MarshalOptions.Multiline,
+		Indent:            cfg.MarshalOptions.Indent,
+		AllowPartial:      cfg.MarshalOptions.AllowPartial,
+		UseProtoNames:     cfg.MarshalOptions.UseProtoNames,
+		UseEnumNumbers:    cfg.MarshalOptions.UseEnumNumbers,
+		EmitUnpopulated:   cfg.MarshalOptions.EmitUnpopulated,
+		EmitDefaultValues: cfg.MarshalOptions.EmitDefaultValues,
+	}
+	s.UnmarshalOptions = protojson.UnmarshalOptions{
+		AllowPartial:   cfg.UnmarshalOptions.AllowPartial,
+		DiscardUnknown: cfg.UnmarshalOptions.DiscardUnknown,
+		RecursionLimit: cfg.UnmarshalOptions.RecursionLimit,
+	}
+	return s
 }
 
 // JSONPbConfig is the configuration for JSONPb.
@@ -51,25 +73,25 @@ type JSONPbConfig struct {
 		// Multiline specifies whether the marshaler should format the output in
 		// indented-form with every textual element on a new line.
 		// If Indent is an empty string, then an arbitrary indent is chosen.
-		Multiline bool
+		Multiline bool `mapstructure:"multiline"`
 
 		// Indent specifies the set of indentation characters to use in a multiline
 		// formatted output such that every entry is preceded by Indent and
 		// terminated by a newline. If non-empty, then Multiline is treated as true.
 		// Indent can only be composed of space or tab characters.
-		Indent string
+		Indent string `mapstructure:"indent"`
 
 		// AllowPartial allows messages that have missing required fields to marshal
 		// without returning an error. If AllowPartial is false (the default),
 		// Marshal will return error if there are any missing required fields.
-		AllowPartial bool
+		AllowPartial bool `mapstructure:"allow_partial"`
 
 		// UseProtoNames uses proto field name instead of lowerCamelCase name in JSON
 		// field names.
-		UseProtoNames bool
+		UseProtoNames bool `mapstructure:"use_proto_names"`
 
 		// UseEnumNumbers emits enum values as numbers.
-		UseEnumNumbers bool
+		UseEnumNumbers bool `mapstructure:"use_enum_numbers"`
 
 		// EmitUnpopulated specifies whether to emit unpopulated fields. It does not
 		// emit unpopulated oneof fields or unpopulated extension fields.
@@ -85,7 +107,7 @@ type JSONPbConfig struct {
 		//  ║ []    │ list fields                ║
 		//  ║ {}    │ map fields                 ║
 		//  ╚═══════╧════════════════════════════╝
-		EmitUnpopulated bool
+		EmitUnpopulated bool `mapstructure:"emit_unpopulated"`
 
 		// EmitDefaultValues specifies whether to emit default-valued primitive fields,
 		// empty lists, and empty maps. The fields affected are as follows:
@@ -104,20 +126,20 @@ type JSONPbConfig struct {
 		// presence-sensing.
 		// EmitUnpopulated takes precedence over EmitDefaultValues since the former generates
 		// a strict superset of the latter.
-		EmitDefaultValues bool
-	}
+		EmitDefaultValues bool `mapstructure:"emit_default_values"`
+	} `mapstructure:"marshal_options"`
 	UnmarshalOptions struct {
 		// If AllowPartial is set, input for messages that will result in missing
 		// required fields will not return an error.
-		AllowPartial bool
+		AllowPartial bool `mapstructure:"allow_partial"`
 
 		// If DiscardUnknown is set, unknown fields and enum name values are ignored.
-		DiscardUnknown bool
+		DiscardUnknown bool `mapstructure:"discard_unknown"`
 
 		// RecursionLimit limits how deeply messages may be nested.
 		// If zero, a default limit is applied.
-		RecursionLimit int
-	}
+		RecursionLimit int `mapstructure:"recursion_limit"`
+	} `mapstructure:"unmarshal_options"`
 }
 
 // JSONPb is a Marshaler which marshals/unmarshals into/from JSON
@@ -133,7 +155,7 @@ type JSONPb struct {
 
 // ContentType always returns "application/json".
 func (*JSONPb) ContentType(_ interface{}) string {
-	return "application/json"
+	return ContentTypeJSON
 }
 
 // Marshal marshals "v" into JSON.

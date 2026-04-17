@@ -18,28 +18,43 @@ package marshaler
 import (
 	"context"
 	"errors"
+	"strings"
 )
 
 var marshalerBuilder = map[string]MarshallerBuilder{}
 
 // RegisterMarshallerBuilder registers a new marshaler builder
 func RegisterMarshallerBuilder(scheme string, builder MarshallerBuilder) {
-	marshalerBuilder[scheme] = builder
+	marshalerBuilder[normalizeScheme(scheme)] = builder
 }
 
 // HasMarshallerBuilder returns true if the marshaler builder exists
 func HasMarshallerBuilder(scheme string) bool {
-	_, ok := marshalerBuilder[scheme]
+	_, ok := marshalerBuilder[normalizeScheme(scheme)]
 	return ok
 }
 
 // BuildMarshaller builds a marshaler for the given scheme
 func BuildMarshaller(scheme string) (Marshaler, error) {
-	f, ok := marshalerBuilder[scheme]
+	f, ok := marshalerBuilder[normalizeScheme(scheme)]
 	if !ok {
 		return nil, errors.New("rest marshaler builder not found")
 	}
 	return f()
+}
+
+// BuildMarshallerWithConfig builds a marshaler for the given scheme and optional config.
+func BuildMarshallerWithConfig(scheme string, jsonpbCfg *JSONPbConfig) (Marshaler, error) {
+	switch normalizeScheme(scheme) {
+	case SchemeJSONPb:
+		return NewJSONPbMarshalerWithConfig(jsonpbCfg), nil
+	default:
+		return BuildMarshaller(scheme)
+	}
+}
+
+func normalizeScheme(scheme string) string {
+	return strings.ToLower(strings.TrimSpace(scheme))
 }
 
 type (

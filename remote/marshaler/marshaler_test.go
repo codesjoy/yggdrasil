@@ -123,66 +123,34 @@ func TestRegistry(t *testing.T) {
 		assert.IsType(t, &JSONPb{}, out)
 	})
 
-	t.Run("Accept Header", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/", nil)           // nolint:noctx
-		req.Header.Set("Accept", "application/octet-stream") // proto maps to this? No, wait.
-		// The registry maps "scheme" names to marshalers.
-		// But GetMarshaler looks up by Accept header value.
-		// Wait, BuildMarshalerRegistry takes schemes like "jsonpb", "proto".
-		// But GetMarshaler uses mimeMap.
-		// Let's check how mimeMap is populated.
-		// marshalerRegistry.add(mime, marshaler)
-		// But BuildMarshalerRegistry calls buildMarshaller(item) and then add(item, marshaler).
-		// So the key in mimeMap is the scheme name?
-		// Let's check GetMarshaler again.
-		// It looks up r.Header[acceptHeader].
-		// So if I pass "jsonpb", the Accept header must be "jsonpb"? That seems wrong.
-		// Usually it should be "application/json".
-
-		// Ah, looking at marshaler_registry.go:
-		// func BuildMarshalerRegistry(scheme ...string) Registry {
-		//     for _, item := range scheme {
-		//         marshaler, err := buildMarshaller(item)
-		//         _ = mr.add(item, marshaler)
-		//     }
-		// }
-		// And marshaler.go:
-		// RegisterMarshallerBuilder("jsonpb", NewJSONPbMarshaler)
-		// RegisterMarshallerBuilder("proto", ...)
-
-		// But GetMarshaler uses:
-		// if m, ok := mr.mimeMap[acceptVal]; ok
-
-		// So if I register "jsonpb", the mimeMap key is "jsonpb".
-		// But the client sends "application/json".
-		// This implies that the 'scheme' passed to BuildMarshalerRegistry should be the MIME type?
-		// But buildMarshaller uses the scheme to look up the builder.
-		// This looks like a potential bug or confusion in the existing code.
-		// The `marshalerBuilder` map uses keys like "jsonpb", "proto".
-		// But `marshalerRegistry` expects keys to be MIME types (from Accept/Content-Type headers).
-
-		// If I look at `marshal_jsonpb.go`:
-		// RegisterMarshallerBuilder("jsonpb", NewJSONPbMarshaler)
-
-		// If I call BuildMarshalerRegistry("jsonpb"), it looks up builder "jsonpb", gets the marshaler, and adds it with key "jsonpb".
-		// Then GetMarshaler looks for "jsonpb" in Accept header.
-		// This means the code expects `Accept: jsonpb`. This is non-standard.
-		// OR, maybe I should register with MIME types?
-		// But `marshalerBuilder` is global and populated by init().
-
-		// Let's assume for now I should test with what the code does, which is using the scheme name as the MIME type key.
-		// I will verify this behavior.
-
-		req.Header.Set("Accept", "proto")
+	t.Run("Accept Header Uses MIME", func(t *testing.T) {
+		req, _ := http.NewRequest("GET", "/", nil) // nolint:noctx
+		req.Header.Set("Accept", "application/octet-stream")
 		_, out := reg.GetMarshaler(req)
 		assert.IsType(t, &ProtoMarshaller{}, out)
 	})
 
-	t.Run("Content-Type Header", func(t *testing.T) {
+	t.Run("Content-Type Header Uses MIME", func(t *testing.T) {
 		req, _ := http.NewRequest("POST", "/", nil) // nolint:noctx
-		req.Header.Set("Content-Type", "proto")
+		req.Header.Set("Content-Type", "application/octet-stream")
 		in, _ := reg.GetMarshaler(req)
 		assert.IsType(t, &ProtoMarshaller{}, in)
+	})
+
+	t.Run("Alias Fallback Remains Supported", func(t *testing.T) {
+		req, _ := http.NewRequest("POST", "/", nil) // nolint:noctx
+		req.Header.Set("Accept", "jsonpb")
+		req.Header.Set("Content-Type", "proto")
+		in, out := reg.GetMarshaler(req)
+		assert.IsType(t, &ProtoMarshaller{}, in)
+		assert.IsType(t, &JSONPb{}, out)
+	})
+
+	t.Run("JSON Media Types Normalize", func(t *testing.T) {
+		req, _ := http.NewRequest("GET", "/", nil) // nolint:noctx
+		req.Header.Set("Accept", "application/json; charset=utf-8")
+		_, out := reg.GetMarshaler(req)
+		assert.IsType(t, &JSONPb{}, out)
 	})
 }
 

@@ -14,7 +14,11 @@
 
 package protocolhttp
 
-import "time"
+import (
+	"time"
+
+	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
+)
 
 // MarshalerConfig http marshaler config
 type MarshalerConfig struct {
@@ -23,22 +27,7 @@ type MarshalerConfig struct {
 }
 
 // JSONPbConfigOpts json pb config
-type JSONPbConfigOpts struct {
-	MarshalOptions struct {
-		Multiline         bool   `mapstructure:"multiline"`
-		Indent            string `mapstructure:"indent"`
-		AllowPartial      bool   `mapstructure:"allow_partial"`
-		UseProtoNames     bool   `mapstructure:"use_proto_names"`
-		UseEnumNumbers    bool   `mapstructure:"use_enum_numbers"`
-		EmitUnpopulated   bool   `mapstructure:"emit_unpopulated"`
-		EmitDefaultValues bool   `mapstructure:"emit_default_values"`
-	} `mapstructure:"marshal_options"`
-	UnmarshalOptions struct {
-		AllowPartial   bool `mapstructure:"allow_partial"`
-		DiscardUnknown bool `mapstructure:"discard_unknown"`
-		RecursionLimit int  `mapstructure:"recursion_limit"`
-	} `mapstructure:"unmarshal_options"`
-}
+type JSONPbConfigOpts = marshaler.JSONPbConfig
 
 // ClientConfig http client config
 type ClientConfig struct {
