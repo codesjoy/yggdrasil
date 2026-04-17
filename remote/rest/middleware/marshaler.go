@@ -18,8 +18,6 @@ package middleware
 import (
 	"net/http"
 
-	"google.golang.org/protobuf/encoding/protojson"
-
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
 )
@@ -31,23 +29,7 @@ func init() {
 func newMarshalerMiddleware() func(http.Handler) http.Handler {
 	key := config.Join(config.KeyBase, "rest", "marshaler", "support")
 	schemes := config.GetStringSlice(key, []string{"jsonpb"})
-
-	// Check if we need to load config for jsonpb
-	hasJSONPb := false
-	for _, scheme := range schemes {
-		if scheme == "jsonpb" {
-			hasJSONPb = true
-			break
-		}
-	}
-
-	var mr marshaler.Registry
-	if hasJSONPb {
-		// Manually build registry to inject config for jsonpb
-		mr = buildRegistryWithJSONPbConfig(schemes)
-	} else {
-		mr = marshaler.BuildMarshalerRegistry(schemes...)
-	}
+	mr := buildRegistry(schemes)
 
 	return func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -73,43 +55,19 @@ func NewMarshalerMiddleware(registry marshaler.Registry) func(http.Handler) http
 	}
 }
 
-func buildRegistryWithJSONPbConfig(schemes []string) marshaler.Registry {
+func buildRegistry(schemes []string) marshaler.Registry {
 	mr := marshaler.NewRegistry()
 	cfg := &marshaler.JSONPbConfig{}
 	key := config.Join(config.KeyBase, "rest", "marshaler", "config", "jsonpb")
 	_ = config.Get(key).Scan(cfg) // Ignore error, use default if failed
 
 	for _, item := range schemes {
-		if item == "jsonpb" {
-			m := &marshaler.JSONPb{
-				MarshalOptions: protojson.MarshalOptions{
-					Multiline:       cfg.MarshalOptions.Multiline,
-					Indent:          cfg.MarshalOptions.Indent,
-					AllowPartial:    cfg.MarshalOptions.AllowPartial,
-					UseProtoNames:   cfg.MarshalOptions.UseProtoNames,
-					UseEnumNumbers:  cfg.MarshalOptions.UseEnumNumbers,
-					EmitUnpopulated: cfg.MarshalOptions.EmitUnpopulated,
-				},
-				UnmarshalOptions: protojson.UnmarshalOptions{
-					AllowPartial:   cfg.UnmarshalOptions.AllowPartial,
-					DiscardUnknown: cfg.UnmarshalOptions.DiscardUnknown,
-					RecursionLimit: cfg.UnmarshalOptions.RecursionLimit,
-				},
-			}
-			_ = mr.Register(item, m)
+		var marshalerCfg *marshaler.JSONPbConfig
+		if item == marshaler.SchemeJSONPb {
+			marshalerCfg = cfg
 		}
-	}
-
-	// Re-implementing the loop properly using casting
-	for _, item := range schemes {
-		if item == "jsonpb" {
-			continue // Handled in the first loop logic for jsonpb specifically
-		}
-
-		m, err := marshaler.BuildMarshaller(item)
+		m, err := marshaler.BuildMarshallerWithConfig(item, marshalerCfg)
 		if err != nil {
-			// Ignore error as per original logic's intent (which logged but continued)
-			// Ideally we should log a warning here if we had logger access
 			continue
 		}
 		_ = mr.Register(item, m)

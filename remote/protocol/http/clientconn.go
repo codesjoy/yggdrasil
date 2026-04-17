@@ -51,7 +51,7 @@ type clientConn struct {
 
 	cfg   *ClientConfig
 	hc    *http.Client
-	cache *marshalerCache
+	codec marshalerSet
 
 	statsHandler  stats.Handler
 	onStateChange remote.OnStateChange
@@ -93,27 +93,22 @@ func newClient(
 	if cfg.Timeout == 0 {
 		cfg.Timeout = 10 * time.Second
 	}
+	codec, err := newConfiguredMarshalers(cfg.Marshaler)
+	if err != nil {
+		return nil, err
+	}
 
 	ccCtx, cancel := context.WithCancel(ctx)
 
-	var inboundCfg, outboundCfg *MarshalerConfig
-	if cfg.Marshaler != nil {
-		inboundCfg = cfg.Marshaler.Inbound
-		outboundCfg = cfg.Marshaler.Outbound
-	}
-
 	cc := &clientConn{
-		ctx:         ccCtx,
-		cancel:      cancel,
-		state:       remote.Ready,
-		endpoint:    endpoint,
-		serviceName: serviceName,
-		cfg:         cfg,
-		hc:          &http.Client{Timeout: cfg.Timeout},
-		cache: &marshalerCache{
-			inboundCfg:  inboundCfg,
-			outboundCfg: outboundCfg,
-		},
+		ctx:          ccCtx,
+		cancel:       cancel,
+		state:        remote.Ready,
+		endpoint:     endpoint,
+		serviceName:  serviceName,
+		cfg:          cfg,
+		hc:           &http.Client{Timeout: cfg.Timeout},
+		codec:        codec,
 		statsHandler: statsHandler,
 		onStateChange: func(state remote.ClientState) {
 			if onStateChange != nil {
@@ -148,13 +143,14 @@ func (cc *clientConn) NewStream(
 	taggedCtx = metadata.WithStreamContext(taggedCtx)
 
 	cs := &httpClientStream{
-		ctx:          taggedCtx,
-		method:       method,
-		endpointAddr: cc.endpoint.GetAddress(),
-		httpClient:   cc.hc,
-		beginTime:    time.Now(),
-		statsHandler: cc.statsHandler,
-		cache:        cc.cache,
+		ctx:                taggedCtx,
+		method:             method,
+		endpointAddr:       cc.endpoint.GetAddress(),
+		httpClient:         cc.hc,
+		beginTime:          time.Now(),
+		statsHandler:       cc.statsHandler,
+		configuredInbound:  cc.codec.inbound,
+		configuredOutbound: cc.codec.outbound,
 	}
 	return cs, nil
 }

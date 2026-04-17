@@ -15,172 +15,67 @@
 package protocolhttp
 
 import (
-	"errors"
-	"mime"
-	"strings"
-	"sync"
-
-	"google.golang.org/protobuf/encoding/protojson"
-
 	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
 )
 
-const (
-	scheme           = "http"
-	contentTypeJSON  = "application/json"
-	contentTypeProto = "application/octet-stream"
-)
+const scheme = "http"
 
-func normalizeContentType(v string) string {
-	if v == "" {
-		return ""
-	}
-	ct, _, err := mime.ParseMediaType(v)
-	if err != nil {
-		return strings.ToLower(strings.TrimSpace(v))
-	}
-	return strings.ToLower(ct)
+type marshalerSet struct {
+	inbound  marshaler.Marshaler
+	outbound marshaler.Marshaler
 }
 
-func buildMarshaler(cfg *MarshalerConfig) (marshaler.Marshaler, error) {
+func newConfiguredMarshalers(cfg *MarshalerConfigSet) (marshalerSet, error) {
 	if cfg == nil {
-		return &marshaler.JSONPb{
-			MarshalOptions: protojson.MarshalOptions{
-				EmitUnpopulated: true,
-			},
-			UnmarshalOptions: protojson.UnmarshalOptions{
-				DiscardUnknown: true,
-			},
-		}, nil
+		return marshalerSet{}, nil
 	}
-
-	switch cfg.Type {
-	case "jsonpb":
-		if cfg.Config == nil {
-			return &marshaler.JSONPb{
-				MarshalOptions: protojson.MarshalOptions{
-					EmitUnpopulated: true,
-				},
-				UnmarshalOptions: protojson.UnmarshalOptions{
-					DiscardUnknown: true,
-				},
-			}, nil
-		}
-		s := &marshaler.JSONPb{
-			MarshalOptions: protojson.MarshalOptions{
-				Multiline:       cfg.Config.MarshalOptions.Multiline,
-				Indent:          cfg.Config.MarshalOptions.Indent,
-				AllowPartial:    cfg.Config.MarshalOptions.AllowPartial,
-				UseProtoNames:   cfg.Config.MarshalOptions.UseProtoNames,
-				UseEnumNumbers:  cfg.Config.MarshalOptions.UseEnumNumbers,
-				EmitUnpopulated: cfg.Config.MarshalOptions.EmitUnpopulated,
-			},
-			UnmarshalOptions: protojson.UnmarshalOptions{
-				AllowPartial:   cfg.Config.UnmarshalOptions.AllowPartial,
-				DiscardUnknown: cfg.Config.UnmarshalOptions.DiscardUnknown,
-				RecursionLimit: cfg.Config.UnmarshalOptions.RecursionLimit,
-			},
-		}
-		return s, nil
-	case "proto":
-		return &marshaler.ProtoMarshaller{}, nil
-	default:
-		return nil, errors.New("unsupported marshaler type: " + cfg.Type)
+	inbound, err := buildConfiguredMarshaler(cfg.Inbound)
+	if err != nil {
+		return marshalerSet{}, err
 	}
+	outbound, err := buildConfiguredMarshaler(cfg.Outbound)
+	if err != nil {
+		return marshalerSet{}, err
+	}
+	return marshalerSet{inbound: inbound, outbound: outbound}, nil
 }
 
-func marshalerFromContentType(ct string) marshaler.Marshaler {
-	ct = normalizeContentType(ct)
-	switch ct {
-	case contentTypeProto:
-		return &marshaler.ProtoMarshaller{}
-	case contentTypeJSON:
-		return &marshaler.JSONPb{
-			MarshalOptions: protojson.MarshalOptions{
-				EmitUnpopulated: true,
-			},
-			UnmarshalOptions: protojson.UnmarshalOptions{
-				DiscardUnknown: true,
-			},
-		}
-	case "":
-		return &marshaler.ProtoMarshaller{}
-	default:
-		if strings.Contains(ct, "json") {
-			return &marshaler.JSONPb{
-				MarshalOptions: protojson.MarshalOptions{
-					EmitUnpopulated: true,
-				},
-				UnmarshalOptions: protojson.UnmarshalOptions{
-					DiscardUnknown: true,
-				},
-			}
-		}
-		return &marshaler.ProtoMarshaller{}
+func buildConfiguredMarshaler(cfg *MarshalerConfig) (marshaler.Marshaler, error) {
+	if cfg == nil {
+		return nil, nil
 	}
+	return marshaler.BuildMarshallerWithConfig(cfg.Type, cfg.Config)
 }
 
-func marshalerForValue(v any) marshaler.Marshaler {
-	if v == nil {
-		return &marshaler.ProtoMarshaller{}
+func selectInboundMarshaler(configured marshaler.Marshaler, contentType string) marshaler.Marshaler {
+	if configured != nil {
+		return configured
 	}
-	if _, ok := v.(interface{ ProtoReflect() }); ok {
-		return &marshaler.ProtoMarshaller{}
+	if resolved := marshaler.MarshalerForContentType(contentType); resolved != nil {
+		return resolved
 	}
-	return &marshaler.JSONPb{
-		MarshalOptions: protojson.MarshalOptions{
-			EmitUnpopulated: true,
-		},
-		UnmarshalOptions: protojson.UnmarshalOptions{
-			DiscardUnknown: true,
-		},
-	}
+	return marshaler.MarshalerForValue(nil)
 }
 
-type marshalerCache struct {
-	mu          sync.RWMutex
-	inbound     marshaler.Marshaler
-	outbound    marshaler.Marshaler
-	inboundCfg  *MarshalerConfig
-	outboundCfg *MarshalerConfig
-}
-
-func (c *marshalerCache) getInbound() marshaler.Marshaler {
-	c.mu.RLock()
-	if c.inbound != nil {
-		m := c.inbound
-		c.mu.RUnlock()
-		return m
+func selectOutboundMarshaler(
+	configured marshaler.Marshaler,
+	accept string,
+	fallback marshaler.Marshaler,
+) marshaler.Marshaler {
+	if configured != nil {
+		return configured
 	}
-	c.mu.RUnlock()
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.inbound == nil {
-		m, err := buildMarshaler(c.inboundCfg)
-		if err == nil {
-			c.inbound = m
+	if accept == "" {
+		if fallback != nil {
+			return fallback
 		}
+		return marshaler.MarshalerForValue(nil)
 	}
-	return c.inbound
-}
-
-func (c *marshalerCache) getOutbound() marshaler.Marshaler {
-	c.mu.RLock()
-	if c.outbound != nil {
-		m := c.outbound
-		c.mu.RUnlock()
-		return m
+	if resolved := marshaler.MarshalerForContentType(accept); resolved != nil {
+		return resolved
 	}
-	c.mu.RUnlock()
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.outbound == nil {
-		m, err := buildMarshaler(c.outboundCfg)
-		if err == nil {
-			c.outbound = m
-		}
+	if fallback != nil {
+		return fallback
 	}
-	return c.outbound
+	return marshaler.MarshalerForValue(nil)
 }

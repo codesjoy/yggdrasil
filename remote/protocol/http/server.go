@@ -44,6 +44,7 @@ type server struct {
 	handle remote.MethodHandle
 
 	statsHandler stats.Handler
+	codec        marshalerSet
 }
 
 func newServer(handle remote.MethodHandle) (remote.Server, error) {
@@ -55,11 +56,16 @@ func newServer(handle remote.MethodHandle) (remote.Server, error) {
 	if opts.Attr == nil {
 		opts.Attr = map[string]string{}
 	}
+	codec, err := newConfiguredMarshalers(opts.Marshaler)
+	if err != nil {
+		return nil, err
+	}
 
 	s := &server{
 		opts:         opts,
 		handle:       handle,
 		statsHandler: stats.GetServerHandler(),
+		codec:        codec,
 	}
 	s.httpSvr = &http.Server{
 		Handler:      http.HandlerFunc(s.serveHTTP),
@@ -151,29 +157,21 @@ func (s *server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	localAddr := s.localAddr()
 	ctx = attachPeer(ctx, r, localAddr)
 
-	var inboundCfg, outboundCfg *MarshalerConfig
-	if s.opts.Marshaler != nil {
-		inboundCfg = s.opts.Marshaler.Inbound
-		outboundCfg = s.opts.Marshaler.Outbound
-	}
-
 	ssCtx, cancel := context.WithCancel(ctx)
 	ss := &httpServerStream{
-		ctx:            ssCtx,
-		cancel:         cancel,
-		method:         method,
-		req:            r,
-		w:              w,
-		localAddr:      localAddr,
-		maxBodyBytes:   localAddrOrZero(s.opts.MaxBodyBytes),
-		statsHandler:   s.statsHandler,
-		beginTime:      time.Now(),
-		remoteEndpoint: r.RemoteAddr,
-		localEndpoint:  addrString(localAddr),
-		cache: &marshalerCache{
-			inboundCfg:  inboundCfg,
-			outboundCfg: outboundCfg,
-		},
+		ctx:                ssCtx,
+		cancel:             cancel,
+		method:             method,
+		req:                r,
+		w:                  w,
+		localAddr:          localAddr,
+		maxBodyBytes:       localAddrOrZero(s.opts.MaxBodyBytes),
+		statsHandler:       s.statsHandler,
+		beginTime:          time.Now(),
+		remoteEndpoint:     r.RemoteAddr,
+		localEndpoint:      addrString(localAddr),
+		configuredInbound:  s.codec.inbound,
+		configuredOutbound: s.codec.outbound,
 	}
 	s.handle(ss)
 }
