@@ -31,26 +31,26 @@ var commonTpl = `
 var clientTpl = `
 type {{$svrType}}Client interface {
 {{range .Methods -}}
-	{{ if .ClientStream -}}
+	{{if or .IsBidi .IsClientStreamOnly -}}
 	{{.Name}}({{$.Context}}) ({{$svrType}}{{.Name}}Client, error)
-	{{else if .ServerStream -}}
+	{{else if .IsServerStreamOnly -}}
 	{{.Name}}({{$.Context}}, *{{.Input}}) ({{$svrType}}{{.Name}}Client, error)
 	{{else -}}
 	{{.Name}}({{$.Context}}, *{{.Input}}) (*{{.Output}}, error)
-	{{ end -}}
+	{{end -}}
 {{end -}}
 }
 
 {{range .Methods}}
 {{ if or .ClientStream .ServerStream -}}
 type {{$svrType}}{{.Name}}Client interface{
-	{{if .ClientStream -}}
+	{{if .IsBidi -}}
 	Send(*{{.Input}}) error
-	{{end -}}
-	{{if .ServerStream -}}
-	{{if not .ClientStream -}}
+	Recv() (*{{.Output}}, error)
+	{{else if .IsClientStreamOnly -}}
+	Send(*{{.Input}}) error
 	CloseAndRecv() (*{{.Output}}, error)
-	{{end -}}
+	{{else if .IsServerStreamOnly -}}
 	Recv() (*{{.Output}}, error)
 	{{end -}}
 	{{$.Stream}}ClientStream
@@ -67,9 +67,9 @@ func New{{$svrType}}Client(cc {{$client}}Client) {{$svrType}}Client {
 }
 
 {{range .Methods -}}
-{{ if .ClientStream -}}
+{{if .IsBidi -}}
 func (c *{{$lrSvrName}}Client) {{.Name}}(ctx {{$ctx}}) ({{$svrType}}{{.Name}}Client, error) {
-	stream, err := c.cc.NewStream(ctx, &{{$svrType}}ServiceDesc.Streams[{{ if .ServerStream -}}0{{else}}1{{end}}], "/{{$.FullServerName}}/{{.Name}}")
+	stream, err := c.cc.NewStream(ctx, &{{$svrType}}ServiceDesc.Streams[{{.StreamIndex}}], "/{{$.FullServerName}}/{{.Name}}")
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,6 @@ func (x *{{$lrSvrName}}{{.Name}}Client) Send(m *{{.Input}}) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-{{ if .ServerStream -}}
 func (x *{{$lrSvrName}}{{.Name}}Client) Recv() (*{{.Output}}, error) {
 	m := new({{.Output}})
 	if err := x.ClientStream.RecvMsg(m); err != nil {
@@ -105,20 +104,13 @@ func (x *{{$lrSvrName}}{{.Name}}Client) Recv() (*{{.Output}}, error) {
 	}
 	return m, nil
 }
-{{end -}}
-{{else if .ServerStream -}}
-func (c *{{$lrSvrName}}Client) {{.Name}}(ctx {{$ctx}}, in *{{.Input}}) ({{$svrType}}{{.Name}}Client, error) {
-	stream, err := c.cc.NewStream(ctx, &{{$svrType}}ServiceDesc.Streams[2], "/{{$.FullServerName}}/{{.Name}}")
+{{else if .IsClientStreamOnly -}}
+func (c *{{$lrSvrName}}Client) {{.Name}}(ctx {{$ctx}}) ({{$svrType}}{{.Name}}Client, error) {
+	stream, err := c.cc.NewStream(ctx, &{{$svrType}}ServiceDesc.Streams[{{.StreamIndex}}], "/{{$.FullServerName}}/{{.Name}}")
 	if err != nil {
 		return nil, err
 	}
 	x := &{{$lrSvrName}}{{.Name}}Client{stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
 	return x, nil
 }
 
@@ -137,14 +129,6 @@ func (x *{{$lrSvrName}}{{.Name}}Client) CloseAndRecv() (*{{.Output}}, error) {
 	return m, nil
 }
 
-func (x *{{$lrSvrName}}{{.Name}}Client) Recv() (*{{.Output}}, error) {
-	m := new({{.Output}})
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
 func (x *{{$lrSvrName}}{{.Name}}Client) Header() ({{$metadata}}MD, error) {
 	v, err := x.ClientStream.Header()
 	if err != nil {
@@ -159,6 +143,46 @@ func (x *{{$lrSvrName}}{{.Name}}Client) Trailer() {{$metadata}}MD {
 
 func (x *{{$lrSvrName}}{{.Name}}Client) Send(m *{{.Input}}) error {
 	return x.ClientStream.SendMsg(m)
+}
+
+{{else if .IsServerStreamOnly -}}
+func (c *{{$lrSvrName}}Client) {{.Name}}(ctx {{$ctx}}, in *{{.Input}}) ({{$svrType}}{{.Name}}Client, error) {
+	stream, err := c.cc.NewStream(ctx, &{{$svrType}}ServiceDesc.Streams[{{.StreamIndex}}], "/{{$.FullServerName}}/{{.Name}}")
+	if err != nil {
+		return nil, err
+	}
+	x := &{{$lrSvrName}}{{.Name}}Client{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type {{$lrSvrName}}{{.Name}}Client struct {
+	{{$.Stream}}ClientStream
+}
+
+func (x *{{$lrSvrName}}{{.Name}}Client) Header() ({{$metadata}}MD, error) {
+	v, err := x.ClientStream.Header()
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (x *{{$lrSvrName}}{{.Name}}Client) Trailer() {{$metadata}}MD {
+	return x.ClientStream.Trailer()
+}
+
+func (x *{{$lrSvrName}}{{.Name}}Client) Recv() (*{{.Output}}, error) {
+	m := new({{.Output}})
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 {{else -}}

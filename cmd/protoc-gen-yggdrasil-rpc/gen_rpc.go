@@ -85,10 +85,11 @@ func genService(g *protogen.GeneratedFile, service *protogen.Service, file *prot
 		Status:                g.QualifiedGoIdent(xerrorPackage.Ident("")),
 		Client:                g.QualifiedGoIdent(clientPackage.Ident("")),
 		Server:                g.QualifiedGoIdent(serverPackage.Ident("")),
-		Interceptor:           g.QualifiedGoIdent(interceptorPackage.Ident("")),
 		Md:                    g.QualifiedGoIdent(metadataPackage.Ident("")),
 		NeedStream:            false,
+		HasUnaryMethods:       false,
 	}
+	streamIndex := 0
 	for _, method := range service.Methods {
 		tmp := &methodDesc{
 			Name:         method.GoName,
@@ -97,13 +98,25 @@ func genService(g *protogen.GeneratedFile, service *protogen.Service, file *prot
 			ClientStream: method.Desc.IsStreamingClient(),
 			ServerStream: method.Desc.IsStreamingServer(),
 		}
+		tmp.IsUnary = !tmp.ClientStream && !tmp.ServerStream
+		tmp.IsBidi = tmp.ClientStream && tmp.ServerStream
+		tmp.IsClientStreamOnly = tmp.ClientStream && !tmp.ServerStream
+		tmp.IsServerStreamOnly = !tmp.ClientStream && tmp.ServerStream
 		if tmp.ClientStream || tmp.ServerStream {
 			sd.NeedStream = true
+			tmp.StreamIndex = streamIndex
+			streamIndex++
+		}
+		if tmp.IsUnary {
+			sd.HasUnaryMethods = true
 		}
 		sd.Methods = append(sd.Methods, tmp)
 	}
 	if sd.NeedStream {
 		sd.Stream = g.QualifiedGoIdent(streamPackage.Ident(""))
+	}
+	if sd.HasUnaryMethods {
+		sd.Interceptor = g.QualifiedGoIdent(interceptorPackage.Ident(""))
 	}
 	if len(sd.Methods) != 0 {
 		g.P(sd.execute(tpl))

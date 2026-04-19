@@ -4,15 +4,13 @@ package helloworld
 
 import (
 	context "context"
-
 	xerror "github.com/codesjoy/pkg/basic/xerror"
-	code "google.golang.org/genproto/googleapis/rpc/code"
-
 	client "github.com/codesjoy/yggdrasil/v2/client"
 	interceptor "github.com/codesjoy/yggdrasil/v2/interceptor"
 	metadata "github.com/codesjoy/yggdrasil/v2/metadata"
 	server "github.com/codesjoy/yggdrasil/v2/server"
 	stream "github.com/codesjoy/yggdrasil/v2/stream"
+	code "google.golang.org/genproto/googleapis/rpc/code"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -35,11 +33,11 @@ type GreeterServiceSayHelloStreamClient interface {
 
 type GreeterServiceSayHelloClientStreamClient interface {
 	Send(*SayHelloClientStreamRequest) error
+	CloseAndRecv() (*SayHelloClientStreamResponse, error)
 	stream.ClientStream
 }
 
 type GreeterServiceSayHelloServerStreamClient interface {
-	CloseAndRecv() (*SayHelloServerStreamResponse, error)
 	Recv() (*SayHelloServerStreamResponse, error)
 	stream.ClientStream
 }
@@ -106,7 +104,6 @@ func (x *greeterserviceSayHelloStreamClient) Recv() (*SayHelloStreamResponse, er
 	}
 	return m, nil
 }
-
 func (c *greeterserviceClient) SayHelloClientStream(ctx context.Context) (GreeterServiceSayHelloClientStreamClient, error) {
 	stream, err := c.cc.NewStream(ctx, &GreeterServiceServiceDesc.Streams[1], "/codesjoy.yggdrasil.example.proto.helloword.GreeterService/SayHelloClientStream")
 	if err != nil {
@@ -118,6 +115,17 @@ func (c *greeterserviceClient) SayHelloClientStream(ctx context.Context) (Greete
 
 type greeterserviceSayHelloClientStreamClient struct {
 	stream.ClientStream
+}
+
+func (x *greeterserviceSayHelloClientStreamClient) CloseAndRecv() (*SayHelloClientStreamResponse, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(SayHelloClientStreamResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func (x *greeterserviceSayHelloClientStreamClient) Header() (metadata.MD, error) {
@@ -155,25 +163,6 @@ type greeterserviceSayHelloServerStreamClient struct {
 	stream.ClientStream
 }
 
-func (x *greeterserviceSayHelloServerStreamClient) CloseAndRecv() (*SayHelloServerStreamResponse, error) {
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	m := new(SayHelloServerStreamResponse)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-func (x *greeterserviceSayHelloServerStreamClient) Recv() (*SayHelloServerStreamResponse, error) {
-	m := new(SayHelloServerStreamResponse)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
 func (x *greeterserviceSayHelloServerStreamClient) Header() (metadata.MD, error) {
 	v, err := x.ClientStream.Header()
 	if err != nil {
@@ -186,8 +175,12 @@ func (x *greeterserviceSayHelloServerStreamClient) Trailer() metadata.MD {
 	return x.ClientStream.Trailer()
 }
 
-func (x *greeterserviceSayHelloServerStreamClient) Send(m *SayHelloServerStreamRequest) error {
-	return x.ClientStream.SendMsg(m)
+func (x *greeterserviceSayHelloServerStreamClient) Recv() (*SayHelloServerStreamResponse, error) {
+	m := new(SayHelloServerStreamResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func _GreeterService_SayHello_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, unaryInt interceptor.UnaryServerInterceptor) (interface{}, error) {
@@ -361,7 +354,8 @@ type UnsafeGreeterServiceServer interface {
 }
 
 // UnimplementedGreeterServiceServer must be embedded to have forward compatible implementations.
-type UnimplementedGreeterServiceServer struct{}
+type UnimplementedGreeterServiceServer struct {
+}
 
 func (UnimplementedGreeterServiceServer) SayHello(context.Context, *SayHelloRequest) (*SayHelloResponse, error) {
 	return nil, xerror.New(code.Code_UNIMPLEMENTED, "method SayHello not implemented")
