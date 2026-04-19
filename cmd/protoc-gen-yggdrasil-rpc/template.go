@@ -27,6 +27,7 @@ type serviceDesc struct {
 	FullServerName        string
 	LowerFirstServiceType string
 	Methods               []*methodDesc
+	HasUnaryMethods       bool
 	Context               string
 	Status                string
 	Code                  string
@@ -39,11 +40,16 @@ type serviceDesc struct {
 }
 
 type methodDesc struct {
-	Name         string
-	Input        string
-	Output       string
-	ClientStream bool
-	ServerStream bool
+	Name               string
+	Input              string
+	Output             string
+	ClientStream       bool
+	ServerStream       bool
+	IsUnary            bool
+	IsBidi             bool
+	IsClientStreamOnly bool
+	IsServerStreamOnly bool
+	StreamIndex        int
 }
 
 func (sd *serviceDesc) execute(tpl string) string {
