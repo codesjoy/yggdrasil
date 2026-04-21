@@ -16,68 +16,12 @@ package client
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/codesjoy/yggdrasil/v2/balancer"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 )
-
-// mockPicker is a mock implementation of balancer.Picker
-type mockPicker struct {
-	results     []balancer.PickResult
-	errors      []error
-	callCount   int32
-	returnIndex int32
-}
-
-func newMockPicker() *mockPicker {
-	return &mockPicker{
-		results: make([]balancer.PickResult, 0),
-		errors:  make([]error, 0),
-	}
-}
-
-func (m *mockPicker) AddResult(result balancer.PickResult, err error) {
-	m.results = append(m.results, result)
-	m.errors = append(m.errors, err)
-}
-
-func (m *mockPicker) Next(ri balancer.RPCInfo) (balancer.PickResult, error) {
-	atomic.AddInt32(&m.callCount, 1)
-	idx := atomic.AddInt32(&m.returnIndex, 1) - 1
-	if int(idx) >= len(m.results) {
-		idx = int32(len(m.results) - 1)
-	}
-	return m.results[idx], m.errors[idx]
-}
-
-func (m *mockPicker) GetCallCount() int32 {
-	return atomic.LoadInt32(&m.callCount)
-}
-
-// mockPickResult is a mock implementation of balancer.PickResult
-type mockPickResult struct {
-	client     remote.Client
-	reportFunc func(err error)
-}
-
-func newMockPickResult(client remote.Client) *mockPickResult {
-	return &mockPickResult{
-		client: client,
-	}
-}
-
-func (m *mockPickResult) RemoteClient() remote.Client {
-	return m.client
-}
-
-func (m *mockPickResult) Report(err error) {
-	if m.reportFunc != nil {
-		m.reportFunc(err)
-	}
-}
 
 func TestPickerSnap_UpdatePicker(t *testing.T) {
 	cli := &client{}

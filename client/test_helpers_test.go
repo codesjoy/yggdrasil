@@ -17,6 +17,9 @@ package client
 import (
 	"context"
 	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
 
 	"github.com/codesjoy/yggdrasil/v2/balancer"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
@@ -26,7 +29,28 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/stream"
 )
 
-// mockRemoteClient is a mock implementation of remote.Client
+func preserveClientSettings(t *testing.T) {
+	t.Helper()
+	settingsMu.RLock()
+	prev := settingsV
+	settingsMu.RUnlock()
+	t.Cleanup(func() { Configure(prev) })
+}
+
+type countingBackoff struct {
+	calls int32
+}
+
+func (b *countingBackoff) Backoff(_ int) time.Duration {
+	atomic.AddInt32(&b.calls, 1)
+	return time.Millisecond
+}
+
+func (b *countingBackoff) Count() int32 {
+	return atomic.LoadInt32(&b.calls)
+}
+
+// mockRemoteClient is a mock implementation of remote.Client.
 type mockRemoteClient struct {
 	name      string
 	state     remote.State
@@ -98,7 +122,7 @@ func (m *mockRemoteClient) IsConnected() bool {
 	return m.connected
 }
 
-// mockEndpoint is a mock implementation of resolver.Endpoint
+// mockEndpoint is a mock implementation of resolver.Endpoint.
 type mockEndpoint struct {
 	name       string
 	address    string
@@ -131,7 +155,7 @@ func (m *mockEndpoint) GetAttributes() map[string]any {
 	return m.attributes
 }
 
-// mockClientStream is a mock implementation of stream.ClientStream
+// mockClientStream is a mock implementation of stream.ClientStream.
 type mockClientStream struct {
 	ctx       context.Context
 	header    metadata.MD
@@ -171,14 +195,14 @@ func (m *mockClientStream) Context() context.Context {
 	return m.ctx
 }
 
-func (m *mockClientStream) SendMsg(msg interface{}) error {
+func (m *mockClientStream) SendMsg(any) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.sendCount++
 	return m.sendErr
 }
 
-func (m *mockClientStream) RecvMsg(msg interface{}) error {
+func (m *mockClientStream) RecvMsg(any) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.recvCount++
@@ -197,7 +221,7 @@ func (m *mockClientStream) SetRecvErr(err error) {
 	m.recvErr = err
 }
 
-// mockStatsHandler is a mock implementation of stats.Handler
+// mockStatsHandler is a mock implementation of stats.Handler.
 type mockStatsHandler struct{}
 
 func newMockStatsHandler() stats.Handler {
@@ -208,15 +232,15 @@ func (m *mockStatsHandler) TagRPC(ctx context.Context, info stats.RPCTagInfo) co
 	return ctx
 }
 
-func (m *mockStatsHandler) HandleRPC(ctx context.Context, s stats.RPCStats) {}
+func (m *mockStatsHandler) HandleRPC(context.Context, stats.RPCStats) {}
 
 func (m *mockStatsHandler) TagChannel(ctx context.Context, info stats.ChanTagInfo) context.Context {
 	return ctx
 }
 
-func (m *mockStatsHandler) HandleChannel(ctx context.Context, s stats.ChanStats) {}
+func (m *mockStatsHandler) HandleChannel(context.Context, stats.ChanStats) {}
 
-// mockBalancer is a mock implementation of balancer.Balancer
+// mockBalancer is a mock implementation of balancer.Balancer.
 type mockBalancer struct {
 	mu          sync.Mutex
 	state       resolver.State
@@ -253,50 +277,57 @@ func (m *mockBalancer) UpdatePicker(picker balancer.Picker) {
 	m.picker = picker
 }
 
-// mockResolver is a mock implementation of resolver.Resolver
-type mockResolver struct {
-	mu         sync.Mutex
-	watchers   map[string]resolver.Client
-	addCount   int
-	delCount   int
-	addErr     error
-	delErr     error
-	updateFunc func(resolver.Client)
+// mockPicker is a mock implementation of balancer.Picker.
+type mockPicker struct {
+	results     []balancer.PickResult
+	errors      []error
+	callCount   int32
+	returnIndex int32
 }
 
-func newMockResolver() *mockResolver {
-	return &mockResolver{
-		watchers: make(map[string]resolver.Client),
+func newMockPicker() *mockPicker {
+	return &mockPicker{
+		results: make([]balancer.PickResult, 0),
+		errors:  make([]error, 0),
 	}
 }
 
-func (m *mockResolver) AddWatch(appName string, watcher resolver.Client) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.addErr != nil {
-		return m.addErr
-	}
-	m.watchers[appName] = watcher
-	m.addCount++
-	if m.updateFunc != nil {
-		m.updateFunc(watcher)
-	}
-	return nil
+func (m *mockPicker) AddResult(result balancer.PickResult, err error) {
+	m.results = append(m.results, result)
+	m.errors = append(m.errors, err)
 }
 
-func (m *mockResolver) DelWatch(appName string, watcher resolver.Client) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.delErr != nil {
-		return m.delErr
+func (m *mockPicker) Next(balancer.RPCInfo) (balancer.PickResult, error) {
+	atomic.AddInt32(&m.callCount, 1)
+	idx := atomic.AddInt32(&m.returnIndex, 1) - 1
+	if int(idx) >= len(m.results) {
+		idx = int32(len(m.results) - 1)
 	}
-	if _, ok := m.watchers[appName]; ok {
-		delete(m.watchers, appName)
-		m.delCount++
-	}
-	return nil
+	return m.results[idx], m.errors[idx]
 }
 
-func (m *mockResolver) Type() string {
-	return "mock_resolver"
+func (m *mockPicker) GetCallCount() int32 {
+	return atomic.LoadInt32(&m.callCount)
+}
+
+// mockPickResult is a mock implementation of balancer.PickResult.
+type mockPickResult struct {
+	client     remote.Client
+	reportFunc func(err error)
+}
+
+func newMockPickResult(client remote.Client) *mockPickResult {
+	return &mockPickResult{
+		client: client,
+	}
+}
+
+func (m *mockPickResult) RemoteClient() remote.Client {
+	return m.client
+}
+
+func (m *mockPickResult) Report(err error) {
+	if m.reportFunc != nil {
+		m.reportFunc(err)
+	}
 }

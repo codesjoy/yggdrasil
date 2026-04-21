@@ -26,15 +26,15 @@ import (
 
 // Test implementations for interfaces
 
-type MockEndpoint struct {
+type mockEndpoint struct {
 	scheme   string
 	address  string
 	metadata map[string]string
 	kind     constant.ServerKind
 }
 
-func NewMockEndpoint(scheme, address string, kind constant.ServerKind) *MockEndpoint {
-	return &MockEndpoint{
+func newMockEndpoint(scheme, address string, kind constant.ServerKind) *mockEndpoint {
+	return &mockEndpoint{
 		scheme:  scheme,
 		address: address,
 		kind:    kind,
@@ -45,23 +45,23 @@ func NewMockEndpoint(scheme, address string, kind constant.ServerKind) *MockEndp
 	}
 }
 
-func (m *MockEndpoint) Scheme() string {
+func (m *mockEndpoint) Scheme() string {
 	return m.scheme
 }
 
-func (m *MockEndpoint) Address() string {
+func (m *mockEndpoint) Address() string {
 	return m.address
 }
 
-func (m *MockEndpoint) Metadata() map[string]string {
+func (m *mockEndpoint) Metadata() map[string]string {
 	return m.metadata
 }
 
-func (m *MockEndpoint) Kind() constant.ServerKind {
+func (m *mockEndpoint) Kind() constant.ServerKind {
 	return m.kind
 }
 
-type MockServer struct {
+type mockServer struct {
 	services          []*ServiceDesc
 	restServices      []*RestServiceDesc
 	rawHandlers       []*RestRawHandlerDesc
@@ -71,8 +71,8 @@ type MockServer struct {
 	startFlagProvided bool
 }
 
-func NewMockServer() *MockServer {
-	return &MockServer{
+func newMockServer() *mockServer {
+	return &mockServer{
 		services:     make([]*ServiceDesc, 0),
 		restServices: make([]*RestServiceDesc, 0),
 		rawHandlers:  make([]*RestRawHandlerDesc, 0),
@@ -80,19 +80,19 @@ func NewMockServer() *MockServer {
 	}
 }
 
-func (m *MockServer) RegisterService(sd *ServiceDesc, ss interface{}) {
+func (m *mockServer) RegisterService(sd *ServiceDesc, ss interface{}) {
 	m.services = append(m.services, sd)
 }
 
-func (m *MockServer) RegisterRestService(sd *RestServiceDesc, ss interface{}, prefix ...string) {
+func (m *mockServer) RegisterRestService(sd *RestServiceDesc, ss interface{}, prefix ...string) {
 	m.restServices = append(m.restServices, sd)
 }
 
-func (m *MockServer) RegisterRestRawHandlers(sd ...*RestRawHandlerDesc) {
+func (m *mockServer) RegisterRestRawHandlers(sd ...*RestRawHandlerDesc) {
 	m.rawHandlers = append(m.rawHandlers, sd...)
 }
 
-func (m *MockServer) Serve(startFlag chan<- struct{}) error {
+func (m *mockServer) Serve(startFlag chan<- struct{}) error {
 	m.serveCalled = true
 	if startFlag != nil {
 		startFlag <- struct{}{}
@@ -101,19 +101,19 @@ func (m *MockServer) Serve(startFlag chan<- struct{}) error {
 	return nil
 }
 
-func (m *MockServer) Stop(context.Context) error {
+func (m *mockServer) Stop(context.Context) error {
 	m.stopCalled = true
 	return nil
 }
 
-func (m *MockServer) Endpoints() []Endpoint {
+func (m *mockServer) Endpoints() []Endpoint {
 	return m.endpoints
 }
 
 // Test Endpoint interface
 func TestEndpointInterface(t *testing.T) {
 	// Test RPC endpoint
-	rpcEndpoint := NewMockEndpoint("grpc", "localhost:8080", constant.ServerKindRPC)
+	rpcEndpoint := newMockEndpoint("grpc", "localhost:8080", constant.ServerKindRPC)
 
 	assert.Equal(t, "grpc", rpcEndpoint.Scheme())
 	assert.Equal(t, "localhost:8080", rpcEndpoint.Address())
@@ -124,7 +124,7 @@ func TestEndpointInterface(t *testing.T) {
 	assert.Equal(t, "us-east-1", metadata["region"])
 
 	// Test REST endpoint
-	restEndpoint := NewMockEndpoint("http", "localhost:9000", constant.ServerKindRest)
+	restEndpoint := newMockEndpoint("http", "localhost:9000", constant.ServerKindRest)
 
 	assert.Equal(t, "http", restEndpoint.Scheme())
 	assert.Equal(t, "localhost:9000", restEndpoint.Address())
@@ -137,7 +137,7 @@ func TestEndpointInterface(t *testing.T) {
 
 // Test Server interface
 func TestServerInterface(t *testing.T) {
-	server := NewMockServer()
+	server := newMockServer()
 
 	// Test initial state
 	assert.False(t, server.serveCalled)
@@ -195,7 +195,7 @@ func TestServerInterface(t *testing.T) {
 	}
 
 	// Test Endpoints
-	endpoint := NewMockEndpoint("grpc", "localhost:8080", constant.ServerKindRPC)
+	endpoint := newMockEndpoint("grpc", "localhost:8080", constant.ServerKindRPC)
 	server.endpoints = append(server.endpoints, endpoint)
 
 	endpoints := server.Endpoints()
@@ -211,10 +211,10 @@ func TestServerInterface(t *testing.T) {
 // Test interface implementations
 func TestInterfaceImplementations(t *testing.T) {
 	// Test that MockEndpoint implements Endpoint
-	var _ Endpoint = (*MockEndpoint)(nil)
+	var _ Endpoint = (*mockEndpoint)(nil)
 
 	// Test that MockServer implements Server
-	var _ Server = (*MockServer)(nil)
+	var _ Server = (*mockServer)(nil)
 
 	// Verify interface methods work correctly
 	si := &serverInfo{
@@ -293,7 +293,7 @@ func TestServerInfoImplementation(t *testing.T) {
 
 // Test Server interface methods with edge cases
 func TestServerInterfaceEdgeCases(t *testing.T) {
-	server := NewMockServer()
+	server := newMockServer()
 
 	// Test multiple service registrations
 	for i := 0; i < 5; i++ {
@@ -331,7 +331,7 @@ func TestServerInterfaceEdgeCases(t *testing.T) {
 	// Test multiple endpoints
 	var endpoints []Endpoint
 	for i := 0; i < 2; i++ {
-		endpoints = append(endpoints, NewMockEndpoint(
+		endpoints = append(endpoints, newMockEndpoint(
 			"grpc",
 			fmt.Sprintf("localhost:%d", 8080+i),
 			constant.ServerKindRPC,
