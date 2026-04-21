@@ -14,7 +14,10 @@
 
 package stats
 
-import "sync"
+import (
+	"strings"
+	"sync"
+)
 
 // ProviderSettings contains provider-specific stats payloads.
 type ProviderSettings struct {
@@ -49,4 +52,24 @@ func CurrentSettings() Settings {
 	settingsMu.RLock()
 	defer settingsMu.RUnlock()
 	return settingsV
+}
+
+// ParseHandlerNames parses a comma-separated handler list, trimming spaces and
+// deduplicating names while preserving order.
+func ParseHandlerNames(raw string) []string {
+	items := strings.Split(raw, ",")
+	names := make([]string, 0, len(items))
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		name := strings.TrimSpace(item)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	return names
 }

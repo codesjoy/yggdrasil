@@ -147,9 +147,9 @@ func (s *server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	ctx = metadata.WithInContext(ctx, extractMetadataWithPrefix(r.Header, MetadataHeaderPrefix))
 	ctx = s.statsHandler.TagRPC(ctx, &stats.RPCTagInfoBase{FullMethod: method})
 	ctx = metadata.WithStreamContext(ctx)
-	ctx = metadata.WithInContext(ctx, extractMetadataWithPrefix(r.Header, MetadataHeaderPrefix))
 	localAddr := s.localAddr()
 	ctx = attachPeer(ctx, r, localAddr)
 

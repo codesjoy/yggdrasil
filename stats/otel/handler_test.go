@@ -22,11 +22,41 @@ import (
 	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
 	"github.com/codesjoy/yggdrasil/v2/stats"
 	"github.com/codesjoy/yggdrasil/v2/status"
 )
+
+type recordedInt64Histogram struct {
+	noop.Int64Histogram
+	values []int64
+}
+
+func (h *recordedInt64Histogram) Record(context.Context, int64, ...metric.RecordOption) {}
+
+func (h *recordedInt64Histogram) record(value int64) {
+	h.values = append(h.values, value)
+}
+
+type spyInt64Histogram struct {
+	recordedInt64Histogram
+}
+
+func (h *spyInt64Histogram) Record(_ context.Context, value int64, _ ...metric.RecordOption) {
+	h.record(value)
+}
+
+type spyFloat64Histogram struct {
+	noop.Float64Histogram
+	values []float64
+}
+
+func (h *spyFloat64Histogram) Record(_ context.Context, value float64, _ ...metric.RecordOption) {
+	h.values = append(h.values, value)
+}
 
 // TestNewHandler tests newHandler function
 func TestNewHandler(t *testing.T) {
@@ -149,6 +179,94 @@ func TestHandleWithMetrics(t *testing.T) {
 
 		// Should not panic
 		h.handleWithMetrics(ctx, rs, false)
+	})
+}
+
+func TestHandleWithMetrics_RequestResponseSemantics(t *testing.T) {
+	t.Run("server side payload direction", func(t *testing.T) {
+		h := newHandler(true)
+		h.cfg = &Config{EnableMetrics: true}
+		reqSize := &spyInt64Histogram{}
+		respSize := &spyInt64Histogram{}
+		reqPerRPC := &spyInt64Histogram{}
+		respPerRPC := &spyInt64Histogram{}
+		dur := &spyFloat64Histogram{}
+		h.rpcRequestSize = reqSize
+		h.rpcResponseSize = respSize
+		h.rpcRequestsPerRPC = reqPerRPC
+		h.rpcResponsesPerRPC = respPerRPC
+		h.rpcDuration = dur
+
+		ctx, span := h.tracer.Start(context.Background(), "server")
+		defer span.End()
+		ctx = context.WithValue(ctx, rpcContextKey{}, &rpcContext{})
+
+		h.handleWithMetrics(ctx, &stats.RPCInPayloadBase{
+			Client:        false,
+			TransportSize: 12,
+			Protocol:      "grpc",
+		}, true)
+		h.handleWithMetrics(ctx, &stats.RPCOutPayloadBase{
+			Client:        false,
+			TransportSize: 34,
+			Protocol:      "grpc",
+		}, true)
+		begin := time.Now()
+		h.handleWithMetrics(ctx, &stats.RPCEndBase{
+			Client:    false,
+			BeginTime: begin,
+			EndTime:   begin.Add(25 * time.Millisecond),
+			Protocol:  "grpc",
+		}, true)
+
+		assert.Equal(t, []int64{12}, reqSize.values)
+		assert.Equal(t, []int64{34}, respSize.values)
+		assert.Equal(t, []int64{1}, reqPerRPC.values)
+		assert.Equal(t, []int64{1}, respPerRPC.values)
+		assert.Len(t, dur.values, 1)
+	})
+
+	t.Run("client side payload direction", func(t *testing.T) {
+		h := newHandler(false)
+		h.cfg = &Config{EnableMetrics: true}
+		reqSize := &spyInt64Histogram{}
+		respSize := &spyInt64Histogram{}
+		reqPerRPC := &spyInt64Histogram{}
+		respPerRPC := &spyInt64Histogram{}
+		dur := &spyFloat64Histogram{}
+		h.rpcRequestSize = reqSize
+		h.rpcResponseSize = respSize
+		h.rpcRequestsPerRPC = reqPerRPC
+		h.rpcResponsesPerRPC = respPerRPC
+		h.rpcDuration = dur
+
+		ctx, span := h.tracer.Start(context.Background(), "client")
+		defer span.End()
+		ctx = context.WithValue(ctx, rpcContextKey{}, &rpcContext{})
+
+		h.handleWithMetrics(ctx, &stats.RPCOutPayloadBase{
+			Client:        true,
+			TransportSize: 56,
+			Protocol:      "grpc",
+		}, false)
+		h.handleWithMetrics(ctx, &stats.RPCInPayloadBase{
+			Client:        true,
+			TransportSize: 78,
+			Protocol:      "grpc",
+		}, false)
+		begin := time.Now()
+		h.handleWithMetrics(ctx, &stats.RPCEndBase{
+			Client:    true,
+			BeginTime: begin,
+			EndTime:   begin.Add(25 * time.Millisecond),
+			Protocol:  "grpc",
+		}, false)
+
+		assert.Equal(t, []int64{56}, reqSize.values)
+		assert.Equal(t, []int64{78}, respSize.values)
+		assert.Equal(t, []int64{1}, reqPerRPC.values)
+		assert.Equal(t, []int64{1}, respPerRPC.values)
+		assert.Len(t, dur.values, 1)
 	})
 }
 

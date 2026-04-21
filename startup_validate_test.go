@@ -41,6 +41,25 @@ func TestValidateStartup_NonStrict_WarnsOnly(t *testing.T) {
 	}
 }
 
+func TestValidateStartup_Strict_FailsOnMissingStatsHandlerBuilder(t *testing.T) {
+	configtest.Set(t, "yggdrasil.admin.validation.strict", true)
+	configtest.Set(t, "yggdrasil.telemetry.stats.server", "missing-stats-handler")
+
+	if err := validateStartup(nil); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestValidateStartup_NonStrict_WarnsOnMissingStatsHandlerBuilder(t *testing.T) {
+	configtest.Set(t, "yggdrasil.admin.validation.enable", true)
+	configtest.Set(t, "yggdrasil.admin.validation.strict", false)
+	configtest.Set(t, "yggdrasil.telemetry.stats.client", "missing-stats-handler")
+
+	if err := validateStartup(nil); err != nil {
+		t.Fatalf("expected nil error, got: %v", err)
+	}
+}
+
 func TestValidateStartup_Strict_FailsOnMissingRestMarshalerBuilder(t *testing.T) {
 	configtest.Set(t, "yggdrasil.admin.validation.strict", true)
 	configtest.Set(t, "yggdrasil.transports.http.rest.port", 0)

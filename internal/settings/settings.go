@@ -357,6 +357,20 @@ func Validate(resolved Resolved) error {
 			addErr("meter provider builder not found", fmt.Errorf("name=%s", meterName), slog.String("name", meterName))
 		}
 	}
+	validateStatsHandlers := func(raw string, key string) {
+		for _, name := range stats.ParseHandlerNames(raw) {
+			if stats.GetHandlerBuilder(name) == nil {
+				addErr(
+					"stats handler builder not found",
+					fmt.Errorf("name=%s", name),
+					slog.String("name", name),
+					slog.String("key", key),
+				)
+			}
+		}
+	}
+	validateStatsHandlers(resolved.Telemetry.Stats.Server, "yggdrasil.telemetry.stats.server")
+	validateStatsHandlers(resolved.Telemetry.Stats.Client, "yggdrasil.telemetry.stats.client")
 	for _, protocol := range resolved.Server.Transports {
 		if remote.GetServerBuilder(protocol) == nil {
 			addErr("remote server builder not found", fmt.Errorf("protocol=%s", protocol), slog.String("protocol", protocol))

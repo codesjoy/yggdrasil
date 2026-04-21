@@ -17,7 +17,6 @@ package stats
 import (
 	"context"
 	"log/slog"
-	"strings"
 	"sync"
 )
 
@@ -113,12 +112,8 @@ func (h *handlerChain) HandleChannel(ctx context.Context, cs ChanStats) {
 // GetServerHandler gets the server side stats handler.
 func GetServerHandler() Handler {
 	svrOnce.Do(func() {
-		names := CurrentSettings().Server
 		h := &handlerChain{handlers: make([]Handler, 0)}
-		for _, name := range strings.Split(names, ",") {
-			if name == "" {
-				continue
-			}
+		for _, name := range ParseHandlerNames(CurrentSettings().Server) {
 			builder := GetHandlerBuilder(name)
 			if builder == nil {
 				slog.Warn("fault to get stats handler builder", slog.String("name", name))
@@ -134,12 +129,8 @@ func GetServerHandler() Handler {
 // GetClientHandler gets the client side stats handler.
 func GetClientHandler() Handler {
 	cliOnce.Do(func() {
-		names := CurrentSettings().Client
 		h := &handlerChain{handlers: make([]Handler, 0)}
-		for _, name := range strings.Split(names, ",") {
-			if name == "" {
-				continue
-			}
+		for _, name := range ParseHandlerNames(CurrentSettings().Client) {
 			builder := GetHandlerBuilder(name)
 			if builder == nil {
 				slog.Warn("fault to get stats handler builder", slog.String("name", name))

@@ -38,6 +38,8 @@ type rpcContextKey struct{}
 type rpcContext struct {
 	messagesReceived int64
 	messagesSent     int64
+	requests         int64
+	responses        int64
 	metricAttrs      []attribute.KeyValue
 }
 
@@ -117,7 +119,7 @@ func newHandler(isSvr bool) handler {
 		h.rpcRequestsPerRPC, err = meter.Int64Histogram(
 			"rpc."+role+".requests_per_rpc",
 			metric.WithDescription(
-				"Measures the number of messages received per RPC. Should be 1 for all non-streaming RPCs.",
+				"Measures the number of request messages per RPC. Should be 1 for all non-streaming RPCs.",
 			),
 			metric.WithUnit("{count}"),
 		)
@@ -131,7 +133,7 @@ func newHandler(isSvr bool) handler {
 		h.rpcResponsesPerRPC, err = meter.Int64Histogram(
 			"rpc."+role+".responses_per_rpc",
 			metric.WithDescription(
-				"Measures the number of messages received per RPC. Should be 1 for all non-streaming RPCs.",
+				"Measures the number of response messages per RPC. Should be 1 for all non-streaming RPCs.",
 			),
 			metric.WithUnit("{count}"),
 		)
@@ -163,7 +165,13 @@ func (h *handler) handleWithMetrics(ctx context.Context, rs stats.RPCStats, isSe
 	case stats.RPCInPayload:
 		if rctx != nil {
 			messageID = atomic.AddInt64(&rctx.messagesReceived, 1)
-			h.rpcRequestSize.Record(ctx, int64(rs.GetTransportSize()), metric.WithAttributes(metricAttrs...))
+			if rs.IsClient() {
+				atomic.AddInt64(&rctx.responses, 1)
+				h.rpcResponseSize.Record(ctx, int64(rs.GetTransportSize()), metric.WithAttributes(metricAttrs...))
+			} else {
+				atomic.AddInt64(&rctx.requests, 1)
+				h.rpcRequestSize.Record(ctx, int64(rs.GetTransportSize()), metric.WithAttributes(metricAttrs...))
+			}
 		}
 
 		if h.cfg.ReceivedEvent {
@@ -179,7 +187,13 @@ func (h *handler) handleWithMetrics(ctx context.Context, rs stats.RPCStats, isSe
 	case stats.RPCOutPayload:
 		if rctx != nil {
 			messageID = atomic.AddInt64(&rctx.messagesSent, 1)
-			h.rpcResponseSize.Record(ctx, int64(rs.GetTransportSize()), metric.WithAttributes(metricAttrs...))
+			if rs.IsClient() {
+				atomic.AddInt64(&rctx.requests, 1)
+				h.rpcRequestSize.Record(ctx, int64(rs.GetTransportSize()), metric.WithAttributes(metricAttrs...))
+			} else {
+				atomic.AddInt64(&rctx.responses, 1)
+				h.rpcResponseSize.Record(ctx, int64(rs.GetTransportSize()), metric.WithAttributes(metricAttrs...))
+			}
 		}
 
 		if h.cfg.SentEvent {
@@ -222,8 +236,8 @@ func (h *handler) handleWithMetrics(ctx context.Context, rs stats.RPCStats, isSe
 
 		h.rpcDuration.Record(ctx, elapsedTime, metric.WithAttributes(metricAttrs...))
 		if rctx != nil {
-			h.rpcRequestsPerRPC.Record(ctx, atomic.LoadInt64(&rctx.messagesReceived), metric.WithAttributes(metricAttrs...))
-			h.rpcResponsesPerRPC.Record(ctx, atomic.LoadInt64(&rctx.messagesSent), metric.WithAttributes(metricAttrs...))
+			h.rpcRequestsPerRPC.Record(ctx, atomic.LoadInt64(&rctx.requests), metric.WithAttributes(metricAttrs...))
+			h.rpcResponsesPerRPC.Record(ctx, atomic.LoadInt64(&rctx.responses), metric.WithAttributes(metricAttrs...))
 		}
 	default:
 		return

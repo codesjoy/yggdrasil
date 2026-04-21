@@ -32,6 +32,7 @@ import (
 	xotel "github.com/codesjoy/yggdrasil/v2/otel"
 	"github.com/codesjoy/yggdrasil/v2/registry"
 	"github.com/codesjoy/yggdrasil/v2/server"
+	_ "github.com/codesjoy/yggdrasil/v2/stats/otel"
 
 	"go.opentelemetry.io/otel"
 )
