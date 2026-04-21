@@ -117,7 +117,8 @@ yggdrasil:
     handler:
       default:
         type: "console"
-        level: "debug"
+        config:
+          level: "debug"
     writer:
       default:
         type: "console"
@@ -136,6 +137,8 @@ yggdrasil:
 | `interceptor.stream_server` | 流式 RPC 拦截器 |
 | `logger.handler` | 日志处理器配置 |
 | `logger.writer` | 日志输出配置 |
+
+> 自定义 `logger.writer` 需要自行保证并发安全（内置 `console`/`file(lumberjack)` 已具备并发写保障）。
 
 ## 代码结构说明
 
@@ -311,7 +314,7 @@ remote:
 
 **Q: 如何修改日志级别？**
 
-A: 修改 `config.yaml` 中的 `logger.handler.default.level` 字段（debug/info/warn/error）。
+A: 修改 `config.yaml` 中的 `logger.handler.default.config.level` 字段（debug/info/warn/error）。
 
 **Q: 如何添加自定义拦截器？**
 

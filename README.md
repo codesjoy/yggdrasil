@@ -176,6 +176,8 @@ yggdrasil:
           level: info
 ```
 
+Custom `logger.writer` implementations must be concurrency-safe. Built-in `console` and `file` writers are safe for concurrent logging.
+
 ## 🏗️ Architecture
 
 Yggdrasil adopts a modular architecture with clearly separated concerns:

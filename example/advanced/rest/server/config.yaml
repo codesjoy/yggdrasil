@@ -27,7 +27,8 @@ yggdrasil:
     handler:
       default:
         type: "console"
-        level: "debug"
+        config:
+          level: "debug"
     writer:
       default:
         type: "console"
