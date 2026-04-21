@@ -1,0 +1,119 @@
+package bootstrap
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/codesjoy/yggdrasil/v2/config"
+	"github.com/codesjoy/yggdrasil/v2/config/source"
+)
+
+type failingSource struct {
+	err error
+}
+
+func (s *failingSource) Kind() string { return "failing" }
+func (s *failingSource) Name() string { return "failing" }
+func (s *failingSource) Read() (source.Data, error) {
+	return nil, s.err
+}
+func (s *failingSource) Close() error { return nil }
+
+func TestLoaderLoadFileValidationAndMissingFile(t *testing.T) {
+	loader := NewLoader(nil)
+	manager := config.NewManager()
+
+	_, _, err := loader.LoadFile(manager, "", true)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "path is empty")
+
+	missing := filepath.Join(t.TempDir(), "missing.yaml")
+	loaded, ok, err := loader.LoadFile(manager, missing, false)
+	require.NoError(t, err)
+	require.False(t, ok)
+	require.Nil(t, loaded)
+
+	_, _, err = loader.LoadFile(manager, missing, true)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not found")
+}
+
+func TestLoaderLoadFileSuccessAndDisabledSourceSkipped(t *testing.T) {
+	dir := t.TempDir()
+	bootstrapPath := filepath.Join(dir, "bootstrap.yaml")
+	overridePath := filepath.Join(dir, "override.yaml")
+
+	require.NoError(t, os.WriteFile(overridePath, []byte("app:\n  name: override\n"), 0o600))
+	require.NoError(t, os.WriteFile(bootstrapPath, []byte(
+		"app:\n  name: base\n"+
+			"yggdrasil:\n"+
+			"  bootstrap:\n"+
+			"    sources:\n"+
+			"      - kind: file\n"+
+			"        config:\n"+
+			"          path: "+overridePath+"\n"+
+			"      - kind: env\n"+
+			"        enabled: false\n"+
+			"        config:\n"+
+			"          prefixes: [APP]\n",
+	), 0o600))
+
+	loader := NewLoader(nil)
+	manager := config.NewManager()
+	loaded, ok, err := loader.LoadFile(manager, bootstrapPath, true)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Len(t, loaded, 2) // bootstrap file + one enabled source
+
+	var out struct {
+		Name string `mapstructure:"name"`
+	}
+	require.NoError(t, manager.Section("app").Decode(&out))
+	require.Equal(t, "override", out.Name)
+}
+
+func TestLoaderLoadFileBuildAndLoadErrors(t *testing.T) {
+	buildErrRegistry := NewRegistry()
+	buildErrRegistry.Register("custom", func(spec SourceSpec) (source.Source, config.Priority, error) {
+		return nil, 0, errors.New("build failed")
+	})
+	loader := NewLoader(buildErrRegistry)
+	manager := config.NewManager()
+
+	dir := t.TempDir()
+	buildErrPath := filepath.Join(dir, "build.yaml")
+	require.NoError(t, os.WriteFile(buildErrPath, []byte(
+		"yggdrasil:\n"+
+			"  bootstrap:\n"+
+			"    sources:\n"+
+			"      - kind: custom\n",
+	), 0o600))
+
+	_, _, err := loader.LoadFile(manager, buildErrPath, true)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "bootstrap source[0]")
+	require.Contains(t, err.Error(), "build failed")
+
+	loadErrRegistry := NewRegistry()
+	loadErrRegistry.Register("custom", func(spec SourceSpec) (source.Source, config.Priority, error) {
+		return &failingSource{err: errors.New("read failed")}, config.PriorityFile, nil
+	})
+	loader = NewLoader(loadErrRegistry)
+
+	loadErrPath := filepath.Join(dir, "load.yaml")
+	require.NoError(t, os.WriteFile(loadErrPath, []byte(
+		"yggdrasil:\n"+
+			"  bootstrap:\n"+
+			"    sources:\n"+
+			"      - kind: custom\n",
+	), 0o600))
+
+	_, _, err = loader.LoadFile(config.NewManager(), loadErrPath, true)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "bootstrap source[0]")
+	require.Contains(t, err.Error(), "read failed")
+}
