@@ -53,6 +53,7 @@ var (
 )
 
 var (
+	// Package-level lifecycle state enforces a single application instance per process.
 	app, _ = application.New()
 	initMu sync.Mutex
 	state  = lifecycleStateNew
@@ -95,16 +96,17 @@ func initLocked(appName string, ops ...Option) (err error) {
 		slog.Error("fault to load startup config", slog.Any("error", err))
 		return err
 	}
+	if err = validateStartup(opts); err != nil {
+		slog.Error("startup validation failed", slog.Any("error", err))
+		return err
+	}
+	applyResolvedSettings(opts.resolvedSettings)
 	if err = initLogger(); err != nil {
 		slog.Error("fault to initialize logger", slog.Any("error", err))
 		return err
 	}
 
 	initInstanceInfo(appName, opts.resolvedSettings)
-	if err = validateStartup(opts); err != nil {
-		slog.Error("startup validation failed", slog.Any("error", err))
-		return err
-	}
 	if err = initGovernor(opts); err != nil {
 		slog.Error("fault to initialize governor", slog.Any("error", err))
 		return err
@@ -144,6 +146,7 @@ func Serve(ops ...Option) (err error) {
 		slog.Error("startup validation failed", slog.Any("error", err))
 		return err
 	}
+	applyResolvedSettings(opts.resolvedSettings)
 	if err = initServer(opts); err != nil {
 		initMu.Unlock()
 		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))

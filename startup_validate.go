@@ -24,25 +24,10 @@ import (
 )
 
 func validateStartup(opts *options) error {
-	resolved := settings.Resolved{}
-	if opts != nil {
-		resolved = opts.resolvedSettings
+	resolved, err := resolveStartupSettings(opts)
+	if err != nil {
+		return err
 	}
-	if opts == nil ||
-		(resolved.Logging.Handlers == nil &&
-			resolved.Discovery.Registry.Type == "" &&
-			len(resolved.Server.Transports) == 0 &&
-			resolved.Transports.Rest == nil) {
-		root, err := settings.NewCatalog(config.Default()).Root().Current()
-		if err != nil {
-			return err
-		}
-		resolved, err = settings.Compile(root)
-		if err != nil {
-			return err
-		}
-	}
-	applyResolvedSettings(resolved)
 	strict := resolved.Admin.Validation.Strict
 	enable := strict || resolved.Admin.Validation.Enable
 	if err := settings.Validate(resolved); err != nil {
@@ -83,4 +68,29 @@ func validateStartup(opts *options) error {
 	}
 
 	return multiErr
+}
+
+func resolveStartupSettings(opts *options) (settings.Resolved, error) {
+	resolved := settings.Resolved{}
+	if opts != nil {
+		resolved = opts.resolvedSettings
+	}
+	if opts == nil ||
+		(resolved.Logging.Handlers == nil &&
+			resolved.Discovery.Registry.Type == "" &&
+			len(resolved.Server.Transports) == 0 &&
+			resolved.Transports.Rest == nil) {
+		root, err := settings.NewCatalog(config.Default()).Root().Current()
+		if err != nil {
+			return settings.Resolved{}, err
+		}
+		resolved, err = settings.Compile(root)
+		if err != nil {
+			return settings.Resolved{}, err
+		}
+	}
+	if opts != nil {
+		opts.resolvedSettings = resolved
+	}
+	return resolved, nil
 }

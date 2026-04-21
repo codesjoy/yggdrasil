@@ -40,7 +40,6 @@ func refreshResolvedSettings(opts *options) error {
 	if err != nil {
 		return err
 	}
-	applyResolvedSettings(resolved)
 	opts.resolvedSettings = resolved
 	return nil
 }

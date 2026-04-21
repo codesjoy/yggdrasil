@@ -251,7 +251,7 @@ func HTTPCodeToStuCode(httpCode int32) code.Code {
 	case http.StatusServiceUnavailable:
 		return code.Code_UNAVAILABLE
 	}
-	return http.StatusInternalServerError
+	return code.Code_INTERNAL
 }
 
 // IsRestrictedControlPlaneCode returns whether the status includes a code

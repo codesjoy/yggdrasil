@@ -43,14 +43,6 @@ func Set(t testing.TB, key string, val any) {
 	loadState(t, st)
 }
 
-// Load replaces the entire isolated test layer with data.
-func Load(t testing.TB, data map[string]any) {
-	t.Helper()
-	st := ensureState(t)
-	st.data = cloneMap(data)
-	loadState(t, st)
-}
-
 func ensureState(t testing.TB) *state {
 	t.Helper()
 
@@ -90,28 +82,6 @@ func loadState(t testing.TB, st *state) {
 
 func clearState(layerName string) {
 	_ = config.Default().LoadLayer(layerName, config.PriorityOverride, memory.NewSource(layerName, nil))
-}
-
-func cloneMap(src map[string]any) map[string]any {
-	if src == nil {
-		return map[string]any{}
-	}
-	dst := make(map[string]any, len(src))
-	for k, v := range src {
-		switch item := v.(type) {
-		case map[string]any:
-			dst[k] = cloneMap(item)
-		case []any:
-			out := make([]any, len(item))
-			for i := range item {
-				out[i] = item[i]
-			}
-			dst[k] = out
-		default:
-			dst[k] = v
-		}
-	}
-	return dst
 }
 
 func applySet(dst map[string]any, key string, val any) {

@@ -16,33 +16,24 @@
 package settings
 
 import (
-	"errors"
-	"fmt"
-	"log/slog"
-	"reflect"
-	"slices"
+	"time"
 
 	"github.com/codesjoy/yggdrasil/v2/balancer"
 	"github.com/codesjoy/yggdrasil/v2/client"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	configbootstrap "github.com/codesjoy/yggdrasil/v2/config/bootstrap"
 	"github.com/codesjoy/yggdrasil/v2/governor"
-	"github.com/codesjoy/yggdrasil/v2/interceptor"
-	"github.com/codesjoy/yggdrasil/v2/internal/backoff"
 	"github.com/codesjoy/yggdrasil/v2/internal/instance"
 	"github.com/codesjoy/yggdrasil/v2/logger"
-	xotel "github.com/codesjoy/yggdrasil/v2/otel"
 	"github.com/codesjoy/yggdrasil/v2/registry"
-	"github.com/codesjoy/yggdrasil/v2/remote"
-	"github.com/codesjoy/yggdrasil/v2/remote/credentials"
-	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
 	grpcprotocol "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
 	protocolhttp "github.com/codesjoy/yggdrasil/v2/remote/protocol/http"
 	"github.com/codesjoy/yggdrasil/v2/remote/rest"
-	"github.com/codesjoy/yggdrasil/v2/remote/rest/middleware"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
 	"github.com/codesjoy/yggdrasil/v2/server"
 	"github.com/codesjoy/yggdrasil/v2/stats"
+
+	gkeepalive "google.golang.org/grpc/keepalive"
 )
 
 // Root is the top-level framework configuration schema.
@@ -78,8 +69,8 @@ type GRPCTransport struct {
 
 // GRPCClientTransport contains service-level gRPC client overrides.
 type GRPCClientTransport struct {
-	grpcprotocol.Config `mapstructure:",squash"`
-	Credentials         map[string]map[string]any `mapstructure:"credentials"`
+	Config      grpcClientConfigOverlay   `mapstructure:",squash"`
+	Credentials map[string]map[string]any `mapstructure:"credentials"`
 }
 
 // HTTPTransport contains global HTTP transport settings.
@@ -91,8 +82,8 @@ type HTTPTransport struct {
 
 // ClientTransports contains service-level transport overrides.
 type ClientTransports struct {
-	GRPC GRPCClientTransport       `mapstructure:"grpc"`
-	HTTP protocolhttp.ClientConfig `mapstructure:"http"`
+	GRPC GRPCClientTransport `mapstructure:"grpc"`
+	HTTP HTTPClientTransport `mapstructure:"http"`
 }
 
 // ClientDefaults contains default client values applied to services.
@@ -103,18 +94,65 @@ type ClientDefaults struct {
 
 // clientServiceConfigOverlay keeps service-level override presence information.
 type clientServiceConfigOverlay struct {
-	FastFail     *bool                    `mapstructure:"fast_fail"`
-	Resolver     string                   `mapstructure:"resolver"`
-	Balancer     string                   `mapstructure:"balancer"`
-	Backoff      backoff.Config           `mapstructure:"backoff"`
-	Remote       client.RemoteConfig      `mapstructure:"remote"`
-	Interceptors client.InterceptorConfig `mapstructure:"interceptors"`
+	FastFail     *bool                     `mapstructure:"fast_fail"`
+	Resolver     *string                   `mapstructure:"resolver"`
+	Balancer     *string                   `mapstructure:"balancer"`
+	Backoff      *backoffConfigOverlay     `mapstructure:"backoff"`
+	Remote       *remoteConfigOverlay      `mapstructure:"remote"`
+	Interceptors *interceptorConfigOverlay `mapstructure:"interceptors"`
 }
 
 // ClientServiceSpec contains one configured client service subtree.
 type ClientServiceSpec struct {
 	ServiceConfig clientServiceConfigOverlay `mapstructure:",squash"`
 	Transports    ClientTransports           `mapstructure:"transports"`
+}
+
+// HTTPClientTransport contains service-level HTTP client overrides.
+type HTTPClientTransport struct {
+	Timeout   *time.Duration                   `mapstructure:"timeout"`
+	Marshaler *protocolhttp.MarshalerConfigSet `mapstructure:"marshaler"`
+}
+
+type backoffConfigOverlay struct {
+	BaseDelay  *time.Duration `mapstructure:"baseDelay"`
+	Multiplier *float64       `mapstructure:"multiplier"`
+	Jitter     *float64       `mapstructure:"jitter"`
+	MaxDelay   *time.Duration `mapstructure:"maxDelay"`
+}
+
+type remoteConfigOverlay struct {
+	Endpoints  *[]resolver.BaseEndpoint `mapstructure:"endpoints"`
+	Attributes *map[string]any          `mapstructure:"attributes"`
+}
+
+type interceptorConfigOverlay struct {
+	Unary  *[]string `mapstructure:"unary"`
+	Stream *[]string `mapstructure:"stream"`
+}
+
+type grpcClientConfigOverlay struct {
+	WaitConnTimeout   *time.Duration                    `mapstructure:"wait_conn_timeout"`
+	ConnectTimeout    *time.Duration                    `mapstructure:"connect_timeout"`
+	MaxSendMsgSize    *int                              `mapstructure:"max_send_msg_size"`
+	MaxRecvMsgSize    *int                              `mapstructure:"max_recv_msg_size"`
+	Compressor        *string                           `mapstructure:"compressor"`
+	BackOffMaxDelay   *time.Duration                    `mapstructure:"back_off_max_delay"`
+	MinConnectTimeout *time.Duration                    `mapstructure:"min_connect_timeout"`
+	Network           *string                           `mapstructure:"network"`
+	Transport         grpcClientTransportOptionsOverlay `mapstructure:"transport"`
+}
+
+type grpcClientTransportOptionsOverlay struct {
+	UserAgent             *string                      `mapstructure:"user_agent"`
+	CredsProto            *string                      `mapstructure:"creds_proto"`
+	Authority             *string                      `mapstructure:"authority"`
+	KeepaliveParams       *gkeepalive.ClientParameters `mapstructure:"keepalive_params"`
+	InitialWindowSize     *int32                       `mapstructure:"initial_window_size"`
+	InitialConnWindowSize *int32                       `mapstructure:"initial_conn_window_size"`
+	WriteBufferSize       *int                         `mapstructure:"write_buffer_size"`
+	ReadBufferSize        *int                         `mapstructure:"read_buffer_size"`
+	MaxHeaderListSize     *uint32                      `mapstructure:"max_header_list_size"`
 }
 
 // Clients contains all client settings.
@@ -233,407 +271,4 @@ func (c Catalog) Resolver(name string) config.Section[resolver.Spec] {
 // DecodePayload decodes an arbitrary payload map into the provided target.
 func DecodePayload(target any, value any) error {
 	return config.NewSnapshot(value).Decode(target)
-}
-
-// Compile normalizes the raw framework root into per-module resolved settings.
-func Compile(root Root) (Resolved, error) {
-	fw := root.Yggdrasil
-	resolved := Resolved{
-		Root:      root,
-		Server:    fw.Server,
-		Logging:   fw.Logging,
-		Discovery: fw.Discovery,
-		Balancers: fw.Balancers,
-		Telemetry: fw.Telemetry,
-		Admin:     fw.Admin,
-		Clients: client.Settings{
-			Services: map[string]client.ServiceConfig{},
-		},
-		Transports: ResolvedTransports{
-			GRPC: grpcprotocol.Settings{
-				Client:         fw.Transports.GRPC.Client,
-				ClientServices: map[string]grpcprotocol.Config{},
-				Server:         fw.Transports.GRPC.Server,
-			},
-			HTTP: protocolhttp.Settings{
-				Client:         fw.Transports.HTTP.Client,
-				ClientServices: map[string]protocolhttp.ClientConfig{},
-				Server:         fw.Transports.HTTP.Server,
-			},
-			Rest:                   fw.Transports.HTTP.Rest,
-			GRPCCredentials:        cloneNestedMap(fw.Transports.GRPC.Credentials),
-			GRPCServiceCredentials: map[string]map[string]map[string]any{},
-		},
-	}
-
-	if resolved.Logging.Handlers == nil {
-		resolved.Logging.Handlers = map[string]logger.HandlerSpec{}
-	}
-	if resolved.Logging.Writers == nil {
-		resolved.Logging.Writers = map[string]logger.WriterSpec{}
-	}
-	if resolved.Logging.Interceptors == nil {
-		resolved.Logging.Interceptors = map[string]map[string]any{}
-	}
-	defaultHandler := resolved.Logging.Handlers["default"]
-	if defaultHandler.Type == "" {
-		defaultHandler.Type = "text"
-	}
-	if defaultHandler.Writer == "" {
-		defaultHandler.Writer = "default"
-	}
-	resolved.Logging.Handlers["default"] = defaultHandler
-	if _, ok := resolved.Logging.Writers["default"]; !ok {
-		resolved.Logging.Writers["default"] = logger.WriterSpec{Type: "console"}
-	}
-	if resolved.Logging.RemoteLevel == "" {
-		resolved.Logging.RemoteLevel = "error"
-	}
-
-	if resolved.Discovery.Resolvers == nil {
-		resolved.Discovery.Resolvers = map[string]resolver.Spec{}
-	}
-	if resolved.Balancers.Defaults == nil {
-		resolved.Balancers.Defaults = map[string]balancer.Spec{}
-	}
-	if resolved.Balancers.Services == nil {
-		resolved.Balancers.Services = map[string]map[string]balancer.Spec{}
-	}
-	if fw.Clients.Services == nil {
-		fw.Clients.Services = map[string]ClientServiceSpec{}
-	}
-
-	resolved.Server.RestEnabled = resolved.Transports.Rest != nil
-	for serviceName, spec := range fw.Clients.Services {
-		resolved.Clients.Services[serviceName] = mergeClientServiceConfig(fw.Clients.Defaults.ServiceConfig, spec.ServiceConfig)
-		resolved.Transports.GRPC.ClientServices[serviceName] = mergeGRPCClientConfig(
-			fw.Transports.GRPC.Client,
-			spec.Transports.GRPC.Config,
-		)
-		resolved.Transports.HTTP.ClientServices[serviceName] = mergeHTTPClientConfig(
-			fw.Transports.HTTP.Client,
-			spec.Transports.HTTP,
-		)
-		if len(spec.Transports.GRPC.Credentials) != 0 {
-			resolved.Transports.GRPCServiceCredentials[serviceName] = cloneNestedMap(spec.Transports.GRPC.Credentials)
-		}
-	}
-
-	return resolved, nil
-}
-
-// Validate validates the resolved framework configuration.
-func Validate(resolved Resolved) error {
-	strict := resolved.Admin.Validation.Strict
-	enable := strict || resolved.Admin.Validation.Enable
-	if !enable {
-		return nil
-	}
-
-	var multiErr error
-	addErr := func(msg string, err error, attrs ...slog.Attr) {
-		if err == nil {
-			return
-		}
-		if strict {
-			multiErr = errors.Join(multiErr, fmt.Errorf("%s: %w", msg, err))
-			return
-		}
-		attrs = append(attrs, slog.Any("error", err))
-		args := make([]any, 0, len(attrs))
-		for _, a := range attrs {
-			args = append(args, a)
-		}
-		slog.Warn(msg, args...)
-	}
-
-	if typeName := resolved.Discovery.Registry.Type; typeName != "" && registry.GetBuilder(typeName) == nil {
-		addErr("registry builder not found", fmt.Errorf("type=%s", typeName), slog.String("type", typeName))
-	}
-	for name, spec := range resolved.Discovery.Resolvers {
-		if spec.Type == "" {
-			continue
-		}
-		if !resolver.HasBuilder(spec.Type) {
-			addErr("resolver builder not found", fmt.Errorf("type=%s", spec.Type), slog.String("name", name))
-		}
-	}
-	if tracerName := resolved.Telemetry.Tracer; tracerName != "" {
-		if _, ok := xotel.GetTracerProviderBuilder(tracerName); !ok {
-			addErr("tracer provider builder not found", fmt.Errorf("name=%s", tracerName), slog.String("name", tracerName))
-		}
-	}
-	if meterName := resolved.Telemetry.Meter; meterName != "" {
-		if _, ok := xotel.GetMeterProviderBuilder(meterName); !ok {
-			addErr("meter provider builder not found", fmt.Errorf("name=%s", meterName), slog.String("name", meterName))
-		}
-	}
-	validateStatsHandlers := func(raw string, key string) {
-		for _, name := range stats.ParseHandlerNames(raw) {
-			if stats.GetHandlerBuilder(name) == nil {
-				addErr(
-					"stats handler builder not found",
-					fmt.Errorf("name=%s", name),
-					slog.String("name", name),
-					slog.String("key", key),
-				)
-			}
-		}
-	}
-	validateStatsHandlers(resolved.Telemetry.Stats.Server, "yggdrasil.telemetry.stats.server")
-	validateStatsHandlers(resolved.Telemetry.Stats.Client, "yggdrasil.telemetry.stats.client")
-	for _, protocol := range resolved.Server.Transports {
-		if remote.GetServerBuilder(protocol) == nil {
-			addErr("remote server builder not found", fmt.Errorf("protocol=%s", protocol), slog.String("protocol", protocol))
-		}
-	}
-	validateCredential := func(protoName, serviceName string, client bool, key string) {
-		if protoName == "" {
-			return
-		}
-		builder := credentials.GetBuilder(protoName)
-		if builder == nil {
-			addErr(
-				"remote credentials builder not found",
-				fmt.Errorf("name=%s", protoName),
-				slog.String("name", protoName),
-				slog.String("key", key),
-			)
-			return
-		}
-		if builder(serviceName, client) == nil {
-			addErr(
-				"remote credentials config invalid",
-				fmt.Errorf("name=%s", protoName),
-				slog.String("name", protoName),
-				slog.String("key", key),
-			)
-		}
-	}
-	validateCredential(
-		resolved.Transports.GRPC.Server.CredsProto,
-		"",
-		false,
-		"yggdrasil.transports.grpc.server.creds_proto",
-	)
-	validateCredential(
-		resolved.Transports.GRPC.Client.Transport.CredsProto,
-		"",
-		true,
-		"yggdrasil.transports.grpc.client.transport.creds_proto",
-	)
-	for serviceName, cfg := range resolved.Transports.GRPC.ClientServices {
-		validateCredential(
-			cfg.Transport.CredsProto,
-			serviceName,
-			true,
-			fmt.Sprintf("yggdrasil.clients.services.%s.transports.grpc.transport.creds_proto", serviceName),
-		)
-	}
-	for _, name := range resolved.Server.Interceptors.Unary {
-		if !interceptor.HasUnaryServerIntBuilder(name) {
-			addErr("unary server interceptor not found", fmt.Errorf("name=%s", name), slog.String("name", name))
-		}
-	}
-	for _, name := range resolved.Server.Interceptors.Stream {
-		if !interceptor.HasStreamServerIntBuilder(name) {
-			addErr("stream server interceptor not found", fmt.Errorf("name=%s", name), slog.String("name", name))
-		}
-	}
-	for _, name := range resolved.Root.Yggdrasil.Clients.Defaults.Interceptors.Unary {
-		if !interceptor.HasUnaryClientIntBuilder(name) {
-			addErr("unary client interceptor not found", fmt.Errorf("name=%s", name), slog.String("name", name))
-		}
-	}
-	for _, name := range resolved.Root.Yggdrasil.Clients.Defaults.Interceptors.Stream {
-		if !interceptor.HasStreamClientIntBuilder(name) {
-			addErr("stream client interceptor not found", fmt.Errorf("name=%s", name), slog.String("name", name))
-		}
-	}
-	for serviceName, cfg := range resolved.Clients.Services {
-		for _, name := range cfg.Interceptors.Unary {
-			if !interceptor.HasUnaryClientIntBuilder(name) {
-				addErr(
-					"unary client interceptor not found",
-					fmt.Errorf("name=%s", name),
-					slog.String("name", name),
-					slog.String("app", serviceName),
-				)
-			}
-		}
-		for _, name := range cfg.Interceptors.Stream {
-			if !interceptor.HasStreamClientIntBuilder(name) {
-				addErr(
-					"stream client interceptor not found",
-					fmt.Errorf("name=%s", name),
-					slog.String("name", name),
-					slog.String("app", serviceName),
-				)
-			}
-		}
-	}
-	if resolved.Transports.Rest != nil {
-		for _, name := range resolved.Transports.Rest.Middleware.All {
-			if !middleware.HasBuilder(name) {
-				addErr("rest middleware not found", fmt.Errorf("name=%s", name), slog.String("name", name))
-			}
-		}
-		for _, name := range resolved.Transports.Rest.Middleware.RPC {
-			if !middleware.HasBuilder(name) {
-				addErr("rest middleware not found", fmt.Errorf("name=%s", name), slog.String("name", name))
-			}
-		}
-		for _, name := range resolved.Transports.Rest.Middleware.Web {
-			if !middleware.HasBuilder(name) {
-				addErr("rest middleware not found", fmt.Errorf("name=%s", name), slog.String("name", name))
-			}
-		}
-		if !middleware.HasBuilder("marshaler") {
-			addErr("rest middleware not found", fmt.Errorf("name=marshaler"), slog.String("name", "marshaler"))
-		}
-		schemes := resolved.Transports.Rest.Marshaler.Support
-		if len(schemes) == 0 {
-			schemes = []string{marshaler.SchemeJSONPb}
-		}
-		for _, scheme := range schemes {
-			if !marshaler.HasMarshallerBuilder(scheme) {
-				addErr(
-					"rest marshaler builder not found",
-					fmt.Errorf("scheme=%s", scheme),
-					slog.String("scheme", scheme),
-				)
-			}
-		}
-	}
-	return multiErr
-}
-
-func mergeClientServiceConfig(base client.ServiceConfig, overlay clientServiceConfigOverlay) client.ServiceConfig {
-	out := base
-	if overlay.FastFail != nil {
-		out.FastFail = *overlay.FastFail
-	}
-	if overlay.Resolver != "" {
-		out.Resolver = overlay.Resolver
-	}
-	if overlay.Balancer != "" {
-		out.Balancer = overlay.Balancer
-	}
-	if !reflect.DeepEqual(overlay.Backoff, reflect.Zero(reflect.TypeOf(overlay.Backoff)).Interface()) {
-		out.Backoff = overlay.Backoff
-	}
-	if len(overlay.Remote.Endpoints) > 0 {
-		out.Remote.Endpoints = overlay.Remote.Endpoints
-	}
-	if out.Remote.Attributes == nil {
-		out.Remote.Attributes = map[string]any{}
-	}
-	for key, value := range overlay.Remote.Attributes {
-		out.Remote.Attributes[key] = value
-	}
-	out.Interceptors.Unary = dedupStrings(append(append([]string{}, base.Interceptors.Unary...), overlay.Interceptors.Unary...))
-	out.Interceptors.Stream = dedupStrings(append(append([]string{}, base.Interceptors.Stream...), overlay.Interceptors.Stream...))
-	return out
-}
-
-func mergeHTTPClientConfig(base, overlay protocolhttp.ClientConfig) protocolhttp.ClientConfig {
-	out := base
-	if overlay.Timeout > 0 {
-		out.Timeout = overlay.Timeout
-	}
-	if overlay.Marshaler != nil {
-		out.Marshaler = overlay.Marshaler
-	}
-	return out
-}
-
-func mergeGRPCClientConfig(base, overlay grpcprotocol.Config) grpcprotocol.Config {
-	out := base
-	if overlay.WaitConnTimeout > 0 {
-		out.WaitConnTimeout = overlay.WaitConnTimeout
-	}
-	if overlay.ConnectTimeout > 0 {
-		out.ConnectTimeout = overlay.ConnectTimeout
-	}
-	if overlay.MaxSendMsgSize > 0 {
-		out.MaxSendMsgSize = overlay.MaxSendMsgSize
-	}
-	if overlay.MaxRecvMsgSize > 0 {
-		out.MaxRecvMsgSize = overlay.MaxRecvMsgSize
-	}
-	if overlay.Compressor != "" {
-		out.Compressor = overlay.Compressor
-	}
-	if overlay.BackOffMaxDelay > 0 {
-		out.BackOffMaxDelay = overlay.BackOffMaxDelay
-	}
-	if overlay.MinConnectTimeout > 0 {
-		out.MinConnectTimeout = overlay.MinConnectTimeout
-	}
-	if overlay.Network != "" {
-		out.Network = overlay.Network
-	}
-	out.Transport = mergeGRPCTransportConfig(base.Transport, overlay.Transport)
-	return out
-}
-
-func mergeGRPCTransportConfig(base, overlay grpcprotocol.ClientTransportOptions) grpcprotocol.ClientTransportOptions {
-	out := base
-	if overlay.UserAgent != "" {
-		out.UserAgent = overlay.UserAgent
-	}
-	if overlay.CredsProto != "" {
-		out.CredsProto = overlay.CredsProto
-	}
-	if overlay.Authority != "" {
-		out.Authority = overlay.Authority
-	}
-	if !reflect.ValueOf(overlay.KeepaliveParams).IsZero() {
-		out.KeepaliveParams = overlay.KeepaliveParams
-	}
-	if overlay.InitialWindowSize != 0 {
-		out.InitialWindowSize = overlay.InitialWindowSize
-	}
-	if overlay.InitialConnWindowSize != 0 {
-		out.InitialConnWindowSize = overlay.InitialConnWindowSize
-	}
-	if overlay.WriteBufferSize != 0 {
-		out.WriteBufferSize = overlay.WriteBufferSize
-	}
-	if overlay.ReadBufferSize != 0 {
-		out.ReadBufferSize = overlay.ReadBufferSize
-	}
-	if overlay.MaxHeaderListSize != nil {
-		out.MaxHeaderListSize = overlay.MaxHeaderListSize
-	}
-	return out
-}
-
-func cloneNestedMap(src map[string]map[string]any) map[string]map[string]any {
-	if src == nil {
-		return map[string]map[string]any{}
-	}
-	out := make(map[string]map[string]any, len(src))
-	for key, value := range src {
-		cloned := make(map[string]any, len(value))
-		for k, v := range value {
-			cloned[k] = v
-		}
-		out[key] = cloned
-	}
-	return out
-}
-
-func dedupStrings(values []string) []string {
-	values = slices.DeleteFunc(values, func(item string) bool { return item == "" })
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(values))
-	for _, item := range values {
-		if _, ok := seen[item]; ok {
-			continue
-		}
-		seen[item] = struct{}{}
-		out = append(out, item)
-	}
-	return out
 }
