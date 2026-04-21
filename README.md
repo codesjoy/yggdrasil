@@ -181,6 +181,24 @@ Custom `logger.writer` implementations must be concurrency-safe. Built-in `conso
 `logger.handler.default.type: text` uses the official `slog` `TextHandler` by default.  
 Supported handler config fields: `level`, `add_trace`, `add_source`.
 
+Observability config example:
+
+```yaml
+yggdrasil:
+  telemetry:
+    stats:
+      server: "otel"
+      client: "otel"
+      providers:
+        otel:
+          enable_metrics: true
+          received_event: true
+          sent_event: true
+```
+
+The built-in OTel stats handler (`otel`) is registered by the framework entry package (`github.com/codesjoy/yggdrasil/v2`) by default.  
+If you use a custom stats handler, register it with `stats.RegisterHandlerBuilder` and import that package for side effects.
+
 ## 🏗️ Architecture
 
 Yggdrasil adopts a modular architecture with clearly separated concerns:

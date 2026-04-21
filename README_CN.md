@@ -176,6 +176,24 @@ yggdrasil:
 `logger.handler.default.type: text` 默认使用官方 `slog` `TextHandler`。  
 当前支持的 handler 配置字段：`level`、`add_trace`、`add_source`。
 
+可观测配置示例：
+
+```yaml
+yggdrasil:
+  telemetry:
+    stats:
+      server: "otel"
+      client: "otel"
+      providers:
+        otel:
+          enable_metrics: true
+          received_event: true
+          sent_event: true
+```
+
+框架入口包（`github.com/codesjoy/yggdrasil/v2`）默认会注册内置 OTel stats handler（`otel`）。  
+如果你使用自定义 stats handler，请通过 `stats.RegisterHandlerBuilder` 注册，并使用 side-effect import 触发注册。
+
 ## 🏗️ 架构设计
 
 Yggdrasil 采用模块化架构，关注点清晰分离：
