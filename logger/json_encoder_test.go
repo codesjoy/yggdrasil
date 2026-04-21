@@ -195,19 +195,28 @@ func TestJsonEncoderAddAny(t *testing.T) {
 	enc.AddAny("num", 42)
 	enc.AddAny("nil", nil)
 	enc.AddAny("bool", true)
+	enc.AddAny("obj", map[string]any{"foo": "bar"})
 
-	result := buf.String()
-	if !strings.Contains(result, `"key":"test"`) {
-		t.Errorf("AddAny() for string result = %s", result)
+	result := "{" + buf.String() + "}"
+	var got map[string]any
+	if err := json.Unmarshal([]byte(result), &got); err != nil {
+		t.Fatalf("AddAny() produced invalid JSON: %v, result: %s", err, result)
 	}
-	if !strings.Contains(result, `"num":"42"`) {
-		t.Errorf("AddAny() for int result = %s", result)
+	if got["key"] != "test" {
+		t.Errorf("AddAny() key = %v, want %q", got["key"], "test")
 	}
-	if !strings.Contains(result, `"nil":"null"`) {
-		t.Errorf("AddAny() for nil result = %s", result)
+	if got["num"] != float64(42) {
+		t.Errorf("AddAny() num = %v, want %v", got["num"], 42)
 	}
-	if !strings.Contains(result, `"bool":"true"`) {
-		t.Errorf("AddAny() for bool result = %s", result)
+	if got["nil"] != nil {
+		t.Errorf("AddAny() nil = %v, want nil", got["nil"])
+	}
+	if got["bool"] != true {
+		t.Errorf("AddAny() bool = %v, want true", got["bool"])
+	}
+	obj, ok := got["obj"].(map[string]any)
+	if !ok || obj["foo"] != "bar" {
+		t.Errorf("AddAny() obj = %v, want map[foo:bar]", got["obj"])
 	}
 }
 

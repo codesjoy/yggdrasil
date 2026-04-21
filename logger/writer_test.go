@@ -15,18 +15,22 @@
 package logger
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 )
 
 // resetWriterBuilders clears all registered writers for testing
 func resetWriterBuilders() {
+	writerBuilderMu.Lock()
+	defer writerBuilderMu.Unlock()
 	writerBuilder = make(map[string]WriterBuilder)
 	// Re-register default writers
-	RegisterWriterBuilder("file", newFileWriter)
-	RegisterWriterBuilder("console", newConsoleWriter)
+	writerBuilder["file"] = newFileWriter
+	writerBuilder["console"] = newConsoleWriter
 }
 
 func TestRegisterWriterBuilder(t *testing.T) {
@@ -193,5 +197,32 @@ func TestWriterBuilderFunctionSignature(t *testing.T) {
 
 	if _, ok := w.(*strings.Builder); !ok {
 		t.Error("Writer type mismatch")
+	}
+}
+
+func TestWriterBuilderConcurrentRegisterAndGet(t *testing.T) {
+	resetWriterBuilders()
+
+	const total = 64
+	var wg sync.WaitGroup
+	for i := 0; i < total; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			name := fmt.Sprintf("writer_%d", i)
+			RegisterWriterBuilder(name, func(_ string) (io.Writer, error) {
+				return &strings.Builder{}, nil
+			})
+			_, _ = GetWriterBuilder(name)
+			_, _ = GetWriterBuilder("console")
+		}(i)
+	}
+	wg.Wait()
+
+	for i := 0; i < total; i++ {
+		name := fmt.Sprintf("writer_%d", i)
+		if _, err := GetWriterBuilder(name); err != nil {
+			t.Fatalf("GetWriterBuilder(%q) error = %v", name, err)
+		}
 	}
 }

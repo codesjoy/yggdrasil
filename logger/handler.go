@@ -18,6 +18,7 @@ package logger
 import (
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/codesjoy/yggdrasil/v2/config"
 )
@@ -31,14 +32,19 @@ func init() {
 type HandlerBuilder func(writer string, val config.Value) (slog.Handler, error)
 
 var handlerBuilder = make(map[string]HandlerBuilder)
+var handlerBuilderMu sync.RWMutex
 
 // RegisterHandlerBuilder registers a handler builder for the given type.
 func RegisterHandlerBuilder(typeName string, f HandlerBuilder) {
+	handlerBuilderMu.Lock()
+	defer handlerBuilderMu.Unlock()
 	handlerBuilder[typeName] = f
 }
 
 // GetHandlerBuilder returns the handler builder for the given type.
 func GetHandlerBuilder(typeName string) (HandlerBuilder, error) {
+	handlerBuilderMu.RLock()
+	defer handlerBuilderMu.RUnlock()
 	f, ok := handlerBuilder[typeName]
 	if !ok {
 		return nil, fmt.Errorf("handler builder for type %s not found", typeName)

@@ -16,6 +16,7 @@ package logger
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -394,6 +395,68 @@ func TestCommonHandlerEncodeSlogAttr(t *testing.T) {
 				t.Errorf("encodeSlogAttr(%s) result = %s", tt.name, result)
 			}
 		})
+	}
+}
+
+func TestCommonHandlerEncodeSlogAttrGroupWithKeyNests(t *testing.T) {
+	cfg := &CommonHandlerConfig{
+		Level:         slog.LevelInfo,
+		AddTrace:      false,
+		AddErrVerbose: false,
+		objEnc:        &jsonEncoder{},
+	}
+	h, _ := newCommonHandler(cfg)
+
+	buf := buffer.Get()
+	objEnc := &jsonEncoder{}
+	objEnc.SetBuffer(buf)
+	h.encodeSlogAttr(
+		slog.Group("scope", slog.String("k", "v"), slog.Int("n", 1)),
+		objEnc,
+	)
+
+	result := "{" + buf.String() + "}"
+	var got map[string]any
+	if err := json.Unmarshal([]byte(result), &got); err != nil {
+		t.Fatalf("invalid JSON result: %v, raw=%s", err, result)
+	}
+
+	scope, ok := got["scope"].(map[string]any)
+	if !ok {
+		t.Fatalf("scope should be nested object, got %T (%v)", got["scope"], got["scope"])
+	}
+	if scope["k"] != "v" || scope["n"] != float64(1) {
+		t.Fatalf("scope content mismatch: %v", scope)
+	}
+}
+
+type testLogValuer struct{}
+
+func (testLogValuer) LogValue() slog.Value {
+	return slog.StringValue("resolved")
+}
+
+func TestCommonHandlerEncodeSlogAttrResolvesLogValuer(t *testing.T) {
+	cfg := &CommonHandlerConfig{
+		Level:         slog.LevelInfo,
+		AddTrace:      false,
+		AddErrVerbose: false,
+		objEnc:        &jsonEncoder{},
+	}
+	h, _ := newCommonHandler(cfg)
+
+	buf := buffer.Get()
+	objEnc := &jsonEncoder{}
+	objEnc.SetBuffer(buf)
+	h.encodeSlogAttr(slog.Any("value", testLogValuer{}), objEnc)
+
+	result := "{" + buf.String() + "}"
+	var got map[string]any
+	if err := json.Unmarshal([]byte(result), &got); err != nil {
+		t.Fatalf("invalid JSON result: %v, raw=%s", err, result)
+	}
+	if got["value"] != "resolved" {
+		t.Fatalf("value = %v, want %q", got["value"], "resolved")
 	}
 }
 

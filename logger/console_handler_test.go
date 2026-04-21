@@ -17,6 +17,7 @@ package logger
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"strings"
 	"testing"
@@ -633,6 +634,206 @@ func TestConsoleHandlerUnknownLevelFallback(t *testing.T) {
 	output := mw.String()
 	if !strings.Contains(output, level.String()) {
 		t.Fatalf("output should contain fallback level string %q, got %q", level.String(), output)
+	}
+}
+
+type consoleHandlerLogValuer struct{}
+
+func (consoleHandlerLogValuer) LogValue() slog.Value {
+	return slog.StringValue("resolved_by_logvaluer")
+}
+
+func TestConsoleHandlerHandleAnyTypeMatrix(t *testing.T) {
+	type sampleStruct struct {
+		Name string `json:"name"`
+		Age  int    `json:"age"`
+	}
+
+	var typedNil *int
+	tests := []struct {
+		name string
+		attr slog.Attr
+		want func(t *testing.T, v any)
+	}{
+		{
+			name: "nil",
+			attr: slog.Any("value", nil),
+			want: func(t *testing.T, v any) {
+				if v != nil {
+					t.Fatalf("value = %v, want nil", v)
+				}
+			},
+		},
+		{
+			name: "typed nil pointer",
+			attr: slog.Any("value", typedNil),
+			want: func(t *testing.T, v any) {
+				if v != nil {
+					t.Fatalf("value = %v, want nil", v)
+				}
+			},
+		},
+		{
+			name: "bool",
+			attr: slog.Any("value", true),
+			want: func(t *testing.T, v any) {
+				got, ok := v.(bool)
+				if !ok || !got {
+					t.Fatalf("value = %T(%v), want bool(true)", v, v)
+				}
+			},
+		},
+		{
+			name: "int",
+			attr: slog.Any("value", 42),
+			want: func(t *testing.T, v any) {
+				got, ok := v.(float64)
+				if !ok || got != 42 {
+					t.Fatalf("value = %T(%v), want float64(42)", v, v)
+				}
+			},
+		},
+		{
+			name: "float64",
+			attr: slog.Any("value", 3.14),
+			want: func(t *testing.T, v any) {
+				got, ok := v.(float64)
+				if !ok || got != 3.14 {
+					t.Fatalf("value = %T(%v), want float64(3.14)", v, v)
+				}
+			},
+		},
+		{
+			name: "string",
+			attr: slog.Any("value", "hello"),
+			want: func(t *testing.T, v any) {
+				got, ok := v.(string)
+				if !ok || got != "hello" {
+					t.Fatalf("value = %T(%v), want string(\"hello\")", v, v)
+				}
+			},
+		},
+		{
+			name: "map",
+			attr: slog.Any("value", map[string]any{"k": "v", "n": 1}),
+			want: func(t *testing.T, v any) {
+				got, ok := v.(map[string]any)
+				if !ok {
+					t.Fatalf("value = %T(%v), want map[string]any", v, v)
+				}
+				if got["k"] != "v" || got["n"] != float64(1) {
+					t.Fatalf("map value = %v, want map[k:v n:1]", got)
+				}
+			},
+		},
+		{
+			name: "struct",
+			attr: slog.Any("value", sampleStruct{Name: "alice", Age: 18}),
+			want: func(t *testing.T, v any) {
+				got, ok := v.(map[string]any)
+				if !ok {
+					t.Fatalf("value = %T(%v), want map[string]any", v, v)
+				}
+				if got["name"] != "alice" || got["age"] != float64(18) {
+					t.Fatalf("struct value = %v, want name=alice age=18", got)
+				}
+			},
+		},
+		{
+			name: "error",
+			attr: slog.Any("value", errors.New("boom")),
+			want: func(t *testing.T, v any) {
+				got, ok := v.(string)
+				if !ok || got != "boom" {
+					t.Fatalf("value = %T(%v), want string(\"boom\")", v, v)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mw := newMockWriter()
+			h, err := NewConsoleHandler(&ConsoleHandlerConfig{
+				CommonHandlerConfig: CommonHandlerConfig{
+					Level: slog.LevelInfo,
+				},
+				TimeHandler: "RFC3339",
+				Writer:      mw,
+			})
+			if err != nil {
+				t.Fatalf("NewConsoleHandler() error = %v", err)
+			}
+
+			record := slog.NewRecord(time.Now(), slog.LevelInfo, "any type", 0)
+			record.AddAttrs(tt.attr)
+			if err := h.Handle(context.Background(), record); err != nil {
+				t.Fatalf("Handle() error = %v", err)
+			}
+
+			attrs := parseConsoleAttrsBlock(t, mw.String())
+			tt.want(t, attrs["value"])
+		})
+	}
+}
+
+func TestConsoleHandlerHandleGroupSemantics(t *testing.T) {
+	mw := newMockWriter()
+	h, err := NewConsoleHandler(&ConsoleHandlerConfig{
+		CommonHandlerConfig: CommonHandlerConfig{
+			Level: slog.LevelInfo,
+		},
+		TimeHandler: "RFC3339",
+		Writer:      mw,
+	})
+	if err != nil {
+		t.Fatalf("NewConsoleHandler() error = %v", err)
+	}
+
+	record := slog.NewRecord(time.Now(), slog.LevelInfo, "group test", 0)
+	record.AddAttrs(
+		slog.Group("req", slog.String("path", "/v1/health")),
+		slog.Group("", slog.Int("flat", 7)),
+	)
+	if err := h.Handle(context.Background(), record); err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+
+	attrs := parseConsoleAttrsBlock(t, mw.String())
+	req, ok := attrs["req"].(map[string]any)
+	if !ok {
+		t.Fatalf("req should be nested object, got %T(%v)", attrs["req"], attrs["req"])
+	}
+	if req["path"] != "/v1/health" {
+		t.Fatalf("req.path = %v, want /v1/health", req["path"])
+	}
+	if attrs["flat"] != float64(7) {
+		t.Fatalf("flat = %v, want 7", attrs["flat"])
+	}
+}
+
+func TestConsoleHandlerHandleLogValuer(t *testing.T) {
+	mw := newMockWriter()
+	h, err := NewConsoleHandler(&ConsoleHandlerConfig{
+		CommonHandlerConfig: CommonHandlerConfig{
+			Level: slog.LevelInfo,
+		},
+		TimeHandler: "RFC3339",
+		Writer:      mw,
+	})
+	if err != nil {
+		t.Fatalf("NewConsoleHandler() error = %v", err)
+	}
+
+	record := slog.NewRecord(time.Now(), slog.LevelInfo, "logvaluer test", 0)
+	record.AddAttrs(slog.Any("value", consoleHandlerLogValuer{}))
+	if err := h.Handle(context.Background(), record); err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+
+	attrs := parseConsoleAttrsBlock(t, mw.String())
+	if attrs["value"] != "resolved_by_logvaluer" {
+		t.Fatalf("value = %v, want resolved_by_logvaluer", attrs["value"])
 	}
 }
 
