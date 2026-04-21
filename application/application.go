@@ -316,6 +316,14 @@ func (app *application) startServers() error {
 			// Channel closed without value - startup failed
 			return nil
 		}
+		if app.governor != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := app.governor.WaitStarted(ctx); err != nil {
+				stopAsync()
+				return fmt.Errorf("wait governor startup: %w", err)
+			}
+		}
 		// Servers started successfully, register the service
 		if err := app.register(); err != nil {
 			stopAsync()
@@ -427,7 +435,7 @@ func (app *application) Endpoints() []registry.Endpoint {
 			})
 		}
 	}
-	if app.governor != nil {
+	if app.governor != nil && app.governor.ShouldAdvertise() {
 		governorInfo := app.governor.Info()
 		attr := cloneEndpointMetadata(governorInfo.Attr)
 		attr[registry.MDServerKind] = string(constant.ServerKindGovernor)

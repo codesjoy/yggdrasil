@@ -17,7 +17,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -29,10 +28,8 @@ import (
 	"github.com/codesjoy/pkg/basic/xerror"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
-	"github.com/codesjoy/yggdrasil/v2/governor"
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
 	"github.com/codesjoy/yggdrasil/v2/internal/constant"
-	"github.com/codesjoy/yggdrasil/v2/internal/instance"
 	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote"
@@ -113,36 +110,6 @@ func NewServer() (Server, error) {
 	if err := svr.initRemoteServer(); err != nil {
 		return nil, err
 	}
-	governorRouteOnce.Do(func() {
-		governor.HandleFunc("/services", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(200)
-			encoder := json.NewEncoder(w)
-			if r.URL.Query().Get("pretty") == "true" {
-				encoder.SetIndent("", "    ")
-			}
-			result := map[string]interface{}{
-				"appName": instance.Name(),
-			}
-			if svr != nil {
-				result["services"] = svr.servicesDesc
-			}
-			_ = encoder.Encode(result)
-		})
-		governor.HandleFunc("/rest", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(200)
-			encoder := json.NewEncoder(w)
-			if r.URL.Query().Get("pretty") == "true" {
-				encoder.SetIndent("", "    ")
-			}
-			result := map[string]interface{}{
-				"appName": instance.Name(),
-			}
-			if svr != nil {
-				result["routers"] = svr.restRouterDesc
-			}
-			_ = encoder.Encode(result)
-		})
-	})
 
 	return svr, nil
 }

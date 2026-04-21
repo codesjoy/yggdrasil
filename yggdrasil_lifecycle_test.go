@@ -16,12 +16,16 @@ package yggdrasil
 
 import (
 	"errors"
+	"fmt"
+	"net"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/codesjoy/yggdrasil/v2/application"
+	"github.com/codesjoy/yggdrasil/v2/config"
+	"github.com/codesjoy/yggdrasil/v2/config/source/memory"
 	"github.com/codesjoy/yggdrasil/v2/server"
 )
 
@@ -97,4 +101,36 @@ func TestRestartUnsupportedAfterStop(t *testing.T) {
 
 	err = Serve()
 	require.ErrorIs(t, err, errRestartUnsupported)
+}
+
+func TestInitOnlyDoesNotListenGovernorPort(t *testing.T) {
+	resetLifecycleStateForTest(t)
+
+	port := allocPort(t)
+	src := memory.NewSource("init-only-governor", map[string]any{
+		"yggdrasil": map[string]any{
+			"admin": map[string]any{
+				"governor": map[string]any{
+					"bind": "127.0.0.1",
+					"port": port,
+				},
+			},
+		},
+	})
+	require.NoError(t, Init("init-only-app", WithBootstrapSource("init-only-governor", config.PriorityOverride, src)))
+	t.Cleanup(func() { _ = Stop() })
+
+	lis, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", port))
+	require.NoError(t, err)
+	_ = lis.Close()
+}
+
+func allocPort(t *testing.T) int {
+	t.Helper()
+	lis, err := net.Listen("tcp4", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = lis.Close() }()
+	addr, ok := lis.Addr().(*net.TCPAddr)
+	require.True(t, ok)
+	return addr.Port
 }

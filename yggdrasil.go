@@ -224,6 +224,12 @@ func Stop() error {
 		err = errors.Join(err, stopErr)
 		slog.Error("fault to stop yggdrasil application", slog.Any("error", err))
 	}
+	if opts != nil && opts.governor != nil {
+		if govErr := opts.governor.Stop(); govErr != nil {
+			err = errors.Join(err, govErr)
+			slog.Error("fault to stop governor", slog.Any("error", govErr))
+		}
+	}
 	if closeErr := closeManagedConfigSources(opts); closeErr != nil {
 		err = errors.Join(err, closeErr)
 		slog.Error("fault to close config sources", slog.Any("error", closeErr))
@@ -335,7 +341,7 @@ func initLogger() error {
 }
 
 func initGovernor(opts *options) error {
-	svr, err := governor.NewServer()
+	svr, err := governor.NewServerWithConfig(opts.resolvedSettings.Admin.Governor, opts.configManager)
 	if err != nil {
 		return err
 	}
@@ -352,6 +358,7 @@ func initServer(opts *options) error {
 	if err != nil {
 		return err
 	}
+	server.RegisterGovernorRoutes(opts.governor)
 	for k, v := range opts.serviceDesc {
 		svr.RegisterService(k, v)
 	}

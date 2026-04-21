@@ -17,8 +17,6 @@ package yggdrasil
 import (
 	"github.com/codesjoy/yggdrasil/v2/balancer"
 	"github.com/codesjoy/yggdrasil/v2/client"
-	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/governor"
 	"github.com/codesjoy/yggdrasil/v2/internal/settings"
 	"github.com/codesjoy/yggdrasil/v2/logger"
 	"github.com/codesjoy/yggdrasil/v2/registry"
@@ -42,12 +40,12 @@ func refreshResolvedSettings(opts *options) error {
 	if err != nil {
 		return err
 	}
-	applyResolvedSettings(opts.configManager, resolved)
+	applyResolvedSettings(resolved)
 	opts.resolvedSettings = resolved
 	return nil
 }
 
-func applyResolvedSettings(manager *config.Manager, resolved settings.Resolved) {
+func applyResolvedSettings(resolved settings.Resolved) {
 	logger.Configure(resolved.Logging)
 	registry.Configure(resolved.Discovery.Registry)
 	resolver.Configure(resolved.Discovery.Resolvers)
@@ -58,7 +56,6 @@ func applyResolvedSettings(manager *config.Manager, resolved settings.Resolved) 
 	protocolhttp.Configure(resolved.Transports.HTTP)
 	rest.Configure(resolved.Transports.Rest)
 	stats.Configure(resolved.Telemetry.Stats)
-	governor.Configure(resolved.Admin.Governor, manager)
 
 	var tlsGlobal ytls.BuilderConfig
 	if raw, ok := resolved.Transports.GRPCCredentials["tls"]; ok {

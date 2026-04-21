@@ -19,110 +19,219 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"strconv"
-	"time"
+	"sync"
 
-	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
+	"github.com/codesjoy/yggdrasil/v2/config"
 )
 
-// Config governor config
-type Config struct {
-	Host              string        `mapstructure:"host"`
-	Port              uint64        `mapstructure:"port"`
-	ReadHeaderTimeout time.Duration `mapstructure:"read_header_timeout" default:"5s"`
-	ReadTimeout       time.Duration `mapstructure:"read_timeout"        default:"15s"`
-	WriteTimeout      time.Duration `mapstructure:"write_timeout"       default:"30s"`
-	IdleTimeout       time.Duration `mapstructure:"idle_timeout"        default:"1m"`
-}
-
-// Address returns address
-func (c *Config) Address() string {
-	return fmt.Sprintf("%s:%d", c.Host, c.Port)
-}
-
-// SetDefault sets default values
-func (c *Config) SetDefault() (err error) {
-	c.Host, err = internalutils.NormalizeListenHost(c.Host)
-	return
-}
-
-// ServerInfo contains server info
+// ServerInfo contains server info.
 type ServerInfo struct {
 	Address string
 	Scheme  string
 	Attr    map[string]string
 }
 
-// Server is a governor server
+// Server is a governor server.
 type Server struct {
 	*http.Server
+
+	mu       sync.Mutex
 	listener net.Listener
-	*Config
-	info ServerInfo
+	cfg      Config
+	manager  *config.Manager
+
+	mux    *http.ServeMux
+	routes []string
+
+	configPatchMu   sync.Mutex
+	configPatchData map[string]any
+
+	infoMu sync.RWMutex
+	info   ServerInfo
+
+	startedMu   sync.Mutex
+	startedErr  error
+	startedOnce sync.Once
+	startedCh   chan struct{}
 }
 
-// NewServer creates a new governor server
+// NewServer creates a new governor server with default config.
 func NewServer() (*Server, error) {
-	cfg := currentConfig()
+	return NewServerWithConfig(Config{}, config.Default())
+}
+
+// NewServerWithConfig creates a new governor server with explicit config and manager.
+func NewServerWithConfig(cfg Config, manager *config.Manager) (*Server, error) {
+	if manager == nil {
+		manager = config.Default()
+	}
 	if err := cfg.SetDefault(); err != nil {
 		return nil, err
 	}
 
-	lc := net.ListenConfig{}
-	listener, err := lc.Listen(context.Background(), "tcp4", cfg.Address())
-	if err != nil {
-		return nil, err
+	s := &Server{
+		cfg:             cfg,
+		manager:         manager,
+		mux:             http.NewServeMux(),
+		routes:          make([]string, 0, 16),
+		configPatchData: map[string]any{},
+		startedCh:       make(chan struct{}),
 	}
+	s.Server = &http.Server{
+		Addr:              cfg.Address(),
+		Handler:           s.authMiddleware(s.mux),
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
+	}
+	s.setInfo(ServerInfo{
+		Address: cfg.Address(),
+		Scheme:  "http",
+		Attr:    map[string]string{},
+	})
+	s.installDefaultRoutes()
+	setCompatServer(s)
+	return s, nil
+}
+
+// Serve starts the governor server.
+func (s *Server) Serve() error {
+	if !s.cfg.IsEnabled() {
+		s.markStarted(nil)
+		return nil
+	}
+	listener, err := s.listen()
+	if err != nil {
+		s.markStarted(err)
+		return err
+	}
+
 	host, portStr, err := net.SplitHostPort(listener.Addr().String())
 	if err != nil {
 		_ = listener.Close()
-		return nil, err
+		s.markStarted(err)
+		return err
 	}
 	port, err := strconv.ParseUint(portStr, 10, 64)
 	if err != nil {
 		_ = listener.Close()
-		return nil, err
+		s.markStarted(err)
+		return err
 	}
-	cfg.Host, cfg.Port = host, port
-	s := &Server{
-		Server: &http.Server{
-			Addr:              cfg.Address(),
-			Handler:           defaultServeMux,
-			ReadHeaderTimeout: cfg.ReadHeaderTimeout,
-			ReadTimeout:       cfg.ReadTimeout,
-			WriteTimeout:      cfg.WriteTimeout,
-			IdleTimeout:       cfg.IdleTimeout,
-		},
-		listener: listener,
-		Config:   &cfg,
-		info: ServerInfo{
-			Address: fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
-			Scheme:  "http",
-			Attr:    map[string]string{},
-		},
-	}
-	return s, nil
-}
 
-// Serve starts the governor server
-func (s *Server) Serve() error {
+	s.mu.Lock()
+	s.listener = listener
+	s.cfg.Bind = host
+	s.cfg.Host = host
+	s.cfg.Port = port
+	s.Server.Addr = s.cfg.Address()
+	s.mu.Unlock()
+	s.setInfo(ServerInfo{
+		Address: fmt.Sprintf("%s:%d", host, port),
+		Scheme:  "http",
+		Attr:    map[string]string{},
+	})
+
 	info := s.Info()
 	slog.Info("governor start", "endpoint", fmt.Sprintf("%s://%s", info.Scheme, info.Address))
-	err := s.Server.Serve(s.listener)
+	s.markStarted(nil)
+
+	err = s.Server.Serve(listener)
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
 	return err
 }
 
-// Stop stops the governor server
+// Stop stops the governor server.
 func (s *Server) Stop() error {
 	return s.Shutdown(context.TODO())
 }
 
-// Info returns the server info
+// Shutdown gracefully stops the governor server.
+func (s *Server) Shutdown(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if s.Server == nil {
+		return nil
+	}
+	err := s.Server.Shutdown(ctx)
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
+}
+
+// Info returns the server info.
 func (s *Server) Info() ServerInfo {
-	return s.info
+	s.infoMu.RLock()
+	defer s.infoMu.RUnlock()
+	return ServerInfo{
+		Address: s.info.Address,
+		Scheme:  s.info.Scheme,
+		Attr:    maps.Clone(s.info.Attr),
+	}
+}
+
+// WaitStarted waits for the first serve attempt to finish initial startup.
+func (s *Server) WaitStarted(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-s.startedCh:
+		s.startedMu.Lock()
+		defer s.startedMu.Unlock()
+		return s.startedErr
+	}
+}
+
+// IsEnabled reports whether governor is enabled.
+func (s *Server) IsEnabled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cfg.IsEnabled()
+}
+
+// ShouldAdvertise reports whether governor endpoint should be registered.
+func (s *Server) ShouldAdvertise() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cfg.IsEnabled() && s.cfg.Advertise
+}
+
+func (s *Server) listen() (net.Listener, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.listener != nil {
+		return nil, errors.New("governor already serve")
+	}
+	lc := net.ListenConfig{}
+	return lc.Listen(context.Background(), "tcp4", s.cfg.Address())
+}
+
+func (s *Server) markStarted(err error) {
+	s.startedMu.Lock()
+	s.startedErr = err
+	s.startedMu.Unlock()
+	s.startedOnce.Do(func() {
+		close(s.startedCh)
+	})
+}
+
+func (s *Server) setInfo(info ServerInfo) {
+	s.infoMu.Lock()
+	defer s.infoMu.Unlock()
+	s.info = info
+	if s.info.Attr == nil {
+		s.info.Attr = map[string]string{}
+	}
 }

@@ -17,11 +17,9 @@ package governor
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"net"
 	"net/http"
-	"net/http/httptest"
-	"os"
-	"runtime/debug"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -32,368 +30,276 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/config"
 )
 
-func loadTestGovernorSettings(t *testing.T) {
-	t.Helper()
-	Configure(Config{Host: "127.0.0.1", Port: 0}, config.Default())
-}
-
-func TestConfig_Address(t *testing.T) {
-	cfg := &Config{
-		Host: "localhost",
-		Port: 8080,
-	}
-
-	assert.Equal(t, "localhost:8080", cfg.Address())
-}
-
 func TestConfig_SetDefault(t *testing.T) {
-	cfg := &Config{
-		Host: "localhost",
-		Port: 8080,
-	}
-
-	_ = cfg.SetDefault()
-	assert.Equal(t, "localhost", cfg.Host)
+	cfg := Config{}
+	require.NoError(t, cfg.SetDefault())
+	require.NotNil(t, cfg.Enabled)
+	assert.True(t, *cfg.Enabled)
+	assert.Equal(t, "127.0.0.1", cfg.Bind)
+	assert.False(t, cfg.ExposePprof)
+	assert.False(t, cfg.ExposeEnv)
+	assert.False(t, cfg.AllowConfigPatch)
+	assert.False(t, cfg.Advertise)
 }
 
-func TestServerInfo(t *testing.T) {
-	info := ServerInfo{
-		Address: "localhost:8080",
-		Scheme:  "http",
-		Attr:    map[string]string{"weight": "100"},
+func TestConfig_SetDefault_ValidateAuth(t *testing.T) {
+	cfg := Config{
+		Auth: AuthConfig{
+			Token: "token",
+			Basic: BasicAuthConfig{Username: "u", Password: "p"},
+		},
 	}
-
-	assert.Equal(t, "localhost:8080", info.Address)
-	assert.Equal(t, "http", info.Scheme)
-	assert.Equal(t, map[string]string{"weight": "100"}, info.Attr)
+	err := cfg.SetDefault()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot be configured together")
 }
 
-func TestNewServer(t *testing.T) {
-	testConfig := map[string]interface{}{
-		"host": "127.0.0.1",
-		"port": 0, // Use random port
-	}
-	Configure(Config{Host: testConfig["host"].(string), Port: uint64(testConfig["port"].(int))}, config.Default())
-
-	server, err := NewServer()
+func TestNewServerDoesNotListenUntilServe(t *testing.T) {
+	port := mustAllocPort(t)
+	cfg := Config{Bind: "127.0.0.1", Port: uint64(port)}
+	s, err := NewServerWithConfig(cfg, config.NewManager())
 	require.NoError(t, err)
-	require.NotNil(t, server)
-	assert.NotNil(t, server.Server)
-	assert.NotNil(t, server.listener)
-	assert.NotNil(t, server.Config)
-	assert.Equal(t, "http", server.info.Scheme)
-	assert.NotEmpty(t, server.info.Address)
+	require.NotNil(t, s)
 
-	// Clean up
-	_ = server.Stop()
+	probe, err := net.Listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+	require.NoError(t, err)
+	_ = probe.Close()
 }
 
-func TestServer_ServeAndStop(t *testing.T) {
-	testConfig := map[string]interface{}{
-		"host": "127.0.0.1",
-		"port": 0, // Use random port
-	}
-	Configure(Config{Host: testConfig["host"].(string), Port: uint64(testConfig["port"].(int))}, config.Default())
+func TestServerServeAndStop(t *testing.T) {
+	s := startGovernor(t, Config{}, config.NewManager())
 
-	server, err := NewServer()
-	require.NoError(t, err)
-	require.NotNil(t, server)
-
-	// Start server in goroutine
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- server.Serve()
-	}()
-
-	// Wait for server to start
-	time.Sleep(time.Millisecond * 100)
-
-	// Test that server is running
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) // 设置 5 秒超时
-	defer cancel()
-	req, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodGet,
-		"http://"+server.info.Address+"/",
-		nil,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.Get("http://" + s.Info().Address + "/routes")
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	_ = resp.Body.Close()
 
-	// Stop server
-	err = server.Stop()
+	require.NoError(t, s.Stop())
+	require.NoError(t, s.Stop())
+}
+
+func TestSecurityBaseline_DefaultRoutes(t *testing.T) {
+	s := startGovernor(t, Config{}, config.NewManager())
+
+	assertStatus(t, "GET", "http://"+s.Info().Address+"/env", "", nil, http.StatusNotFound)
+	assertStatus(t, "GET", "http://"+s.Info().Address+"/debug/pprof/", "", nil, http.StatusNotFound)
+	assertStatus(
+		t,
+		"POST",
+		"http://"+s.Info().Address+"/configs",
+		`{"paths":[["test","key"]],"data":["value"]}`,
+		map[string]string{"Content-Type": "application/json"},
+		http.StatusForbidden,
+	)
+}
+
+func TestConfigHandle_MethodNotAllowed(t *testing.T) {
+	s := startGovernor(t, Config{}, config.NewManager())
+	assertStatus(t, "DELETE", "http://"+s.Info().Address+"/configs", "", nil, http.StatusMethodNotAllowed)
+}
+
+func TestConfigPatchValidation(t *testing.T) {
+	s := startGovernor(t, Config{AllowConfigPatch: true}, config.NewManager())
+
+	assertStatus(
+		t,
+		"POST",
+		"http://"+s.Info().Address+"/configs",
+		`{"paths":[["a"]],"data":[]}`,
+		map[string]string{"Content-Type": "application/json"},
+		http.StatusBadRequest,
+	)
+	assertStatus(
+		t,
+		"POST",
+		"http://"+s.Info().Address+"/configs",
+		`{"paths":[[]],"data":[1]}`,
+		map[string]string{"Content-Type": "application/json"},
+		http.StatusBadRequest,
+	)
+	assertStatus(
+		t,
+		"POST",
+		"http://"+s.Info().Address+"/configs",
+		`{"paths":[["","b"]],"data":[1]}`,
+		map[string]string{"Content-Type": "application/json"},
+		http.StatusBadRequest,
+	)
+}
+
+func TestConfigPatchSuccess(t *testing.T) {
+	manager := config.NewManager()
+	s := startGovernor(t, Config{AllowConfigPatch: true}, manager)
+
+	assertStatus(
+		t,
+		"POST",
+		"http://"+s.Info().Address+"/configs",
+		`{"paths":[["app","flag"]],"data":[true]}`,
+		map[string]string{"Content-Type": "application/json"},
+		http.StatusNoContent,
+	)
+
+	resp, err := http.Get("http://" + s.Info().Address + "/configs")
 	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	// Wait for serve to complete
-	select {
-	case err := <-errCh:
-		assert.NoError(t, err)
-	case <-time.After(time.Second * 2):
-		t.Fatal("Server did not stop within timeout")
-	}
+	var payload map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
+	assert.Equal(t, map[string]any{"flag": true}, payload["app"])
 }
 
-func TestServer_Info(t *testing.T) {
-	testConfig := map[string]interface{}{
-		"host": "127.0.0.1",
-		"port": 0,
-	}
-	Configure(Config{Host: testConfig["host"].(string), Port: uint64(testConfig["port"].(int))}, config.Default())
+func TestAuthToken(t *testing.T) {
+	s := startGovernor(t, Config{Auth: AuthConfig{Token: "secret"}}, config.NewManager())
 
-	server, err := NewServer()
-	require.NoError(t, err)
-	require.NotNil(t, server)
-
-	info := server.Info()
-	assert.Equal(t, server.info.Address, info.Address)
-	assert.Equal(t, server.info.Scheme, info.Scheme)
-	assert.Equal(t, server.info.Attr, info.Attr)
-
-	_ = server.Stop()
+	assertStatus(t, "GET", "http://"+s.Info().Address+"/routes", "", nil, http.StatusUnauthorized)
+	assertStatus(
+		t,
+		"GET",
+		"http://"+s.Info().Address+"/routes",
+		"",
+		map[string]string{"Authorization": "Bearer wrong"},
+		http.StatusUnauthorized,
+	)
+	assertStatus(
+		t,
+		"GET",
+		"http://"+s.Info().Address+"/routes",
+		"",
+		map[string]string{"Authorization": "Bearer secret"},
+		http.StatusOK,
+	)
 }
 
-func TestRespErr(t *testing.T) {
-	w := httptest.NewRecorder()
-	testErr := assert.AnError
-
-	respErr(w, http.StatusBadRequest, testErr)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-
-	var response ErrResponse
-	err := json.NewDecoder(w.Body).Decode(&response)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, response.Code)
-	assert.Equal(t, testErr.Error(), response.Msg)
-}
-
-func TestRespSuccess(t *testing.T) {
-	tests := []struct {
-		name     string
-		data     interface{}
-		pretty   string
-		expected string
-	}{
-		{
-			name:     "simple data",
-			data:     map[string]string{"key": "value"},
-			pretty:   "",
-			expected: `{"key":"value"}`,
-		},
-		{
-			name:     "pretty data",
-			data:     map[string]string{"key": "value"},
-			pretty:   "true",
-			expected: "{\n    \"key\": \"value\"\n}",
-		},
-		{
-			name:     "nil data",
-			data:     nil,
-			pretty:   "",
-			expected: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			w := httptest.NewRecorder()
-			r := httptest.NewRequest("GET", "/test?pretty="+tt.pretty, nil)
-
-			respSuccess(w, r, tt.data)
-
-			assert.Equal(t, http.StatusOK, w.Code)
-
-			if tt.expected != "" {
-				body := strings.TrimSpace(w.Body.String())
-				assert.Equal(t, tt.expected, body)
-			}
-		})
-	}
-}
-
-func TestRespNoContent(t *testing.T) {
-	w := httptest.NewRecorder()
-
-	respNoContent(w)
-
-	assert.Equal(t, http.StatusNoContent, w.Code)
-	assert.Equal(t, 0, w.Body.Len())
-}
-
-func TestSetConfig(t *testing.T) {
-	loadTestGovernorSettings(t)
-	w := httptest.NewRecorder()
-	body := strings.NewReader(`{"paths": [["test","key"]], "data": ["test.value"]}`)
-	r := httptest.NewRequest("POST", "/configs", body)
-
-	setConfig(w, r)
-
-	assert.Equal(t, http.StatusNoContent, w.Code)
-}
-
-func TestSetConfig_InvalidJSON(t *testing.T) {
-	loadTestGovernorSettings(t)
-	w := httptest.NewRecorder()
-	body := strings.NewReader(`invalid json`)
-	r := httptest.NewRequest("POST", "/configs", body)
-
-	setConfig(w, r)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-
-	var response ErrResponse
-	err := json.NewDecoder(w.Body).Decode(&response)
-	require.NoError(t, err)
-	assert.Contains(t, response.Msg, "invalid character")
-}
-
-func testGetConfig(t *testing.T) {
-	loadTestGovernorSettings(t)
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/configs", nil)
-
-	getConfig(w, r)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response json.RawMessage
-	err := json.NewDecoder(w.Body).Decode(&response)
-	require.NoError(t, err)
-	assert.NotEmpty(t, response)
-}
-
-func TestConfigHandle(t *testing.T) {
-	tests := []struct {
-		method string
-		testFn func(t *testing.T)
-	}{
-		{
-			method: "GET",
-			testFn: testGetConfig,
-		},
-		{
-			method: "POST",
-			testFn: func(t *testing.T) {
-				w := httptest.NewRecorder()
-				body := strings.NewReader(`{"paths": [["test","key"]], "data": ["test.value"]}`)
-				r := httptest.NewRequest("POST", "/configs", body)
-
-				configHandle(w, r)
-
-				assert.Equal(t, http.StatusNoContent, w.Code)
+func TestAuthBasic(t *testing.T) {
+	s := startGovernor(t, Config{
+		Auth: AuthConfig{
+			Basic: BasicAuthConfig{
+				Username: "admin",
+				Password: "password",
 			},
 		},
-		{
-			method: "PUT",
-			testFn: func(t *testing.T) {
-				w := httptest.NewRecorder()
-				body := strings.NewReader(`{"paths": [["test","key"]], "data": ["test.value"]}`)
-				r := httptest.NewRequest("PUT", "/configs", body)
+	}, config.NewManager())
 
-				configHandle(w, r)
-
-				assert.Equal(t, http.StatusNoContent, w.Code)
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.method, func(t *testing.T) {
-			loadTestGovernorSettings(t)
-			tt.testFn(t)
-		})
-	}
+	assertStatus(t, "GET", "http://"+s.Info().Address+"/routes", "", nil, http.StatusUnauthorized)
+	assertStatus(
+		t,
+		"GET",
+		"http://"+s.Info().Address+"/routes",
+		"",
+		map[string]string{"Authorization": "Basic Zm9vOmJhcg=="},
+		http.StatusUnauthorized,
+	)
+	assertStatus(
+		t,
+		"GET",
+		"http://"+s.Info().Address+"/routes",
+		"",
+		map[string]string{"Authorization": "Basic YWRtaW46cGFzc3dvcmQ="},
+		http.StatusOK,
+	)
 }
 
-func TestEnvHandle(t *testing.T) {
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/env", nil)
-
-	// Set a test environment variable
-	originalValue := os.Getenv("TEST_ENV_VAR")
-	_ = os.Setenv("TEST_ENV_VAR", "test_value")
-	defer func() {
-		if originalValue != "" {
-			_ = os.Setenv("TEST_ENV_VAR", originalValue)
-		} else {
-			_ = os.Unsetenv("TEST_ENV_VAR")
-		}
-	}()
-
-	envHandle(w, r)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var envVars []string
-	err := json.NewDecoder(w.Body).Decode(&envVars)
+func TestCompatibilityHandleFunc(t *testing.T) {
+	s, err := NewServerWithConfig(Config{}, config.NewManager())
 	require.NoError(t, err)
-
-	// Check that our test environment variable is present
-	found := false
-	for _, env := range envVars {
-		if strings.Contains(env, "TEST_ENV_VAR=test_value") {
-			found = true
-			break
-		}
-	}
-	assert.True(t, found, "TEST_ENV_VAR should be present in environment variables")
-}
-
-func TestNewBuildInfoHandle(t *testing.T) {
-	info := &debug.BuildInfo{
-		Path: "test/path",
-	}
-
-	handler := newBuildInfoHandle(info)
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/build_info", nil)
-
-	handler(w, r)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response debug.BuildInfo
-	err := json.NewDecoder(w.Body).Decode(&response)
-	require.NoError(t, err)
-	assert.Equal(t, info.Path, response.Path)
-}
-
-func TestHandleFunc(t *testing.T) {
-	testHandler := func(w http.ResponseWriter, r *http.Request) {
+	HandleFunc("/compat", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("test response handle func"))
-	}
+		_, _ = w.Write([]byte("ok"))
+	})
+	errCh := make(chan error, 1)
+	go func() { errCh <- s.Serve() }()
+	waitCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	require.NoError(t, s.WaitStarted(waitCtx))
+	t.Cleanup(func() {
+		_ = s.Stop()
+		select {
+		case err := <-errCh:
+			assert.NoError(t, err)
+		case <-time.After(2 * time.Second):
+			t.Fatal("governor serve goroutine did not exit")
+		}
+	})
 
-	pattern := fmt.Sprintf("/test_handle_func_%d", time.Now().UnixNano())
-	HandleFunc(pattern, testHandler)
-
-	assert.Contains(t, routes, pattern)
-
-	// Test that the handler is properly registered
-	req := httptest.NewRequest("GET", pattern, nil)
-	w := httptest.NewRecorder()
-
-	defaultServeMux.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "test response handle func", w.Body.String())
+	resp, err := http.Get("http://" + s.Info().Address + "/compat")
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	_ = resp.Body.Close()
 }
 
-func TestRoutesHandle(t *testing.T) {
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/", nil)
-
-	routesHandle(w, r)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response []string
-	err := json.NewDecoder(w.Body).Decode(&response)
+func TestWaitStartedReturnsServeError(t *testing.T) {
+	s, err := NewServerWithConfig(Config{Bind: "999.999.999.999"}, config.NewManager())
 	require.NoError(t, err)
-	assert.Subset(t, response, routes)
+
+	done := make(chan error, 1)
+	go func() { done <- s.Serve() }()
+	waitCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	require.Error(t, s.WaitStarted(waitCtx))
+	require.Error(t, <-done)
+}
+
+func startGovernor(t *testing.T, cfg Config, manager *config.Manager) *Server {
+	t.Helper()
+	s, err := NewServerWithConfig(cfg, manager)
+	require.NoError(t, err)
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- s.Serve()
+	}()
+	waitCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, s.WaitStarted(waitCtx))
+
+	t.Cleanup(func() {
+		_ = s.Stop()
+		select {
+		case err := <-errCh:
+			assert.NoError(t, err)
+		case <-time.After(2 * time.Second):
+			t.Fatal("governor serve goroutine did not exit")
+		}
+	})
+	return s
+}
+
+func assertStatus(
+	t *testing.T,
+	method string,
+	url string,
+	body string,
+	headers map[string]string,
+	expected int,
+) {
+	t.Helper()
+	var reader *strings.Reader
+	if body == "" {
+		reader = strings.NewReader("")
+	} else {
+		reader = strings.NewReader(body)
+	}
+	req, err := http.NewRequest(method, url, reader)
+	require.NoError(t, err)
+	for key, val := range headers {
+		req.Header.Set(key, val)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	assert.Equal(t, expected, resp.StatusCode)
+}
+
+func mustAllocPort(t *testing.T) int {
+	t.Helper()
+	lis, err := net.Listen("tcp4", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = lis.Close() }()
+	_, port, err := net.SplitHostPort(lis.Addr().String())
+	require.NoError(t, err)
+	value, err := strconv.Atoi(port)
+	require.NoError(t, err)
+	return value
 }

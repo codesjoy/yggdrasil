@@ -115,8 +115,8 @@ func (b *blockingAppServer) Endpoints() []yserver.Endpoint {
 }
 
 type runningAppServer struct {
-	stopCtx context.Context
-	stopCh  chan struct{}
+	stopCtx  context.Context
+	stopCh   chan struct{}
 	stopOnce sync.Once
 }
 
@@ -855,7 +855,7 @@ func TestApplication_Hook_ErrorHandling(t *testing.T) {
 func TestApplication_RunStop_Integration(t *testing.T) {
 	// Create a real governor for integration testing
 	// This will test the actual Run/Stop functionality
-	gov, err := governor.NewServer()
+	gov, err := governor.NewServerWithConfig(governor.Config{Advertise: true}, nil)
 	assert.NoError(t, err)
 	app, err := newApplication(WithGovernor(gov))
 	assert.NoError(t, err)
@@ -883,7 +883,7 @@ func TestApplication_RunStop_Integration(t *testing.T) {
 }
 
 func TestApplication_Run_InternalServerFailureTriggersStop(t *testing.T) {
-	gov, err := governor.NewServer()
+	gov, err := governor.NewServerWithConfig(governor.Config{Advertise: true}, nil)
 	require.NoError(t, err)
 
 	mainServer := &runningAppServer{stopCh: make(chan struct{})}
@@ -932,7 +932,7 @@ func TestApplication_Stop_UsesShutdownTimeout(t *testing.T) {
 
 func TestApplication_Endpoints_Integration(t *testing.T) {
 	// Create a real governor for testing Endpoints functionality
-	gov, err := governor.NewServer()
+	gov, err := governor.NewServerWithConfig(governor.Config{Advertise: true}, nil)
 	assert.NoError(t, err)
 	t.Cleanup(func() { _ = gov.Stop() })
 	app, err := newApplication(WithGovernor(gov))
@@ -949,7 +949,7 @@ func TestApplication_Endpoints_Integration(t *testing.T) {
 }
 
 func TestApplication_Endpoints_WithServerAndGovernor(t *testing.T) {
-	gov, err := governor.NewServer()
+	gov, err := governor.NewServerWithConfig(governor.Config{Advertise: true}, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = gov.Stop() })
 

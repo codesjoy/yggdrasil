@@ -42,11 +42,7 @@ func validateStartup(opts *options) error {
 			return err
 		}
 	}
-	manager := config.Default()
-	if opts != nil && opts.configManager != nil {
-		manager = opts.configManager
-	}
-	applyResolvedSettings(manager, resolved)
+	applyResolvedSettings(resolved)
 	strict := resolved.Admin.Validation.Strict
 	enable := strict || resolved.Admin.Validation.Enable
 	if err := settings.Validate(resolved); err != nil {

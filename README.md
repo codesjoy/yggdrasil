@@ -248,6 +248,8 @@ Yggdrasil adopts a modular architecture with clearly separated concerns:
 ### Advanced Features
 
 - **Governor**: Built-in management server for health checks and debugging
+- Governor now defaults to loopback (`127.0.0.1`) with minimal exposure (`/env`, `/debug/pprof/*`, and config patching are disabled unless explicitly enabled).
+- `PUT/POST /configs` only writes an override layer into the config manager; it does not automatically recompile/restart framework modules.
 - **Stats Handler**: Custom metrics and tracing integration
 
 ## 🛠️ Code Generation Tools

@@ -16,32 +16,40 @@
 package governor
 
 import (
-	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/pprof"
-	"runtime/debug"
+	"sync"
 )
 
-func init() {
-	handleFunc()
+var (
+	compatMu     sync.RWMutex
+	compatServer *Server
+)
+
+func setCompatServer(server *Server) {
+	compatMu.Lock()
+	defer compatMu.Unlock()
+	compatServer = server
 }
 
-func routesHandle(resp http.ResponseWriter, _ *http.Request) {
-	_ = json.NewEncoder(resp).Encode(routes)
-}
-
-func handleFunc() {
-	// 获取全部治理路由
-	defaultServeMux.HandleFunc("/", routesHandle)
-	HandleFunc("/routes", routesHandle)
-	HandleFunc("/debug/pprof/", pprof.Index)
-	HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	HandleFunc("/debug/pprof/profile", pprof.Profile)
-	HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	HandleFunc("/debug/pprof/trace", pprof.Trace)
-	HandleFunc("/env", envHandle)
-	HandleFunc("/configs", configHandle)
-	if info, ok := debug.ReadBuildInfo(); ok {
-		HandleFunc("/build_info", newBuildInfoHandle(info))
+// HandleFunc registers a new route with the default compatibility server.
+// Deprecated: use (*Server).HandleFunc instead.
+func HandleFunc(pattern string, handler http.HandlerFunc) {
+	compatMu.RLock()
+	server := compatServer
+	compatMu.RUnlock()
+	if server == nil {
+		slog.Warn("governor compatibility HandleFunc ignored because no default server exists", "pattern", pattern)
+		return
 	}
+	server.HandleFunc(pattern, handler)
+}
+
+func (s *Server) installPprofRoutes() {
+	s.HandleFunc("/debug/pprof/", pprof.Index)
+	s.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	s.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	s.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	s.HandleFunc("/debug/pprof/trace", pprof.Trace)
 }
