@@ -228,7 +228,7 @@ go.fix.%:
 #   - Example:              make go.test.xjwt        Test the xjwt module
 #
 # Coverage Quality Gate:
-#   - Default threshold:    60% (configurable via COVERAGE=)
+#   - Default threshold:    80% (configurable via COVERAGE=)
 #   - Usage example:        make coverage COVERAGE=80
 #   - Reports location:     $(COVERAGE_DIR)/
 #     - <module>.out        Raw coverage data (profiling format)

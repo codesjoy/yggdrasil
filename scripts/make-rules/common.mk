@@ -70,8 +70,8 @@ XARGS           := xargs
 OUTPUT_DIR    := $(ROOT_DIR)/_output
 COVERAGE_DIR  := $(OUTPUT_DIR)/coverage
 
-# Coverage threshold (default 60%)
-COVERAGE      := 60
+# Coverage threshold (default 80%)
+COVERAGE      := 80
 
 # Platform support
 PLATFORMS ?= linux_amd64 linux_arm64 darwin_amd64 darwin_arm64

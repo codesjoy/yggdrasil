@@ -96,7 +96,7 @@ help:
 	@echo "  LOG_LEVEL=1       Show info, warn, error (default)"
 	@echo "  LOG_LEVEL=2       Show warn, error only"
 	@echo "  LOG_LEVEL=3       Show error only"
-	@echo "  COVERAGE=60       Set coverage threshold (default: 60%)"
+	@echo "  COVERAGE=80       Set coverage threshold (default: 80%)"
 	@echo "  EXCLUDE_TESTS=    Pattern to exclude from tests (e.g., \"vendor|test\")"
 	@echo "  INCLUDE_EXAMPLES=1 Include example/examples modules in lint/fix/test/coverage"
 	@echo "  MODULES=...       Explicit module list (e.g., \"cmd/protoc-gen-yggdrasil-rest cmd/protoc-gen-yggdrasil-rpc\"); explicit MODULES are never filtered by INCLUDE_EXAMPLES"
