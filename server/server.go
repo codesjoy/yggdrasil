@@ -44,10 +44,6 @@ const (
 	serverStateClosing
 )
 
-var svr *server
-
-var governorRouteOnce sync.Once
-
 type serverInfo struct {
 	scheme   string
 	address  string
@@ -92,26 +88,26 @@ type server struct {
 // NewServer creates a new server.
 func NewServer() (Server, error) {
 	cfg := CurrentSettings()
-	svr = &server{
+	s := &server{
 		services:       map[string]*ServiceInfo{},
 		servicesDesc:   map[string][]methodInfo{},
 		restRouterDesc: []restRouterInfo{},
 		stats:          stats.GetServerHandler(),
 	}
 	if cfg.RestEnabled {
-		svr.restEnable = true
+		s.restEnable = true
 		var err error
-		svr.restSvr, err = rest.NewServer()
+		s.restSvr, err = rest.NewServer()
 		if err != nil {
 			return nil, err
 		}
 	}
-	svr.initInterceptor()
-	if err := svr.initRemoteServer(); err != nil {
+	s.initInterceptor()
+	if err := s.initRemoteServer(); err != nil {
 		return nil, err
 	}
 
-	return svr, nil
+	return s, nil
 }
 
 // RegisterService registers a service and its implementation to the gRPC
@@ -119,6 +115,9 @@ func NewServer() (Server, error) {
 // invoking Serve. If ss is non-nil (for legacy code), its type is checked to
 // ensure it implements sd.HandlerType.
 func (s *server) RegisterService(sd *ServiceDesc, ss interface{}) {
+	if !s.ensureRegisterable("service") {
+		return
+	}
 	if ss == nil {
 		slog.Error("fault to register service: Server.RegisterService handler is nil")
 		s.mu.Lock()
@@ -153,6 +152,9 @@ func (s *server) RegisterService(sd *ServiceDesc, ss interface{}) {
 
 func (s *server) RegisterRestService(sd *RestServiceDesc, ss interface{}, prefix ...string) {
 	if !s.restEnable {
+		return
+	}
+	if !s.ensureRegisterable("rest service") {
 		return
 	}
 	if ss == nil {
@@ -190,6 +192,9 @@ func (s *server) RegisterRestRawHandlers(sd ...*RestRawHandlerDesc) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.ensureRegisterableLocked("rest raw handlers") {
+		return
+	}
 	for _, item := range sd {
 		s.restRouterDesc = append(s.restRouterDesc, restRouterInfo{
 			Method: item.Method,
@@ -377,6 +382,9 @@ func (s *server) initRemoteServer() error {
 func (s *server) register(sd *ServiceDesc, ss interface{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.ensureRegisterableLocked("service") {
+		return
+	}
 	if _, ok := s.services[sd.ServiceName]; ok {
 		err := fmt.Errorf(
 			"fault to register service: Server.RegisterService found duplicate service registration for %q",
@@ -428,6 +436,9 @@ func (s *server) registerServiceDesc(desc *ServiceDesc) {
 func (s *server) registerRest(sd *RestServiceDesc, ss interface{}, prefix ...string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.ensureRegisterableLocked("rest service") {
+		return
+	}
 	var pathPrefix string
 	if len(prefix) != 0 {
 		pathPrefix = "/" + strings.TrimPrefix(prefix[0], "/")
@@ -531,6 +542,8 @@ func (s *server) handleStream(ss remote.ServerStream) {
 	service := sm[:pos]
 	method := sm[pos+1:]
 
+	// This hot path intentionally reads from services map without locking.
+	// Registration is hard-gated to init state; once serving starts, services are immutable.
 	srv, knownService := s.services[service]
 	if knownService {
 		if md, ok := srv.Methods[method]; ok {
@@ -549,6 +562,54 @@ func (s *server) handleStream(ss remote.ServerStream) {
 		errDesc = fmt.Sprintf("unknown method %v for service %v", method, service)
 	}
 	ss.Finish(nil, xerror.New(code.Code_UNIMPLEMENTED, errDesc))
+}
+
+func (s *server) ensureRegisterable(action string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ensureRegisterableLocked(action)
+}
+
+func (s *server) ensureRegisterableLocked(action string) bool {
+	if s.state == serverStateInit {
+		return true
+	}
+	err := fmt.Errorf("server register %s: server is %s", action, s.stateNameLocked())
+	s.registerErr = errors.Join(s.registerErr, err)
+	slog.Error("fault to register after server startup",
+		slog.String("action", action),
+		slog.String("state", s.stateNameLocked()),
+	)
+	return false
+}
+
+func (s *server) stateNameLocked() string {
+	switch s.state {
+	case serverStateInit:
+		return "init"
+	case serverStateRunning:
+		return "running"
+	case serverStateClosing:
+		return "closing"
+	default:
+		return "unknown"
+	}
+}
+
+func (s *server) serviceDescSnapshot() map[string][]methodInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make(map[string][]methodInfo, len(s.servicesDesc))
+	for serviceName, methods := range s.servicesDesc {
+		result[serviceName] = append([]methodInfo(nil), methods...)
+	}
+	return result
+}
+
+func (s *server) restRouteSnapshot() []restRouterInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]restRouterInfo(nil), s.restRouterDesc...)
 }
 
 func (s *server) processUnaryRPC(desc *MethodDesc, srv *ServiceInfo, ss remote.ServerStream) {

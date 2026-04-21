@@ -15,8 +15,10 @@
 package governor
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
@@ -199,6 +201,28 @@ func TestAuthBasic(t *testing.T) {
 		map[string]string{"Authorization": "Basic YWRtaW46cGFzc3dvcmQ="},
 		http.StatusOK,
 	)
+}
+
+func TestWarnOnExposedRoutesWithoutAuth(t *testing.T) {
+	var logBuf bytes.Buffer
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() {
+		slog.SetDefault(oldLogger)
+	})
+
+	s := startGovernor(t, Config{
+		ExposePprof:      true,
+		ExposeEnv:        true,
+		AllowConfigPatch: true,
+	}, config.NewManager())
+	require.NotNil(t, s)
+
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "governor high-risk routes are exposed without authentication")
+	assert.Contains(t, logOutput, "pprof")
+	assert.Contains(t, logOutput, "env")
+	assert.Contains(t, logOutput, "config_patch")
 }
 
 func TestCompatibilityHandleFunc(t *testing.T) {

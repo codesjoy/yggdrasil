@@ -23,38 +23,36 @@ import (
 )
 
 // RegisterGovernorRoutes registers service and rest metadata routes into governor.
-func RegisterGovernorRoutes(gov *governor.Server) {
-	if gov == nil {
+func RegisterGovernorRoutes(gov *governor.Server, app Server) {
+	if gov == nil || app == nil {
 		return
 	}
-	governorRouteOnce.Do(func() {
-		gov.HandleFunc("/services", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(200)
-			encoder := json.NewEncoder(w)
-			if r.URL.Query().Get("pretty") == "true" {
-				encoder.SetIndent("", "    ")
-			}
-			result := map[string]interface{}{
-				"appName": instance.Name(),
-			}
-			if svr != nil {
-				result["services"] = svr.servicesDesc
-			}
-			_ = encoder.Encode(result)
-		})
-		gov.HandleFunc("/rest", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(200)
-			encoder := json.NewEncoder(w)
-			if r.URL.Query().Get("pretty") == "true" {
-				encoder.SetIndent("", "    ")
-			}
-			result := map[string]interface{}{
-				"appName": instance.Name(),
-			}
-			if svr != nil {
-				result["routers"] = svr.restRouterDesc
-			}
-			_ = encoder.Encode(result)
-		})
+	s, ok := app.(*server)
+	if !ok {
+		return
+	}
+	gov.HandleFunc("/services", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		encoder := json.NewEncoder(w)
+		if r.URL.Query().Get("pretty") == "true" {
+			encoder.SetIndent("", "    ")
+		}
+		result := map[string]interface{}{
+			"appName":  instance.Name(),
+			"services": s.serviceDescSnapshot(),
+		}
+		_ = encoder.Encode(result)
+	})
+	gov.HandleFunc("/rest", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		encoder := json.NewEncoder(w)
+		if r.URL.Query().Get("pretty") == "true" {
+			encoder.SetIndent("", "    ")
+		}
+		result := map[string]interface{}{
+			"appName": instance.Name(),
+			"routers": s.restRouteSnapshot(),
+		}
+		_ = encoder.Encode(result)
 	})
 }

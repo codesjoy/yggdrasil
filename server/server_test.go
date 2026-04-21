@@ -26,6 +26,7 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
 	"github.com/codesjoy/yggdrasil/v2/internal/constant"
+	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/remote/rest"
 	"github.com/codesjoy/yggdrasil/v2/stream"
@@ -901,4 +902,143 @@ func TestServe_SignalHandling(t *testing.T) {
 
 		wg.Wait()
 	})
+}
+
+type mockHandleStream struct {
+	method string
+	ctx    context.Context
+}
+
+func (m *mockHandleStream) Method() string {
+	return m.method
+}
+
+func (m *mockHandleStream) Start(bool, bool) error {
+	return nil
+}
+
+func (m *mockHandleStream) Finish(any, error) {}
+
+func (m *mockHandleStream) SetHeader(metadata.MD) error {
+	return nil
+}
+
+func (m *mockHandleStream) SendHeader(metadata.MD) error {
+	return nil
+}
+
+func (m *mockHandleStream) SetTrailer(metadata.MD) {}
+
+func (m *mockHandleStream) Context() context.Context {
+	if m.ctx != nil {
+		return m.ctx
+	}
+	return context.Background()
+}
+
+func (m *mockHandleStream) SendMsg(any) error {
+	return nil
+}
+
+func (m *mockHandleStream) RecvMsg(any) error {
+	return nil
+}
+
+func TestRegisterRejectedWhenServerNotInit(t *testing.T) {
+	tests := []struct {
+		name  string
+		state int
+	}{
+		{name: "running", state: serverStateRunning},
+		{name: "closing", state: serverStateClosing},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &server{
+				services:       map[string]*ServiceInfo{},
+				servicesDesc:   map[string][]methodInfo{},
+				restRouterDesc: []restRouterInfo{},
+				restEnable:     true,
+				restSvr:        &mockRestServer{},
+				state:          tt.state,
+			}
+
+			s.RegisterService(&ServiceDesc{
+				ServiceName: "late.service",
+				HandlerType: (*TestService)(nil),
+			}, &TestServiceImpl{})
+
+			s.RegisterRestService(&RestServiceDesc{
+				HandlerType: (*TestService)(nil),
+				Methods: []RestMethodDesc{
+					{
+						Method: "GET",
+						Path:   "/late",
+						Handler: func(w http.ResponseWriter, r *http.Request, srv interface{}, interceptor interceptor.UnaryServerInterceptor) (interface{}, error) {
+							return nil, nil
+						},
+					},
+				},
+			}, &TestServiceImpl{})
+
+			s.RegisterRestRawHandlers(&RestRawHandlerDesc{
+				Method: "GET",
+				Path:   "/raw",
+				Handler: func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+				},
+			})
+
+			s.mu.RLock()
+			defer s.mu.RUnlock()
+			assert.Empty(t, s.services)
+			assert.Empty(t, s.servicesDesc)
+			assert.Empty(t, s.restRouterDesc)
+			assert.Error(t, s.registerErr)
+		})
+	}
+}
+
+func TestHandleStreamConcurrentWithLateRegister(t *testing.T) {
+	s := &server{
+		services: map[string]*ServiceInfo{
+			"existing.service": {
+				ServiceImpl: nil,
+				Methods:     map[string]*MethodDesc{},
+				Streams:     map[string]*stream.Desc{},
+			},
+		},
+		servicesDesc: map[string][]methodInfo{},
+		state:        serverStateRunning,
+	}
+	desc := &ServiceDesc{
+		ServiceName: "late.service",
+		HandlerType: (*TestService)(nil),
+	}
+	impl := &TestServiceImpl{}
+
+	const workers = 200
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.handleStream(&mockHandleStream{method: "/existing.service/missing"})
+		}()
+	}
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.RegisterService(desc, impl)
+		}()
+	}
+	wg.Wait()
+
+	s.mu.RLock()
+	_, exists := s.services["late.service"]
+	registerErr := s.registerErr
+	s.mu.RUnlock()
+	assert.False(t, exists)
+	assert.Error(t, registerErr)
 }

@@ -23,6 +23,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/codesjoy/yggdrasil/v2/config"
@@ -105,6 +106,7 @@ func (s *Server) Serve() error {
 		s.markStarted(nil)
 		return nil
 	}
+	s.warnIfUnauthenticatedExposure()
 	listener, err := s.listen()
 	if err != nil {
 		s.markStarted(err)
@@ -234,4 +236,30 @@ func (s *Server) setInfo(info ServerInfo) {
 	if s.info.Attr == nil {
 		s.info.Attr = map[string]string{}
 	}
+}
+
+func (s *Server) warnIfUnauthenticatedExposure() {
+	if s.cfg.Auth.Enabled() {
+		return
+	}
+	exposed := make([]string, 0, 3)
+	if s.cfg.ExposePprof {
+		exposed = append(exposed, "pprof")
+	}
+	if s.cfg.ExposeEnv {
+		exposed = append(exposed, "env")
+	}
+	if s.cfg.AllowConfigPatch {
+		exposed = append(exposed, "config_patch")
+	}
+	if len(exposed) == 0 {
+		return
+	}
+	slog.Warn(
+		"governor high-risk routes are exposed without authentication",
+		"routes",
+		strings.Join(exposed, ","),
+		"suggestion",
+		"configure governor.auth.token or governor.auth.basic credentials",
+	)
 }

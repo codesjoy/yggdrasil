@@ -197,11 +197,13 @@ func (s *ServeMux) Start() error {
 	if s.started {
 		return errors.New("server had already serve")
 	}
-	s.started = true
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	lis, err := (&net.ListenConfig{}).Listen(ctx, "tcp", s.info.address)
 	if err != nil {
+		s.started = false
+		s.listener = nil
+		s.svr = nil
 		return err
 	}
 	s.info.address = lis.Addr().String()
@@ -213,6 +215,7 @@ func (s *ServeMux) Start() error {
 		WriteTimeout:      s.cfg.WriteTimeout,
 		IdleTimeout:       s.cfg.IdleTimeout,
 	}
+	s.started = true
 	return nil
 }
 
@@ -226,10 +229,27 @@ func (s *ServeMux) Serve() error {
 
 // Stop stops the server.
 func (s *ServeMux) Stop(ctx context.Context) error {
-	if ctx == nil {
-		ctx = context.Background()
+	s.mu.Lock()
+	svr := s.svr
+	timeout := time.Duration(0)
+	if s.cfg != nil {
+		timeout = s.cfg.ShutdownTimeout
 	}
-	return s.svr.Shutdown(ctx)
+	s.stopped = true
+	s.mu.Unlock()
+	if svr == nil {
+		return nil
+	}
+	if ctx == nil {
+		if timeout > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+		} else {
+			ctx = context.Background()
+		}
+	}
+	return svr.Shutdown(ctx)
 }
 
 // Info returns the server info.

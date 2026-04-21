@@ -358,7 +358,7 @@ func initServer(opts *options) error {
 	if err != nil {
 		return err
 	}
-	server.RegisterGovernorRoutes(opts.governor)
+	server.RegisterGovernorRoutes(opts.governor, svr)
 	for k, v := range opts.serviceDesc {
 		svr.RegisterService(k, v)
 	}
