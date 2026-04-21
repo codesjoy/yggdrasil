@@ -15,12 +15,17 @@
 package logger
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"sync"
 	"testing"
+
+	"gopkg.in/natefinch/lumberjack.v2"
+
+	"github.com/codesjoy/yggdrasil/v2/config"
 )
 
 // resetWriterBuilders clears all registered writers for testing
@@ -134,14 +139,23 @@ func TestGetWriterConsole(t *testing.T) {
 func TestNewFileWriter(t *testing.T) {
 	resetWriterBuilders()
 
-	// The newFileWriter depends on config, so we just test that it's registered
-	f, err := GetWriterBuilder("file")
-	if err != nil {
-		t.Fatalf("GetWriterBuilder('file') error = %v", err)
+	name := "writer_file_success"
+	if err := config.Set(config.Join(config.KeyBase, "logger", "writer", name), map[string]any{
+		"filename":   "/tmp/yggdrasil-logger-test.log",
+		"max_size":   1,
+		"max_backups": 1,
+		"max_age":    1,
+		"compress":   false,
+	}); err != nil {
+		t.Fatalf("config.Set(file writer config) error = %v", err)
 	}
 
-	if f == nil {
-		t.Error("File writer builder not registered")
+	w, err := newFileWriter(name)
+	if err != nil {
+		t.Fatalf("newFileWriter() error = %v", err)
+	}
+	if _, ok := w.(*lumberjack.Logger); !ok {
+		t.Fatalf("newFileWriter() type = %T, want *lumberjack.Logger", w)
 	}
 }
 
@@ -224,5 +238,88 @@ func TestWriterBuilderConcurrentRegisterAndGet(t *testing.T) {
 		if _, err := GetWriterBuilder(name); err != nil {
 			t.Fatalf("GetWriterBuilder(%q) error = %v", name, err)
 		}
+	}
+}
+
+func TestGetWriterSuccess(t *testing.T) {
+	resetWriterBuilders()
+
+	writerType := "writer_get_success_type"
+	writerName := "writer_get_success_name"
+	target := &strings.Builder{}
+	RegisterWriterBuilder(writerType, func(string) (io.Writer, error) {
+		return target, nil
+	})
+	if err := config.Set(config.Join(config.KeyBase, "logger", "writer", writerName, "type"), writerType); err != nil {
+		t.Fatalf("config.Set(writer type) error = %v", err)
+	}
+
+	got, err := GetWriter(writerName)
+	if err != nil {
+		t.Fatalf("GetWriter() error = %v", err)
+	}
+	if got != target {
+		t.Fatalf("GetWriter() = %v, want %v", got, target)
+	}
+}
+
+func TestGetWriterBuilderNotRegistered(t *testing.T) {
+	resetWriterBuilders()
+
+	writerName := "writer_get_missing_builder"
+	if err := config.Set(config.Join(config.KeyBase, "logger", "writer", writerName, "type"), "writer_type_not_exist"); err != nil {
+		t.Fatalf("config.Set(writer type) error = %v", err)
+	}
+
+	_, err := GetWriter(writerName)
+	if err == nil {
+		t.Fatal("GetWriter() expected error for missing builder")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("GetWriter() err = %v, want contains not found", err)
+	}
+}
+
+func TestGetWriterBuilderError(t *testing.T) {
+	resetWriterBuilders()
+
+	writerType := "writer_get_error_type"
+	writerName := "writer_get_error_name"
+	wantErr := errors.New("writer builder boom")
+
+	RegisterWriterBuilder(writerType, func(string) (io.Writer, error) {
+		return nil, wantErr
+	})
+	if err := config.Set(config.Join(config.KeyBase, "logger", "writer", writerName, "type"), writerType); err != nil {
+		t.Fatalf("config.Set(writer type) error = %v", err)
+	}
+
+	_, err := GetWriter(writerName)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("GetWriter() err = %v, want %v", err, wantErr)
+	}
+}
+
+func TestNewFileWriterScanError(t *testing.T) {
+	resetWriterBuilders()
+
+	name := "writer_file_scan_error"
+	if err := config.Set(config.Join(config.KeyBase, "logger", "writer", name), []any{"invalid"}); err != nil {
+		t.Fatalf("config.Set(invalid file writer config) error = %v", err)
+	}
+
+	if _, err := newFileWriter(name); err == nil {
+		t.Fatal("newFileWriter() expected error for invalid config shape")
+	}
+}
+
+func TestEmptyWriterWrite(t *testing.T) {
+	w := emptyWriter{}
+	n, err := w.Write([]byte("anything"))
+	if err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("Write() n = %d, want 0", n)
 	}
 }

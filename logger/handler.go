@@ -25,7 +25,7 @@ import (
 
 func init() {
 	RegisterHandlerBuilder("json", newJSONHandler)
-	RegisterHandlerBuilder("console", newConsoleHandler)
+	RegisterHandlerBuilder("text", newConsoleHandler)
 }
 
 // HandlerBuilder is the interface for building a slog.Handler.
@@ -43,6 +43,9 @@ func RegisterHandlerBuilder(typeName string, f HandlerBuilder) {
 
 // GetHandlerBuilder returns the handler builder for the given type.
 func GetHandlerBuilder(typeName string) (HandlerBuilder, error) {
+	if typeName == "console" {
+		typeName = "text"
+	}
 	handlerBuilderMu.RLock()
 	defer handlerBuilderMu.RUnlock()
 	f, ok := handlerBuilder[typeName]

@@ -24,9 +24,7 @@ import (
 func newBenchmarkJSONLogger(b *testing.B) *slog.Logger {
 	b.Helper()
 	h, err := NewJSONHandler(&JSONHandlerConfig{
-		CommonHandlerConfig: CommonHandlerConfig{
-			Level: slog.LevelInfo,
-		},
+		Level:  slog.LevelInfo,
 		Writer: io.Discard,
 	})
 	if err != nil {

@@ -301,7 +301,7 @@ func initInstanceInfo(appName string) {
 func initLogger() error {
 	loggerKeyBase := config.Join(config.KeyBase, "logger")
 	vals := config.ValueToValues(config.Get(config.Join(loggerKeyBase, "handler", "default")))
-	typeName := vals.Get("type").String("console")
+	typeName := vals.Get("type").String("text")
 	writerName := vals.Get("writer").String("default")
 	if writerName == "default" {
 		writerType := config.GetString(
@@ -322,7 +322,7 @@ func initLogger() error {
 	if err != nil {
 		return err
 	}
-	h, err := handlerBuilder(writerName, getLoggerHandlerConfigValue(vals))
+	h, err := handlerBuilder(writerName, vals.Get("config"))
 	if err != nil {
 		return err
 	}
@@ -337,14 +337,6 @@ func initLogger() error {
 	}
 	remotelog.Init(remoteLoggerLv, h)
 	return nil
-}
-
-func getLoggerHandlerConfigValue(vals config.Values) config.Value {
-	cfg := vals.Get("config")
-	if len(cfg.Map()) != 0 {
-		return cfg
-	}
-	return vals.Get("")
 }
 
 func initGovernor(opts *options) error {

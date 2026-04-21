@@ -15,40 +15,223 @@
 package yggdrasil
 
 import (
+	"encoding/json"
+	"io"
+	"log/slog"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/codesjoy/yggdrasil/v2/config"
+	"github.com/codesjoy/yggdrasil/v2/logger"
 )
 
-type loggerLevelHolder struct {
-	Level string `mapstructure:"level"`
+type testLogWriter struct {
+	mu    sync.Mutex
+	lines []string
 }
 
-func TestGetLoggerHandlerConfigValue_PreferNestedConfig(t *testing.T) {
-	cfg := config.NewConfig(".")
-	require.NoError(t, cfg.Set("type", "console"))
-	require.NoError(t, cfg.Set("level", "debug"))
-	require.NoError(t, cfg.Set("config.level", "info"))
-
-	vals := cfg.ValueToValues(cfg.Get(""))
-	selected := getLoggerHandlerConfigValue(vals)
-
-	var got loggerLevelHolder
-	require.NoError(t, selected.Scan(&got))
-	require.Equal(t, "info", got.Level)
+func (w *testLogWriter) Write(p []byte) (n int, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.lines = append(w.lines, string(append([]byte(nil), p...)))
+	return len(p), nil
 }
 
-func TestGetLoggerHandlerConfigValue_FallbackToLegacyRoot(t *testing.T) {
-	cfg := config.NewConfig(".")
-	require.NoError(t, cfg.Set("type", "console"))
-	require.NoError(t, cfg.Set("level", "warn"))
+func (w *testLogWriter) LastLine() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.lines) == 0 {
+		return ""
+	}
+	return w.lines[len(w.lines)-1]
+}
 
-	vals := cfg.ValueToValues(cfg.Get(""))
-	selected := getLoggerHandlerConfigValue(vals)
+func TestInitLoggerTextTypeUsesOfficialTextHandler(t *testing.T) {
+	w := &testLogWriter{}
+	writerType := "test_logger_default_text"
+	logger.RegisterWriterBuilder(writerType, func(string) (io.Writer, error) {
+		return w, nil
+	})
 
-	var got loggerLevelHolder
-	require.NoError(t, selected.Scan(&got))
-	require.Equal(t, "warn", got.Level)
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "logger", "writer", "default", "type"), writerType),
+	)
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "logger", "handler", "default", "type"), "text"),
+	)
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "logger", "handler", "default", "writer"), "default"))
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "logger", "handler", "default", "config", "level"), "info"),
+	)
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "remote", "logger_level"), "error"))
+
+	require.NoError(t, initLogger())
+	slog.Info("default text", slog.String("k", "v"))
+
+	line := strings.TrimSpace(w.LastLine())
+	require.Contains(t, line, "level=INFO")
+	require.Contains(t, line, `msg="default text"`)
+	require.Contains(t, line, "k=v")
+}
+
+func TestInitLoggerConsoleAliasStillWorks(t *testing.T) {
+	w := &testLogWriter{}
+	writerType := "test_logger_console_alias"
+	logger.RegisterWriterBuilder(writerType, func(string) (io.Writer, error) {
+		return w, nil
+	})
+
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "logger", "writer", "default", "type"), writerType),
+	)
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "logger", "handler", "default", "type"), "console"),
+	)
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "logger", "handler", "default", "writer"), "default"))
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "logger", "handler", "default", "config", "level"), "info"),
+	)
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "remote", "logger_level"), "error"))
+
+	require.NoError(t, initLogger())
+	slog.Info("console alias", slog.String("k", "v"))
+
+	line := strings.TrimSpace(w.LastLine())
+	require.Contains(t, line, "level=INFO")
+	require.Contains(t, line, `msg="console alias"`)
+	require.Contains(t, line, "k=v")
+}
+
+func TestInitLoggerJSONTypeUsesOfficialJSONHandler(t *testing.T) {
+	w := &testLogWriter{}
+	writerType := "test_logger_default_json"
+	logger.RegisterWriterBuilder(writerType, func(string) (io.Writer, error) {
+		return w, nil
+	})
+
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "logger", "writer", "default", "type"), writerType),
+	)
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "logger", "handler", "default", "type"), "json"),
+	)
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "logger", "handler", "default", "writer"), "default"))
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "logger", "handler", "default", "config", "level"), "info"),
+	)
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "remote", "logger_level"), "error"))
+
+	require.NoError(t, initLogger())
+	slog.Info("default json", slog.Int("id", 11))
+
+	line := strings.TrimSpace(w.LastLine())
+	var got map[string]any
+	require.NoError(t, json.Unmarshal([]byte(line), &got))
+	require.Equal(t, "INFO", got["level"])
+	require.Equal(t, "default json", got["msg"])
+	require.Equal(t, float64(11), got["id"])
+}
+
+func TestInitLoggerIgnoresLegacyDefaultLevel(t *testing.T) {
+	w := &testLogWriter{}
+	writerType := "test_logger_legacy_level_ignored"
+	logger.RegisterWriterBuilder(writerType, func(string) (io.Writer, error) {
+		return w, nil
+	})
+
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "logger", "writer", "default", "type"), writerType),
+	)
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "logger", "handler", "default", "type"), "json"),
+	)
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "logger", "handler", "default", "writer"), "default"))
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "logger", "handler", "default", "config", "level"), "error"),
+	)
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "logger", "handler", "default", "level"), "debug"),
+	)
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "remote", "logger_level"), "error"))
+
+	require.NoError(t, initLogger())
+	slog.Info("should be filtered by config.level")
+	require.Len(t, w.lines, 0)
+
+	slog.Error("should pass")
+	require.Len(t, w.lines, 1)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(w.LastLine())), &got))
+	require.Equal(t, "should pass", got["msg"])
+}
+
+func TestInitLoggerIgnoresDeprecatedHandlerKeys(t *testing.T) {
+	w := &testLogWriter{}
+	writerType := "test_logger_deprecated_keys_ignored"
+	logger.RegisterWriterBuilder(writerType, func(string) (io.Writer, error) {
+		return w, nil
+	})
+
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "logger", "writer", "default", "type"), writerType),
+	)
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "logger", "handler", "default", "type"), "json"),
+	)
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "logger", "handler", "default", "writer"), "default"))
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "logger", "handler", "default", "config", "level"), "info"),
+	)
+	require.NoError(
+		t,
+		config.Set(
+			config.Join(config.KeyBase, "logger", "handler", "default", "config", "add_err_verbose"),
+			true,
+		),
+	)
+	require.NoError(
+		t,
+		config.Set(
+			config.Join(config.KeyBase, "logger", "handler", "default", "config", "time_handler"),
+			"millis",
+		),
+	)
+	require.NoError(
+		t,
+		config.Set(
+			config.Join(config.KeyBase, "logger", "handler", "default", "config", "encoder", "spaced"),
+			true,
+		),
+	)
+	require.NoError(t, config.Set(config.Join(config.KeyBase, "remote", "logger_level"), "error"))
+
+	require.NoError(t, initLogger())
+	slog.Error("deprecated keys", slog.Any("error", io.EOF))
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(w.LastLine())), &got))
+	require.Equal(t, "deprecated keys", got["msg"])
+	require.Equal(t, "EOF", got["error"])
+	_, ok := got["errorVerbose"]
+	require.False(t, ok)
 }

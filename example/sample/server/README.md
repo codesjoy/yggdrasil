@@ -116,7 +116,7 @@ yggdrasil:
   logger:
     handler:
       default:
-        type: "console"
+        type: "text"
         config:
           level: "debug"
     writer:

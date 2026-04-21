@@ -166,12 +166,15 @@ yggdrasil:
   logger:
     handler:
       default:
-        type: console
+        type: text
         config:
           level: info
 ```
 
 自定义 `logger.writer` 需要自行保证并发安全。内置 `console` 与 `file` writer 支持并发日志写入。
+
+`logger.handler.default.type: text` 默认使用官方 `slog` `TextHandler`。  
+当前支持的 handler 配置字段：`level`、`add_trace`、`add_source`。
 
 ## 🏗️ 架构设计
 

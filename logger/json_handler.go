@@ -15,105 +15,33 @@
 package logger
 
 import (
-	"context"
+	"fmt"
 	"io"
 	"log/slog"
-	"runtime"
-
-	"github.com/codesjoy/yggdrasil/v2/logger/buffer"
 )
 
 // JSONHandlerConfig is the configuration for JSON handler.
 type JSONHandlerConfig struct {
-	CommonHandlerConfig
-	Encoder   JSONEncoderConfig `mapstructure:"encoder"    yaml:"encoder"    json:"encoder"`
-	AddSource bool              `mapstructure:"add_source" yaml:"add_source" json:"add_source"`
+	Level     slog.Level `mapstructure:"level"      yaml:"level"      json:"level"`
+	AddTrace  bool       `mapstructure:"add_trace"  yaml:"add_trace"  json:"add_trace"`
+	AddSource bool       `mapstructure:"add_source" yaml:"add_source" json:"add_source"`
 
 	Writer io.Writer
 }
 
-type jsonHandler struct {
-	*commonHandler
-	sourceHandle func(*slog.Record, ObjectEncoder)
-}
-
 // NewJSONHandler creates a new JSON handler.
 func NewJSONHandler(cfg *JSONHandlerConfig) (slog.Handler, error) {
-	enc, err := NewJSONEncoder(&cfg.Encoder)
-	if err != nil {
-		return nil, err
+	if cfg == nil {
+		return nil, fmt.Errorf("nil JSONHandlerConfig")
 	}
-	cfg.objEnc = enc
-	cfg.writer = cfg.Writer
-
-	commHandler, err := newCommonHandler(&cfg.CommonHandlerConfig)
-	if err != nil {
-		return nil, err
+	w := cfg.Writer
+	if w == nil {
+		w = emptyWriter{}
 	}
-
-	h := &jsonHandler{
-		commonHandler: commHandler,
-		sourceHandle:  func(*slog.Record, ObjectEncoder) {},
+	opts := &slog.HandlerOptions{
+		AddSource: cfg.AddSource,
+		Level:     cfg.Level,
 	}
-
-	if cfg.AddSource {
-		h.sourceHandle = h.addSourceHandle
-	}
-
-	return h, nil
-}
-
-func (h *jsonHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	clone := *h
-	clone.commonHandler = h.commonHandler.WithAttrs(attrs)
-	return &clone
-}
-
-func (h *jsonHandler) WithGroup(group string) slog.Handler {
-	clone := *h
-	clone.commonHandler = h.commonHandler.WithGroup(group)
-	return &clone
-}
-
-func (h *jsonHandler) Handle(ctx context.Context, r slog.Record) error {
-	objEnc := h.objEnc.Get()
-	defer objEnc.Free()
-	buf := buffer.Get()
-	defer buf.Free()
-	buf.AppendByte('{')
-	objEnc.SetBuffer(buf)
-	objEnc.AddTime(slog.TimeKey, r.Time)
-	objEnc.AddString(slog.LevelKey, r.Level.String())
-	h.sourceHandle(&r, objEnc)
-	objEnc.AddString(slog.MessageKey, r.Message)
-	h.traceHandle(ctx, objEnc)
-	h.appendPreformattedAttrs(objEnc, buf)
-	h.openGroupsFrom(objEnc, h.nOpenGroups)
-	r.Attrs(func(attr slog.Attr) bool {
-		h.encodeSlogAttr(attr, objEnc)
-		return true
-	})
-	objEnc.CloseNamespace(len(h.groups))
-	buf.AppendByte('}')
-	buf.AppendByte('\n')
-	_, err := h.writer.Write(buf.Bytes())
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (h *jsonHandler) addSourceHandle(r *slog.Record, obj ObjectEncoder) {
-	fs := runtime.CallersFrames([]uintptr{r.PC})
-	f, _ := fs.Next()
-	if f.Function != "" {
-		obj.AddString("function", f.Function)
-	}
-	if f.File != "" {
-		obj.AddString("file", f.File)
-	}
-	if f.Line != 0 {
-		obj.AddInt64("line", int64(f.Line))
-	}
+	h := slog.NewJSONHandler(w, opts)
+	return wrapTraceHandler(h, cfg.AddTrace), nil
 }

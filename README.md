@@ -171,12 +171,15 @@ yggdrasil:
   logger:
     handler:
       default:
-        type: console
+        type: text
         config:
           level: info
 ```
 
 Custom `logger.writer` implementations must be concurrency-safe. Built-in `console` and `file` writers are safe for concurrent logging.
+
+`logger.handler.default.type: text` uses the official `slog` `TextHandler` by default.  
+Supported handler config fields: `level`, `add_trace`, `add_source`.
 
 ## 🏗️ Architecture
 
