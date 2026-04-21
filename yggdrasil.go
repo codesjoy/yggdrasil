@@ -322,7 +322,7 @@ func initLogger() error {
 	if err != nil {
 		return err
 	}
-	h, err := handlerBuilder(writerName, vals.Get("config"))
+	h, err := handlerBuilder(writerName, getLoggerHandlerConfigValue(vals))
 	if err != nil {
 		return err
 	}
@@ -337,6 +337,14 @@ func initLogger() error {
 	}
 	remotelog.Init(remoteLoggerLv, h)
 	return nil
+}
+
+func getLoggerHandlerConfigValue(vals config.Values) config.Value {
+	cfg := vals.Get("config")
+	if len(cfg.Map()) != 0 {
+		return cfg
+	}
+	return vals.Get("")
 }
 
 func initGovernor(opts *options) error {

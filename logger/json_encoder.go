@@ -208,22 +208,82 @@ func (enc *jsonEncoder) appendTime(val time.Time) {
 }
 
 func (enc *jsonEncoder) appendAny(val any) error {
+	switch v := val.(type) {
+	case nil:
+		enc.addElementSeparator()
+		enc.buf.AppendString("null")
+		return nil
+	case bool:
+		enc.AppendBool(v)
+		return nil
+	case string:
+		enc.AppendString(v)
+		return nil
+	case int:
+		enc.AppendInt64(int64(v))
+		return nil
+	case int8:
+		enc.AppendInt64(int64(v))
+		return nil
+	case int16:
+		enc.AppendInt64(int64(v))
+		return nil
+	case int32:
+		enc.AppendInt64(int64(v))
+		return nil
+	case int64:
+		enc.AppendInt64(v)
+		return nil
+	case uint:
+		enc.AppendUint64(uint64(v))
+		return nil
+	case uint8:
+		enc.AppendUint64(uint64(v))
+		return nil
+	case uint16:
+		enc.AppendUint64(uint64(v))
+		return nil
+	case uint32:
+		enc.AppendUint64(uint64(v))
+		return nil
+	case uint64:
+		enc.AppendUint64(v)
+		return nil
+	case uintptr:
+		enc.AppendUint64(uint64(v))
+		return nil
+	case float32:
+		enc.AppendFloat64(float64(v))
+		return nil
+	case float64:
+		enc.AppendFloat64(v)
+		return nil
+	case time.Time:
+		enc.appendTime(v)
+		return nil
+	case time.Duration:
+		enc.appendDuration(v)
+		return nil
+	case error:
+		enc.AppendString(v.Error())
+		return nil
+	}
+	return enc.appendAnySlow(val)
+}
+
+func (enc *jsonEncoder) appendAnySlow(val any) error {
 	enc.addElementSeparator()
-	if val == nil {
-		enc.AppendString("null")
-		return nil
-	}
-
-	_, ok := val.(json.Marshaler)
-	if !ok {
-		enc.AppendString(fmt.Sprintf("%v", val))
-		return nil
-	}
-
+	start := enc.buf.Len()
 	e := json.NewEncoder(enc.buf)
 	e.SetEscapeHTML(false)
 	if err := e.Encode(val); err != nil {
+		enc.buf.SetLen(start)
 		return err
+	}
+
+	// json.Encoder.Encode appends a trailing newline; keep log output single-line.
+	if last := enc.buf.Len() - 1; last >= start && enc.buf.Bytes()[last] == '\n' {
+		enc.buf.SetLen(last)
 	}
 	return nil
 }

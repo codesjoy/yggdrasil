@@ -189,6 +189,13 @@ func (h *commonHandler) handleErrorOnlyError(key string, err error, enc ObjectEn
 }
 
 func (h *commonHandler) encodeSlogAttr(attr slog.Attr, objEnc ObjectEncoder) {
+	if attr.Value.Kind() == slog.KindLogValuer {
+		attr.Value = attr.Value.Resolve()
+	}
+	h.encodeResolvedSlogAttr(attr, objEnc)
+}
+
+func (h *commonHandler) encodeResolvedSlogAttr(attr slog.Attr, objEnc ObjectEncoder) {
 	switch attr.Value.Kind() {
 	case slog.KindBool:
 		objEnc.AddBool(attr.Key, attr.Value.Bool())
@@ -205,9 +212,18 @@ func (h *commonHandler) encodeSlogAttr(attr slog.Attr, objEnc ObjectEncoder) {
 	case slog.KindUint64:
 		objEnc.AddUint64(attr.Key, attr.Value.Uint64())
 	case slog.KindGroup:
-		for _, groupAttr := range attr.Value.Group() {
+		group := attr.Value.Group()
+		if attr.Key == "" {
+			for _, groupAttr := range group {
+				h.encodeSlogAttr(groupAttr, objEnc)
+			}
+			return
+		}
+		objEnc.OpenNamespace(attr.Key)
+		for _, groupAttr := range group {
 			h.encodeSlogAttr(groupAttr, objEnc)
 		}
+		objEnc.CloseNamespace(1)
 	case slog.KindAny:
 		a := attr.Value.Any()
 		switch v := a.(type) {
@@ -216,6 +232,11 @@ func (h *commonHandler) encodeSlogAttr(attr slog.Attr, objEnc ObjectEncoder) {
 		default:
 			objEnc.AddAny(attr.Key, v)
 		}
+	case slog.KindLogValuer:
+		// Defensive fallback: resolved above in normal path, but keep behavior
+		// stable if this helper is reused with unresolved values.
+		attr.Value = attr.Value.Resolve()
+		h.encodeResolvedSlogAttr(attr, objEnc)
 	default:
 	}
 }

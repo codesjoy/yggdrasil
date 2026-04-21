@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	"gopkg.in/natefinch/lumberjack.v2"
 
@@ -33,14 +34,19 @@ func init() {
 type WriterBuilder func(name string) (io.Writer, error)
 
 var writerBuilder = make(map[string]WriterBuilder)
+var writerBuilderMu sync.RWMutex
 
 // RegisterWriterBuilder registers a WriterBuilder for the given type.
 func RegisterWriterBuilder(typeName string, f WriterBuilder) {
+	writerBuilderMu.Lock()
+	defer writerBuilderMu.Unlock()
 	writerBuilder[typeName] = f
 }
 
 // GetWriterBuilder returns the WriterBuilder for the given type.
 func GetWriterBuilder(typeName string) (WriterBuilder, error) {
+	writerBuilderMu.RLock()
+	defer writerBuilderMu.RUnlock()
 	f, ok := writerBuilder[typeName]
 	if !ok {
 		return nil, fmt.Errorf("writer builder for type %s not found", typeName)
