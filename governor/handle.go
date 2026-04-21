@@ -16,16 +16,21 @@ package governor
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"runtime/debug"
+	"sync"
 
 	"github.com/codesjoy/yggdrasil/v2/config"
+	"github.com/codesjoy/yggdrasil/v2/config/source/memory"
 )
 
 var (
 	defaultServeMux = http.NewServeMux()
 	routes          []string
+	configPatchMu   sync.Mutex
+	configPatchData = map[string]any{}
 )
 
 // HandleFunc registers a new route with the default ServeMux.
@@ -41,8 +46,8 @@ type ErrResponse struct {
 }
 
 type setConfigReq struct {
-	Keys []string      `json:"keys"`
-	Data []interface{} `json:"data"`
+	Paths [][]string    `json:"paths"`
+	Data  []interface{} `json:"data"`
 }
 
 func respErr(w http.ResponseWriter, code int, err error) {
@@ -75,7 +80,7 @@ func setConfig(w http.ResponseWriter, r *http.Request) {
 		respErr(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := config.SetMulti(cfg.Keys, cfg.Data); err != nil {
+	if err := applyConfigPatch(cfg.Paths, cfg.Data); err != nil {
 		respErr(w, http.StatusBadRequest, err)
 		return
 	}
@@ -83,7 +88,12 @@ func setConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func getConfig(w http.ResponseWriter, r *http.Request) {
-	respSuccess(w, r, json.RawMessage(config.Bytes()))
+	manager := currentManager()
+	if manager == nil {
+		respSuccess(w, r, json.RawMessage([]byte("{}")))
+		return
+	}
+	respSuccess(w, r, json.RawMessage(manager.Bytes()))
 }
 
 func configHandle(w http.ResponseWriter, r *http.Request) {
@@ -103,4 +113,28 @@ func newBuildInfoHandle(info *debug.BuildInfo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		respSuccess(w, r, info)
 	}
+}
+
+func applyConfigPatch(paths [][]string, values []interface{}) error {
+	if len(paths) != len(values) {
+		return errors.New("the quantity of path and value does not match")
+	}
+
+	configPatchMu.Lock()
+	defer configPatchMu.Unlock()
+	for i := range paths {
+		setNestedValue(configPatchData, paths[i], values[i])
+	}
+	manager := currentManager()
+	if manager == nil {
+		return errors.New("config manager is not configured")
+	}
+	return manager.LoadLayer("governor.config_patch", config.PriorityOverride, memory.NewSource("governor.config_patch", configPatchData))
+}
+
+func setNestedValue(dst map[string]any, path []string, val any) {
+	if len(path) == 0 {
+		return
+	}
+	config.SetPath(dst, val, path...)
 }

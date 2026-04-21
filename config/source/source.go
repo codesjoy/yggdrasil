@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package source provides interfaces for loading configuration
+// Package source provides interfaces for loading configuration snapshots.
 package source
 
 import (
@@ -20,138 +20,64 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
-	"sync"
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
 )
 
-// Priority is the priority of the source
-type Priority uint8
-
-const (
-	_ Priority = iota
-	// PriorityMemory is the priority of the memory source
-	PriorityMemory
-	// PriorityFile is the priority of the file source
-	PriorityFile
-	// PriorityRemote is the priority of the remote source
-	PriorityRemote
-	// PriorityEnv is the priority of the env source
-	PriorityEnv
-	// PriorityFlag is the priority of the flag source
-	PriorityFlag
-
-	// PriorityMax is the maximum priority
-	PriorityMax
-)
-
-// Data is the data returned by the source
+// Data is a source snapshot payload.
 type Data interface {
-	Priority() Priority
-	Data() []byte
+	Bytes() []byte
 	Unmarshal(v any) error
 }
 
-// Source is the source from which conf is loaded
+// Source reads configuration data.
 type Source interface {
-	Type() string
+	Kind() string
 	Name() string
 	Read() (Data, error)
-	Changeable() bool
-	Watch() (<-chan Data, error)
 	io.Closer
 }
 
-// Builder creates a source from configuration.
-type Builder func(cfg map[string]any) (Source, error)
-
-var (
-	builders  = map[string]Builder{}
-	builderMu sync.RWMutex
-)
-
-func normalizeTypeName(typeName string) string {
-	return strings.ToLower(strings.TrimSpace(typeName))
+// Watchable is implemented by sources that can stream replacement snapshots.
+type Watchable interface {
+	Watch() (<-chan Data, error)
 }
 
-// RegisterBuilder registers a source builder by type.
-func RegisterBuilder(typeName string, builder Builder) {
-	typeName = normalizeTypeName(typeName)
-	if typeName == "" || builder == nil {
-		return
-	}
-	builderMu.Lock()
-	builders[typeName] = builder
-	builderMu.Unlock()
+type bytesData struct {
+	data   []byte
+	parser Parser
 }
 
-// GetBuilder returns a source builder by type.
-func GetBuilder(typeName string) Builder {
-	typeName = normalizeTypeName(typeName)
-	builderMu.RLock()
-	builder := builders[typeName]
-	builderMu.RUnlock()
-	return builder
+// NewBytesData creates a new raw bytes payload.
+func NewBytesData(data []byte, parser Parser) Data {
+	return &bytesData{data: data, parser: parser}
 }
 
-// New creates a source from a registered builder.
-func New(typeName string, cfg map[string]any) (Source, error) {
-	builder := GetBuilder(typeName)
-	if builder == nil {
-		return nil, fmt.Errorf("source builder for type %q not found", typeName)
-	}
-	if cfg == nil {
-		cfg = map[string]any{}
-	}
-	return builder(cfg)
+func (c *bytesData) Bytes() []byte {
+	return append([]byte(nil), c.data...)
 }
 
-type bytesSourceData struct {
-	priority Priority
-	data     []byte
-	parser   Parser
-}
-
-// NewBytesSourceData creates a new bytes source data
-func NewBytesSourceData(priority Priority, data []byte, parser Parser) Data {
-	return &bytesSourceData{priority: priority, data: data, parser: parser}
-}
-
-func (c *bytesSourceData) Priority() Priority {
-	return c.priority
-}
-
-func (c *bytesSourceData) Data() []byte {
-	return c.data
-}
-
-func (c *bytesSourceData) Unmarshal(v interface{}) error {
+func (c *bytesData) Unmarshal(v any) error {
 	return c.parser(c.data, v)
 }
 
-type mapSourceData struct {
-	priority Priority
-	data     map[string]interface{}
+type mapData struct {
+	data map[string]any
 }
 
-// NewMapSourceData creates a new map source data
-func NewMapSourceData(priority Priority, data map[string]interface{}) Data {
-	return &mapSourceData{priority: priority, data: data}
+// NewMapData creates a new in-memory map payload.
+func NewMapData(data map[string]any) Data {
+	return &mapData{data: data}
 }
 
-func (c *mapSourceData) Priority() Priority {
-	return c.priority
-}
-
-func (c *mapSourceData) Data() []byte {
+func (c *mapData) Bytes() []byte {
 	data, _ := json.Marshal(c.data)
 	return data
 }
 
-func (c *mapSourceData) Unmarshal(v any) error {
+func (c *mapData) Unmarshal(v any) error {
 	config := mapstructure.DecoderConfig{
 		DecodeHook: mapstructure.ComposeDecodeHookFunc(
 			mapstructure.TextUnmarshallerHookFunc(),
@@ -166,10 +92,10 @@ func (c *mapSourceData) Unmarshal(v any) error {
 	return decoder.Decode(c.data)
 }
 
-// Parser is the parser of the source
+// Parser is the parser of the source.
 type Parser func([]byte, any) error
 
-// UnmarshalText implements encoding.TextUnmarshaler
+// UnmarshalText implements encoding.TextUnmarshaler.
 func (p *Parser) UnmarshalText(text []byte) error {
 	if p == nil {
 		return errors.New("can't unmarshal a nil *Parser")
@@ -187,7 +113,7 @@ func (p *Parser) UnmarshalText(text []byte) error {
 	return nil
 }
 
-// ParseParser parses a string to parser
+// ParseParser parses a string to parser.
 func ParseParser(text string) (Parser, error) {
 	var p Parser = func([]byte, any) error { return nil }
 	err := p.UnmarshalText([]byte(text))

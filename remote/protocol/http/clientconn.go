@@ -25,7 +25,6 @@ import (
 	"github.com/codesjoy/pkg/basic/xerror"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
@@ -68,26 +67,20 @@ func newClient(
 		statsHandler = stats.NoOpHandler
 	}
 
-	baseKey := config.Join(config.KeyBase, "remote", "protocol", scheme, "client")
-	globalCfg := &ClientConfig{}
-	if err := config.Get(baseKey).Scan(globalCfg); err != nil {
-		return nil, err
-	}
+	resolved := currentSettings()
+	globalCfg := &resolved.Client
 
 	cfg := &ClientConfig{
 		Timeout:   globalCfg.Timeout,
 		Marshaler: globalCfg.Marshaler,
 	}
 
-	serviceKey := config.Join(baseKey, serviceName)
-	serviceConfig := &ClientConfig{}
-	if err := config.Get(serviceKey).Scan(serviceConfig); err == nil {
-		if serviceConfig.Timeout > 0 {
-			cfg.Timeout = serviceConfig.Timeout
-		}
-		if serviceConfig.Marshaler != nil {
-			cfg.Marshaler = serviceConfig.Marshaler
-		}
+	serviceConfig := resolved.ClientServices[serviceName]
+	if serviceConfig.Timeout > 0 {
+		cfg.Timeout = serviceConfig.Timeout
+	}
+	if serviceConfig.Marshaler != nil {
+		cfg.Marshaler = serviceConfig.Marshaler
 	}
 
 	if cfg.Timeout == 0 {

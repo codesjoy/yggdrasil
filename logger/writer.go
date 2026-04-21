@@ -56,7 +56,11 @@ func GetWriterBuilder(typeName string) (WriterBuilder, error) {
 
 // GetWriter returns the Writer for the given name.
 func GetWriter(name string) (io.Writer, error) {
-	writerType := config.GetString(config.Join("yggdrasil", "logger", "writer", name, "type"))
+	spec := CurrentSettings().Writers[name]
+	writerType := spec.Type
+	if writerType == "" && name == "default" {
+		writerType = "console"
+	}
 	f, err := GetWriterBuilder(writerType)
 	if err != nil {
 		return nil, err
@@ -70,7 +74,8 @@ func GetWriter(name string) (io.Writer, error) {
 
 func newFileWriter(name string) (io.Writer, error) {
 	w := &lumberjack.Logger{}
-	err := config.Get(config.Join(config.KeyBase, "logger", "writer", name)).Scan(w)
+	spec := CurrentSettings().Writers[name]
+	err := config.NewSnapshot(spec.Config).Decode(w)
 	if err != nil {
 		return nil, err
 	}

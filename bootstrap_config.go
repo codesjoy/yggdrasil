@@ -25,30 +25,32 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v2/application"
 	"github.com/codesjoy/yggdrasil/v2/config"
+	configbootstrap "github.com/codesjoy/yggdrasil/v2/config/bootstrap"
 	"github.com/codesjoy/yggdrasil/v2/config/source"
-	filesource "github.com/codesjoy/yggdrasil/v2/config/source/file"
 )
 
 const (
 	bootstrapConfigFlagName    = "yggdrasil-config"
 	defaultBootstrapConfigPath = "./config.yaml"
-	bootstrapSourceKey         = "yggdrasil.config.sources"
 )
 
-type bootstrapSourceSpec struct {
-	Type    string         `mapstructure:"type"`
-	Enabled *bool          `mapstructure:"enabled"`
-	Config  map[string]any `mapstructure:"config"`
-}
-
 func initConfigChain(opts *options) error {
+	if opts.configManager == nil {
+		opts.configManager = config.Default()
+	} else {
+		config.SetDefault(opts.configManager)
+	}
 	if err := loadBootstrapConfigChain(opts); err != nil {
 		return err
 	}
-	opts.initConfigSourceCount = len(opts.configSources)
 	if err := loadProgrammaticConfigSources(opts); err != nil {
 		return err
 	}
+	if err := refreshResolvedSettings(opts); err != nil {
+		return err
+	}
+	opts.initBootstrapPath = opts.bootstrapPath
+	opts.initConfigManager = opts.configManager
 	registerConfigSourceCleanup(opts)
 	return nil
 }
@@ -57,7 +59,7 @@ func loadBootstrapConfigChain(opts *options) error {
 	if opts.bootstrapConfigLoaded {
 		return nil
 	}
-	path, explicit := resolveBootstrapConfigPath()
+	path, explicit := resolveBootstrapConfigPath(opts.bootstrapPath)
 	loaded, err := loadBootstrapConfigFile(opts, path, explicit)
 	if err != nil {
 		return err
@@ -68,12 +70,14 @@ func loadBootstrapConfigChain(opts *options) error {
 	return nil
 }
 
-func resolveBootstrapConfigPath() (string, bool) {
+func resolveBootstrapConfigPath(configuredPath string) (string, bool) {
 	args := os.Args[1:]
 	if path, ok := parseNamedFlagArg(args, bootstrapConfigFlagName); ok {
 		return path, true
 	}
-
+	if configuredPath = strings.TrimSpace(configuredPath); configuredPath != "" {
+		return configuredPath, true
+	}
 	f := flag.CommandLine.Lookup(bootstrapConfigFlagName)
 	if f != nil {
 		if path := strings.TrimSpace(f.Value.String()); path != "" {
@@ -133,68 +137,47 @@ func loadBootstrapConfigFile(opts *options, path string, explicit bool) (bool, e
 		return false, fmt.Errorf("stat bootstrap config file %q: %w", path, err)
 	}
 
-	bootstrapSource := filesource.NewSource(path, false)
-	if err := loadSourcesAndTrack(opts, []source.Source{bootstrapSource}, "bootstrap file"); err != nil {
-		return false, err
-	}
-
-	sources, err := buildBootstrapDeclaredSources()
+	loader := configbootstrap.NewLoader(nil)
+	sources, loaded, err := loader.LoadFile(opts.configManager, path, explicit)
 	if err != nil {
 		return false, err
 	}
-	if err := loadSourcesAndTrack(opts, sources, "bootstrap declared"); err != nil {
-		return false, err
+	for _, item := range sources {
+		addManagedConfigSource(opts, item)
 	}
-	return true, nil
-}
-
-func buildBootstrapDeclaredSources() ([]source.Source, error) {
-	specs := make([]bootstrapSourceSpec, 0)
-	if err := config.Scan(bootstrapSourceKey, &specs); err != nil {
-		return nil, err
-	}
-	sources := make([]source.Source, 0, len(specs))
-	for i, item := range specs {
-		if strings.TrimSpace(item.Type) == "" {
-			return nil, fmt.Errorf("bootstrap source[%d] type is required", i)
-		}
-		if item.Enabled != nil && !*item.Enabled {
-			continue
-		}
-		cfg := item.Config
-		if cfg == nil {
-			cfg = map[string]any{}
-		}
-		ss, err := source.New(item.Type, cfg)
-		if err != nil {
-			return nil, fmt.Errorf("bootstrap source[%d] type=%q: %w", i, item.Type, err)
-		}
-		sources = append(sources, ss)
-	}
-	return sources, nil
+	return loaded, nil
 }
 
 func loadProgrammaticConfigSources(opts *options) error {
-	if opts.loadedConfigSourceCount >= opts.initConfigSourceCount {
-		return nil
-	}
-	pending := opts.configSources[opts.loadedConfigSourceCount:opts.initConfigSourceCount]
-	if err := loadSourcesAndTrack(opts, pending, "option"); err != nil {
-		return err
-	}
-	opts.loadedConfigSourceCount = opts.initConfigSourceCount
-	return nil
+	return loadLayersAndTrack(opts, opts.bootstrapSources, "option")
 }
 
-func loadSourcesAndTrack(opts *options, sources []source.Source, scope string) error {
+func loadSourcesAndTrack(opts *options, sources []source.Source, priority config.Priority, scope string) error {
 	for i, item := range sources {
 		if item == nil {
 			continue
 		}
-		if err := config.LoadSource(item); err != nil {
+		if err := opts.configManager.LoadLayer(fmt.Sprintf("%s:%d", scope, i), priority, item); err != nil {
 			return fmt.Errorf("%s config source[%d]: %w", scope, i, err)
 		}
 		addManagedConfigSource(opts, item)
+	}
+	return nil
+}
+
+func loadLayersAndTrack(opts *options, layers []configLayerSource, scope string) error {
+	for i, item := range layers {
+		if item.Source == nil {
+			continue
+		}
+		name := item.Name
+		if strings.TrimSpace(name) == "" {
+			name = fmt.Sprintf("%s:%d", scope, i)
+		}
+		if err := opts.configManager.LoadLayer(name, item.Priority, item.Source); err != nil {
+			return fmt.Errorf("%s config source[%d]: %w", scope, i, err)
+		}
+		addManagedConfigSource(opts, item.Source)
 	}
 	return nil
 }
@@ -241,8 +224,8 @@ func closeConfigSourcesReverse(sources []source.Source) error {
 			multiErr = errors.Join(
 				multiErr,
 				fmt.Errorf(
-					"close config source type=%q name=%q: %w",
-					item.Type(),
+					"close config source kind=%q name=%q: %w",
+					item.Kind(),
 					item.Name(),
 					err,
 				),
@@ -252,14 +235,12 @@ func closeConfigSourcesReverse(sources []source.Source) error {
 	return multiErr
 }
 
-func dropServeStageConfigSources(opts *options) {
-	if len(opts.configSources) <= opts.initConfigSourceCount {
-		return
+func validateServeStageConfigOptions(opts *options) error {
+	if opts.initConfigManager != nil && opts.configManager != opts.initConfigManager {
+		return errors.New("WithConfigManager cannot be changed in Serve after Init")
 	}
-	ignored := len(opts.configSources) - opts.initConfigSourceCount
-	slog.Warn(
-		"WithConfigSource is ignored in Serve; use Init/Run instead",
-		slog.Int("ignored", ignored),
-	)
-	opts.configSources = opts.configSources[:opts.initConfigSourceCount]
+	if opts.initBootstrapPath != opts.bootstrapPath {
+		return errors.New("WithBootstrapPath cannot be changed in Serve after Init")
+	}
+	return nil
 }

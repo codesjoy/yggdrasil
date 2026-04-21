@@ -18,7 +18,6 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
 )
 
@@ -27,8 +26,10 @@ func init() {
 }
 
 func newMarshalerMiddleware() func(http.Handler) http.Handler {
-	key := config.Join(config.KeyBase, "rest", "marshaler", "support")
-	schemes := config.GetStringSlice(key, []string{"jsonpb"})
+	schemes, _ := currentMarshalerConfig()
+	if len(schemes) == 0 {
+		schemes = []string{"jsonpb"}
+	}
 	mr := buildRegistry(schemes)
 
 	return func(handler http.Handler) http.Handler {
@@ -57,9 +58,7 @@ func NewMarshalerMiddleware(registry marshaler.Registry) func(http.Handler) http
 
 func buildRegistry(schemes []string) marshaler.Registry {
 	mr := marshaler.NewRegistry()
-	cfg := &marshaler.JSONPbConfig{}
-	key := config.Join(config.KeyBase, "rest", "marshaler", "config", "jsonpb")
-	_ = config.Get(key).Scan(cfg) // Ignore error, use default if failed
+	_, cfg := currentMarshalerConfig()
 
 	for _, item := range schemes {
 		var marshalerCfg *marshaler.JSONPbConfig

@@ -18,9 +18,7 @@ package grpc
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
-	"log/slog"
 	"math"
 	"net"
 	"sync"
@@ -31,8 +29,6 @@ import (
 	gkeepalive "google.golang.org/grpc/keepalive"
 	gmetadata "google.golang.org/grpc/metadata"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/internal/remotelog"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
@@ -55,15 +51,15 @@ func init() {
 
 // Config defines the configuration for a client.
 type Config struct {
-	WaitConnTimeout   time.Duration `default:"500ms"`
-	Transport         clientTransportOptions
-	ConnectTimeout    time.Duration `default:"3s"`
-	MaxSendMsgSize    int
-	MaxRecvMsgSize    int
-	Compressor        string
-	BackOffMaxDelay   time.Duration `default:"5s"`
-	MinConnectTimeout time.Duration `default:"1s"`
-	Network           string        `default:"tcp"`
+	WaitConnTimeout   time.Duration          `mapstructure:"wait_conn_timeout" default:"500ms"`
+	Transport         clientTransportOptions `mapstructure:"transport"`
+	ConnectTimeout    time.Duration          `mapstructure:"connect_timeout" default:"3s"`
+	MaxSendMsgSize    int                    `mapstructure:"max_send_msg_size"`
+	MaxRecvMsgSize    int                    `mapstructure:"max_recv_msg_size"`
+	Compressor        string                 `mapstructure:"compressor"`
+	BackOffMaxDelay   time.Duration          `mapstructure:"back_off_max_delay" default:"5s"`
+	MinConnectTimeout time.Duration          `mapstructure:"min_connect_timeout" default:"1s"`
+	Network           string                 `mapstructure:"network" default:"tcp"`
 }
 
 func (cfg *Config) setDefault(serviceName string) {
@@ -105,19 +101,10 @@ func newClient(
 	statsHandler stats.Handler,
 	onStateChange remote.OnStateChange,
 ) (remote.Client, error) {
-	cfg := &Config{}
-	commKey := config.Join(config.KeyBase, "remote", "protocol", "grpc")
-	clientKey := config.Join(
-		config.KeyBase,
-		"client",
-		fmt.Sprintf("{%s}", serviceName),
-		"protocol_config",
-		"grpc",
-	)
-	if err := config.GetMulti(commKey, clientKey).Scan(cfg); err != nil {
-		remotelog.Logger().
-			Error("fault to load client config", slog.String("protocol", "grpc"), slog.Any("error", err))
-		return nil, err
+	resolved := currentSettings()
+	cfg := &resolved.Client
+	if serviceCfg, ok := resolved.ClientServices[serviceName]; ok {
+		cfg = &serviceCfg
 	}
 	cfg.setDefault(serviceName)
 

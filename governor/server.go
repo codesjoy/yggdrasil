@@ -24,7 +24,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
 	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
 )
 
@@ -66,10 +65,7 @@ type Server struct {
 
 // NewServer creates a new governor server
 func NewServer() (*Server, error) {
-	cfg := &Config{}
-	if err := config.Get(config.Join(config.KeyBase, "governor")).Scan(cfg); err != nil {
-		return nil, err
-	}
+	cfg := currentConfig()
 	if err := cfg.SetDefault(); err != nil {
 		return nil, err
 	}
@@ -100,7 +96,7 @@ func NewServer() (*Server, error) {
 			IdleTimeout:       cfg.IdleTimeout,
 		},
 		listener: listener,
-		Config:   cfg,
+		Config:   &cfg,
 		info: ServerInfo{
 			Address: fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
 			Scheme:  "http",

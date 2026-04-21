@@ -32,6 +32,11 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/config"
 )
 
+func loadTestGovernorSettings(t *testing.T) {
+	t.Helper()
+	Configure(Config{Host: "127.0.0.1", Port: 0}, config.Default())
+}
+
 func TestConfig_Address(t *testing.T) {
 	cfg := &Config{
 		Host: "localhost",
@@ -64,20 +69,11 @@ func TestServerInfo(t *testing.T) {
 }
 
 func TestNewServer(t *testing.T) {
-	key := config.Join(config.KeyBase, "governor")
-	// Mock config
-	originalConfig := config.Get(key)
-	defer func() {
-		// Restore original config if needed
-		_ = config.Set(key, originalConfig)
-	}()
-
-	// Set test config
 	testConfig := map[string]interface{}{
 		"host": "127.0.0.1",
 		"port": 0, // Use random port
 	}
-	_ = config.Set(key, testConfig)
+	Configure(Config{Host: testConfig["host"].(string), Port: uint64(testConfig["port"].(int))}, config.Default())
 
 	server, err := NewServer()
 	require.NoError(t, err)
@@ -93,13 +89,11 @@ func TestNewServer(t *testing.T) {
 }
 
 func TestServer_ServeAndStop(t *testing.T) {
-	key := config.Join(config.KeyBase, "governor")
-	// Mock config
 	testConfig := map[string]interface{}{
 		"host": "127.0.0.1",
 		"port": 0, // Use random port
 	}
-	_ = config.Set(key, testConfig)
+	Configure(Config{Host: testConfig["host"].(string), Port: uint64(testConfig["port"].(int))}, config.Default())
 
 	server, err := NewServer()
 	require.NoError(t, err)
@@ -149,7 +143,7 @@ func TestServer_Info(t *testing.T) {
 		"host": "127.0.0.1",
 		"port": 0,
 	}
-	_ = config.Set(config.Join(config.KeyBase, "governor"), testConfig)
+	Configure(Config{Host: testConfig["host"].(string), Port: uint64(testConfig["port"].(int))}, config.Default())
 
 	server, err := NewServer()
 	require.NoError(t, err)
@@ -232,8 +226,9 @@ func TestRespNoContent(t *testing.T) {
 }
 
 func TestSetConfig(t *testing.T) {
+	loadTestGovernorSettings(t)
 	w := httptest.NewRecorder()
-	body := strings.NewReader(`{"keys": ["test.key"], "data": ["test.value"]}`)
+	body := strings.NewReader(`{"paths": [["test","key"]], "data": ["test.value"]}`)
 	r := httptest.NewRequest("POST", "/configs", body)
 
 	setConfig(w, r)
@@ -242,6 +237,7 @@ func TestSetConfig(t *testing.T) {
 }
 
 func TestSetConfig_InvalidJSON(t *testing.T) {
+	loadTestGovernorSettings(t)
 	w := httptest.NewRecorder()
 	body := strings.NewReader(`invalid json`)
 	r := httptest.NewRequest("POST", "/configs", body)
@@ -257,6 +253,7 @@ func TestSetConfig_InvalidJSON(t *testing.T) {
 }
 
 func testGetConfig(t *testing.T) {
+	loadTestGovernorSettings(t)
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/configs", nil)
 
@@ -283,7 +280,7 @@ func TestConfigHandle(t *testing.T) {
 			method: "POST",
 			testFn: func(t *testing.T) {
 				w := httptest.NewRecorder()
-				body := strings.NewReader(`{"keys": ["test.key"], "data": ["test.value"]}`)
+				body := strings.NewReader(`{"paths": [["test","key"]], "data": ["test.value"]}`)
 				r := httptest.NewRequest("POST", "/configs", body)
 
 				configHandle(w, r)
@@ -295,7 +292,7 @@ func TestConfigHandle(t *testing.T) {
 			method: "PUT",
 			testFn: func(t *testing.T) {
 				w := httptest.NewRecorder()
-				body := strings.NewReader(`{"keys": ["test.key"], "data": ["test.value"]}`)
+				body := strings.NewReader(`{"paths": [["test","key"]], "data": ["test.value"]}`)
 				r := httptest.NewRequest("PUT", "/configs", body)
 
 				configHandle(w, r)
@@ -307,6 +304,7 @@ func TestConfigHandle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.method, func(t *testing.T) {
+			loadTestGovernorSettings(t)
 			tt.testFn(t)
 		})
 	}

@@ -17,6 +17,7 @@ package otel
 
 import (
 	"github.com/codesjoy/yggdrasil/v2/config"
+	"github.com/codesjoy/yggdrasil/v2/stats"
 )
 
 // Config is the configuration for the OpenTelemetry provider.
@@ -28,7 +29,6 @@ type Config struct {
 
 func getCfg() *Config {
 	globalCfg := &Config{}
-	key := config.Join(config.KeyBase, "stats", "config", "otel")
-	_ = config.Get(key).Scan(globalCfg)
+	_ = config.NewSnapshot(stats.CurrentSettings().Providers.OTel).Decode(globalCfg)
 	return globalCfg
 }

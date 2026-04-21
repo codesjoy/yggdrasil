@@ -19,8 +19,6 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
-
-	"github.com/codesjoy/yggdrasil/v2/config"
 )
 
 var (
@@ -115,7 +113,7 @@ func (h *handlerChain) HandleChannel(ctx context.Context, cs ChanStats) {
 // GetServerHandler gets the server side stats handler.
 func GetServerHandler() Handler {
 	svrOnce.Do(func() {
-		names := config.Get(config.Join(config.KeyBase, "stats", "server")).String("")
+		names := CurrentSettings().Server
 		h := &handlerChain{handlers: make([]Handler, 0)}
 		for _, name := range strings.Split(names, ",") {
 			if name == "" {
@@ -136,7 +134,7 @@ func GetServerHandler() Handler {
 // GetClientHandler gets the client side stats handler.
 func GetClientHandler() Handler {
 	cliOnce.Do(func() {
-		names := config.Get(config.Join(config.KeyBase, "stats", "client")).String("")
+		names := CurrentSettings().Client
 		h := &handlerChain{handlers: make([]Handler, 0)}
 		for _, name := range strings.Split(names, ",") {
 			if name == "" {

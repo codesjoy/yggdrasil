@@ -16,8 +16,6 @@ package balancer
 
 import (
 	"testing"
-
-	"github.com/codesjoy/yggdrasil/v2/config"
 )
 
 func TestResolveType_WithDefault(t *testing.T) {
@@ -45,10 +43,8 @@ func TestResolveType_WithDefault(t *testing.T) {
 			name:         "configured balancer returns configured type",
 			balancerName: "my-balancer",
 			setupConfig: func() error {
-				return config.Set(
-					config.Join(config.KeyBase, "balancer", "my-balancer", "type"),
-					"weighted",
-				)
+				Configure(map[string]Spec{"my-balancer": {Type: "weighted"}}, nil)
+				return nil
 			},
 			want:    "weighted",
 			wantErr: false,
@@ -57,9 +53,6 @@ func TestResolveType_WithDefault(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Reset config before each test by clearing the specific key
-			_ = config.Set(config.Join(config.KeyBase, "balancer", tt.balancerName, "type"), "")
-
 			if err := tt.setupConfig(); err != nil {
 				t.Fatalf("setupConfig failed: %v", err)
 			}

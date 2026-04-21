@@ -27,6 +27,7 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
+	"github.com/codesjoy/yggdrasil/v2/logger"
 	"github.com/codesjoy/yggdrasil/v2/status"
 	"github.com/codesjoy/yggdrasil/v2/stream"
 )
@@ -50,32 +51,18 @@ type Config struct {
 func initGlobalLogging() {
 	once.Do(func() {
 		cfg := Config{}
-		primaryKey := config.Join(config.KeyBase, "interceptor", "config", typeLogging)
-		fallbackKey := config.Join(config.KeyBase, "interceptor", "config", typeLogger)
-
-		primaryVal := config.Get(primaryKey)
-		fallbackVal := config.Get(fallbackKey)
-
-		useFallback := false
-		if m := primaryVal.Map(nil); len(m) == 0 {
-			if fm := fallbackVal.Map(nil); len(fm) != 0 {
-				useFallback = true
-			}
+		var source any
+		switch {
+		case logger.InterceptorConfig(typeLogging) != nil:
+			source = logger.InterceptorConfig(typeLogging)
+		case logger.InterceptorConfig(typeLogger) != nil:
+			source = logger.InterceptorConfig(typeLogger)
+		default:
+			source = nil
 		}
-		if useFallback {
-			if err := fallbackVal.Scan(&cfg); err != nil {
-				slog.Error(
-					"fault to load logging config",
-					slog.String("type", typeLogger),
-					slog.Any("error", err),
-				)
-				os.Exit(1)
-			}
-		} else {
-			if err := primaryVal.Scan(&cfg); err != nil {
-				slog.Error("fault to load logging config", slog.String("type", typeLogging), slog.Any("error", err))
-				os.Exit(1)
-			}
+		if err := config.NewSnapshot(source).Decode(&cfg); err != nil {
+			slog.Error("fault to load logging config", slog.String("type", typeLogging), slog.Any("error", err))
+			os.Exit(1)
 		}
 		global = &logging{cfg: &cfg}
 	})

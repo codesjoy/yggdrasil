@@ -19,8 +19,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/config/source"
 	"github.com/codesjoy/yggdrasil/v2/governor"
+	"github.com/codesjoy/yggdrasil/v2/internal/settings"
 	"github.com/codesjoy/yggdrasil/v2/registry"
 	"github.com/codesjoy/yggdrasil/v2/server"
 
@@ -30,6 +32,12 @@ import (
 type restServiceDesc struct {
 	ss     interface{}
 	Prefix []string
+}
+
+type configLayerSource struct {
+	Name     string
+	Priority config.Priority
+	Source   source.Source
 }
 
 type options struct {
@@ -45,15 +53,17 @@ type options struct {
 	stopBeforeHook    []func(context.Context) error
 	stopAfterHook     []func(context.Context) error
 	appOpts           []application.Option
-	configSources     []source.Source
-
-	initConfigSourceCount   int
-	loadedConfigSourceCount int
+	configManager     *config.Manager
+	bootstrapPath     string
+	bootstrapSources  []configLayerSource
+	initBootstrapPath string
+	initConfigManager *config.Manager
 
 	managedConfigSources          []source.Source
 	configSourceCleanupRegistered bool
 	bootstrapConfigLoaded         bool
 	managedConfigSourcesClosed    bool
+	resolvedSettings              settings.Resolved
 }
 
 func (opts *options) getAppOpts() []application.Option {
@@ -151,19 +161,38 @@ func WithCleanup(name string, fn func(context.Context) error) Option {
 	}
 }
 
-// WithConfigSource registers configuration sources.
-// Sources are only loaded during Init/Run and are ignored in Serve.
-func WithConfigSource(sources ...source.Source) Option {
+// WithConfigManager replaces the default framework config manager.
+func WithConfigManager(manager *config.Manager) Option {
 	return func(opts *options) error {
-		for _, item := range sources {
-			if item == nil {
-				continue
-			}
-			if hasSource(opts.configSources, item) {
-				continue
-			}
-			opts.configSources = append(opts.configSources, item)
+		opts.configManager = manager
+		return nil
+	}
+}
+
+// WithBootstrapPath overrides the bootstrap config file path.
+func WithBootstrapPath(path string) Option {
+	return func(opts *options) error {
+		opts.bootstrapPath = path
+		return nil
+	}
+}
+
+// WithBootstrapSource registers an explicit configuration source loaded after the bootstrap file.
+func WithBootstrapSource(name string, priority config.Priority, src source.Source) Option {
+	return func(opts *options) error {
+		if src == nil {
+			return nil
 		}
+		for _, item := range opts.bootstrapSources {
+			if item.Source == src {
+				return nil
+			}
+		}
+		opts.bootstrapSources = append(opts.bootstrapSources, configLayerSource{
+			Name:     name,
+			Priority: priority,
+			Source:   src,
+		})
 		return nil
 	}
 }

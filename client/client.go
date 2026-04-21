@@ -18,7 +18,6 @@ package client
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"slices"
@@ -31,7 +30,6 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/code"
 
 	"github.com/codesjoy/yggdrasil/v2/balancer"
-	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
 	"github.com/codesjoy/yggdrasil/v2/internal/backoff"
 	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
@@ -134,12 +132,11 @@ type client struct {
 
 // NewClient creates a new client.
 func NewClient(ctx context.Context, appName string) (_ Client, err error) {
-	cfgKey := config.Join(config.KeyBase, "client", fmt.Sprintf("{%s}", appName))
-	cfg := config.ValueToValues(config.Get(cfgKey))
+	cfg := CurrentConfig(appName)
 	statsHandler := stats.GetClientHandler()
 	cli := &client{
 		appName:       appName,
-		fastFail:      cfg.Get("fastFail").Bool(false),
+		fastFail:      cfg.FastFail,
 		statsHandler:  statsHandler,
 		stateChange:   make(chan resolver.State, 1),
 		resolvedEvent: xsync.NewEvent(),
@@ -173,11 +170,7 @@ func NewClient(ctx context.Context, appName string) (_ Client, err error) {
 		}
 	}()
 
-	boCfg := backoff.Config{}
-	if err = cfg.Get(config.Join("backoff")).Scan(&boCfg); err != nil {
-		return nil, err
-	}
-	cli.streamBackoff = backoff.Exponential{Config: boCfg}
+	cli.streamBackoff = backoff.Exponential{Config: cfg.Backoff}
 	// Initialize pickerSnap to avoid nil pointer panic on first updatePicker call
 	cli.pickerSnap.Store(&pickerSnap{
 		picker:     nil,
@@ -300,28 +293,26 @@ func (c *client) updateConnectivityState(state remote.State) {
 	c.channelState.Store(int32(state))
 }
 
-func (c *client) updateStaticState(cfg config.Values) error {
-	var endpoints []resolver.BaseEndpoint
-	if err := cfg.Get(config.Join("remote", "endpoints")).Scan(&endpoints); err != nil {
-		return err
-	}
-	if len(endpoints) == 0 {
+func (c *client) updateStaticState(cfg ServiceConfig) error {
+	if len(cfg.Remote.Endpoints) == 0 {
 		return errors.New("no endpoints provided")
 	}
-	attrs := cfg.Get(config.Join("remote", "attributes")).Map(map[string]any{})
 	state := resolver.BaseState{
-		Attributes: attrs,
-		Endpoints:  make([]resolver.Endpoint, 0, len(endpoints)),
+		Attributes: cfg.Remote.Attributes,
+		Endpoints:  make([]resolver.Endpoint, 0, len(cfg.Remote.Endpoints)),
 	}
-	for _, endpoint := range endpoints {
+	for _, endpoint := range cfg.Remote.Endpoints {
 		state.Endpoints = append(state.Endpoints, endpoint)
 	}
 	c.updateState(state)
 	return nil
 }
 
-func (c *client) initResolverAndBalancer(cfg config.Values) error {
-	balancerName := cfg.Get("balancer").String("default")
+func (c *client) initResolverAndBalancer(cfg ServiceConfig) error {
+	balancerName := cfg.Balancer
+	if balancerName == "" {
+		balancerName = "default"
+	}
 	b, err := balancer.New(
 		c.appName,
 		balancerName,
@@ -335,7 +326,7 @@ func (c *client) initResolverAndBalancer(cfg config.Values) error {
 		return err
 	}
 	c.balancer = b
-	resolverName := cfg.Get("resolver").String("")
+	resolverName := cfg.Resolver
 	if resolverName != "" {
 		r, err := resolver.Get(resolverName)
 		if err != nil {
@@ -427,53 +418,18 @@ func (c *client) invoke(ctx context.Context, method string, args, reply interfac
 }
 
 func (c *client) initInterceptor() {
-	serviceNameKey := fmt.Sprintf("{%s}", c.appName)
-
-	unaryNames := append(
-		loadInterceptorNames(config.Join(config.KeyBase, "client", "interceptor", "unary")),
-		loadInterceptorNames(
-			config.Join(config.KeyBase, "client", serviceNameKey, "interceptor", "unary"),
-		)...,
-	)
+	cfg := CurrentConfig(c.appName)
+	unaryNames := append([]string(nil), cfg.Interceptors.Unary...)
 	unaryNames = internalutils.DedupStableStrings(
 		slices.DeleteFunc(unaryNames, func(s string) bool { return s == "" }),
 	)
 	c.unaryInterceptor = interceptor.ChainUnaryClientInterceptors(c.appName, unaryNames)
 
-	streamNames := append(
-		loadInterceptorNames(config.Join(config.KeyBase, "client", "interceptor", "stream")),
-		loadInterceptorNames(
-			config.Join(config.KeyBase, "client", serviceNameKey, "interceptor", "stream"),
-		)...,
-	)
+	streamNames := append([]string(nil), cfg.Interceptors.Stream...)
 	streamNames = internalutils.DedupStableStrings(
 		slices.DeleteFunc(streamNames, func(s string) bool { return s == "" }),
 	)
 	c.streamInterceptor = interceptor.ChainStreamClientInterceptors(c.appName, streamNames)
-}
-
-func loadInterceptorNames(key string) []string {
-	val := config.Get(key)
-	names := val.StringSlice()
-
-	var raw any
-	_ = val.Scan(&raw)
-	switch v := raw.(type) {
-	case nil, []string, []interface{}:
-		return names
-	case string:
-		if len(v) > 0 {
-			slog.Warn("interceptor config value is string, fallback parser is applied", slog.String("key", key))
-		}
-		return names
-	default:
-		slog.Warn(
-			"interceptor config value is not list-like, fallback to empty list",
-			slog.String("key", key),
-			slog.String("type", fmt.Sprintf("%T", v)),
-		)
-		return names
-	}
 }
 
 // waitForResolved blocks until the resolver provides addresses or the

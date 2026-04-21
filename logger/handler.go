@@ -29,7 +29,7 @@ func init() {
 }
 
 // HandlerBuilder is the interface for building a slog.Handler.
-type HandlerBuilder func(writer string, val config.Value) (slog.Handler, error)
+type HandlerBuilder func(writer string, cfg map[string]any) (slog.Handler, error)
 
 var handlerBuilder = make(map[string]HandlerBuilder)
 var handlerBuilderMu sync.RWMutex
@@ -55,9 +55,9 @@ func GetHandlerBuilder(typeName string) (HandlerBuilder, error) {
 	return f, nil
 }
 
-func newJSONHandler(writer string, val config.Value) (slog.Handler, error) {
+func newJSONHandler(writer string, cfgMap map[string]any) (slog.Handler, error) {
 	cfg := &JSONHandlerConfig{}
-	if err := val.Scan(cfg); err != nil {
+	if err := config.NewSnapshot(cfgMap).Decode(cfg); err != nil {
 		return nil, err
 	}
 	w, err := GetWriter(writer)
@@ -68,9 +68,9 @@ func newJSONHandler(writer string, val config.Value) (slog.Handler, error) {
 	return NewJSONHandler(cfg)
 }
 
-func newConsoleHandler(writer string, val config.Value) (slog.Handler, error) {
+func newConsoleHandler(writer string, cfgMap map[string]any) (slog.Handler, error) {
 	cfg := &ConsoleHandlerConfig{}
-	if err := val.Scan(cfg); err != nil {
+	if err := config.NewSnapshot(cfgMap).Decode(cfg); err != nil {
 		return nil, err
 	}
 	w, err := GetWriter(writer)

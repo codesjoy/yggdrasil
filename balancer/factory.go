@@ -16,13 +16,46 @@ package balancer
 
 import (
 	"fmt"
-
-	"github.com/codesjoy/yggdrasil/v2/config"
+	"sync"
 )
+
+// Spec describes a named balancer configuration envelope.
+type Spec struct {
+	Type   string         `mapstructure:"type"`
+	Config map[string]any `mapstructure:"config"`
+}
+
+type configStore struct {
+	defaults map[string]Spec
+	services map[string]map[string]Spec
+}
+
+var (
+	configMu sync.RWMutex
+	configV  = configStore{
+		defaults: map[string]Spec{},
+		services: map[string]map[string]Spec{},
+	}
+)
+
+// Configure replaces the configured balancer specs.
+func Configure(defaults map[string]Spec, services map[string]map[string]Spec) {
+	configMu.Lock()
+	defer configMu.Unlock()
+	if defaults == nil {
+		defaults = map[string]Spec{}
+	}
+	if services == nil {
+		services = map[string]map[string]Spec{}
+	}
+	configV = configStore{defaults: defaults, services: services}
+}
 
 // ResolveType resolves the balancer type.
 func ResolveType(balancerName string) (string, error) {
-	typeName := config.Get(config.Join(config.KeyBase, "balancer", balancerName, "type")).String("")
+	configMu.RLock()
+	typeName := configV.defaults[balancerName].Type
+	configMu.RUnlock()
 
 	// Fallback to default if not configured
 	if typeName == "" {
@@ -36,13 +69,21 @@ func ResolveType(balancerName string) (string, error) {
 }
 
 // LoadConfig loads the balancer config.
-func LoadConfig(serviceName, balancerName string) config.Value {
-	serviceKey := fmt.Sprintf("{%s}", serviceName)
-	return config.GetMulti(
-		config.Join(config.KeyBase, "balancer", "config"),
-		config.Join(config.KeyBase, "balancer", balancerName, "config"),
-		config.Join(config.KeyBase, "balancer", serviceKey, balancerName, "config"),
-	)
+func LoadConfig(serviceName, balancerName string) map[string]any {
+	configMu.RLock()
+	merged := map[string]any{}
+	for key, value := range configV.defaults[balancerName].Config {
+		merged[key] = value
+	}
+	override := map[string]any{}
+	if svc, ok := configV.services[serviceName]; ok {
+		override = svc[balancerName].Config
+	}
+	configMu.RUnlock()
+	for key, value := range override {
+		merged[key] = value
+	}
+	return merged
 }
 
 // New creates a new balancer.

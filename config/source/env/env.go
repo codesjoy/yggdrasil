@@ -22,7 +22,6 @@ import (
 	"strings"
 
 	"github.com/codesjoy/pkg/utils/xmap"
-	"github.com/mitchellh/mapstructure"
 
 	"github.com/codesjoy/yggdrasil/v2/config/internal"
 	"github.com/codesjoy/yggdrasil/v2/config/source"
@@ -37,50 +36,23 @@ type env struct {
 	delimiter        string
 }
 
-type builderConfig struct {
-	Prefixes         []string `mapstructure:"prefixes"`
-	StrippedPrefixes []string `mapstructure:"stripped_prefixes"`
-	Delimiter        string   `mapstructure:"delimiter"`
-	ParseArray       bool     `mapstructure:"parse_array"`
-	ArraySep         string   `mapstructure:"array_sep"`
-	Name             string   `mapstructure:"name"`
-}
-
-func init() {
-	source.RegisterBuilder("env", func(cfg map[string]any) (source.Source, error) {
-		buildCfg := &builderConfig{}
-		if err := mapstructure.Decode(cfg, buildCfg); err != nil {
-			return nil, err
-		}
-		opts := make([]Option, 0, 3)
-		if buildCfg.Delimiter != "" {
-			opts = append(opts, SetKeyDelimiter(buildCfg.Delimiter))
-		}
-		if buildCfg.ParseArray {
-			opts = append(opts, WithParseArray(buildCfg.ArraySep))
-		}
-		if buildCfg.Name != "" {
-			opts = append(opts, WithName(buildCfg.Name))
-		}
-		return NewSource(buildCfg.Prefixes, buildCfg.StrippedPrefixes, opts...), nil
-	})
-}
-
-func (e *env) parseValue(value string) interface{} {
+func (e *env) parseValue(value string) any {
 	if intValue, err := strconv.Atoi(value); err == nil {
 		return intValue
-	} else if boolValue, err := strconv.ParseBool(value); err == nil {
+	}
+	if boolValue, err := strconv.ParseBool(value); err == nil {
 		return boolValue
-	} else if floatValue, err := strconv.ParseFloat(value, 64); err == nil {
+	}
+	if floatValue, err := strconv.ParseFloat(value, 64); err == nil {
 		return floatValue
 	}
 	return value
 }
 
 func (e *env) Read() (source.Data, error) {
-	result := make(map[string]interface{})
-	for _, env := range os.Environ() {
-		pair := strings.SplitN(env, "=", 2)
+	result := make(map[string]any)
+	for _, envVar := range os.Environ() {
+		pair := strings.SplitN(envVar, "=", 2)
 		value := pair[1]
 		key := strings.ToLower(pair[0])
 		if len(e.prefixes) > 0 || len(e.strippedPrefixes) > 0 {
@@ -98,13 +70,13 @@ func (e *env) Read() (source.Data, error) {
 		}
 		keys := strings.Split(key, e.delimiter)
 		slices.Reverse(keys)
-		tmp := make(map[string]interface{})
+		tmp := make(map[string]any)
 		for i, k := range keys {
 			if i == 0 {
 				if e.parseArray {
 					values := strings.Split(value, e.arraySep)
 					if len(values) > 1 {
-						tmpVal := make([]interface{}, len(values))
+						tmpVal := make([]any, len(values))
 						for j, item := range values {
 							tmpVal[j] = e.parseValue(item)
 						}
@@ -115,14 +87,11 @@ func (e *env) Read() (source.Data, error) {
 				tmp[k] = e.parseValue(value)
 				continue
 			}
-			tmp = map[string]interface{}{k: tmp}
+			tmp = map[string]any{k: tmp}
 		}
-
 		xmap.MergeStringMap(result, tmp)
 	}
-
-	cs := source.NewMapSourceData(source.PriorityEnv, result)
-	return cs, nil
+	return source.NewMapData(result), nil
 }
 
 func (e *env) matchPrefix(pre []string, s string) (string, bool) {
@@ -131,23 +100,14 @@ func (e *env) matchPrefix(pre []string, s string) (string, bool) {
 			return p, true
 		}
 	}
-
 	return "", false
-}
-
-func (e *env) Changeable() bool {
-	return false
-}
-
-func (e *env) Watch() (<-chan source.Data, error) {
-	return nil, nil
 }
 
 func (e *env) Name() string {
 	return e.name
 }
 
-func (e *env) Type() string {
+func (e *env) Kind() string {
 	return "env"
 }
 
@@ -160,7 +120,6 @@ func NewSource(pre, sp []string, opts ...Option) source.Source {
 	for i, item := range pre {
 		pre[i] = strings.ToLower(item)
 	}
-
 	for i, item := range sp {
 		sp[i] = strings.ToLower(item)
 	}

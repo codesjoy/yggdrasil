@@ -19,6 +19,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/codesjoy/yggdrasil/v2"
@@ -60,7 +61,7 @@ func main() {
 	}
 
 	appConfig := &AppConfig{}
-	if err := config.Get("app").Scan(appConfig); err != nil {
+	if err := config.Default().Section("app").Decode(appConfig); err != nil {
 		slog.Error("failed to scan config", slog.Any("error", err))
 		os.Exit(1)
 	}
@@ -85,12 +86,13 @@ func main() {
 }
 
 func loadConfigSources() error {
-	if err := config.LoadSource(file.NewSource("config.yaml", false)); err != nil {
+	manager := config.Default()
+	if err := manager.LoadLayer("example:file", config.PriorityFile, file.NewSource("config.yaml", false)); err != nil {
 		return err
 	}
 	slog.Info("loaded config from file")
 
-	if err := config.LoadSource(env.NewSource([]string{"APP_"}, []string{"_"})); err != nil {
+	if err := manager.LoadLayer("example:env", config.PriorityEnv, env.NewSource([]string{"APP_"}, []string{"_"})); err != nil {
 		return err
 	}
 	slog.Info("loaded config from env")
@@ -140,18 +142,29 @@ func validateConfig(cfg *AppConfig) error {
 }
 
 func getConfigValue(key string) string {
-	value := config.Get("app." + key)
-	return value.String()
+	var value string
+	_ = config.Default().Section(append([]string{"app"}, strings.Split(key, ".")...)...).Decode(&value)
+	return value
 }
 
 func getServerHost() string {
-	return config.GetString("app.server.host", "localhost")
+	var host string
+	if err := config.Default().Section("app", "server", "host").Decode(&host); err != nil || host == "" {
+		return "localhost"
+	}
+	return host
 }
 
 func getServerPort() int {
-	return config.GetInt("app.server.port", 8080)
+	var port int
+	if err := config.Default().Section("app", "server", "port").Decode(&port); err != nil || port == 0 {
+		return 8080
+	}
+	return port
 }
 
 func isCacheEnabled() bool {
-	return config.GetBool("app.cache.enabled", false)
+	var enabled bool
+	_ = config.Default().Section("app", "cache", "enabled").Decode(&enabled)
+	return enabled
 }

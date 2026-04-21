@@ -32,7 +32,6 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
 	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
@@ -58,6 +57,12 @@ type Config struct {
 		Web []string `mapstructure:"web"`
 		All []string `mapstructure:"all"`
 	} `mapstructure:"middleware"`
+	Marshaler struct {
+		Support []string `mapstructure:"support"`
+		Config  struct {
+			JSONPB *marshaler.JSONPbConfig `mapstructure:"jsonpb"`
+		} `mapstructure:"config"`
+	} `mapstructure:"marshaler"`
 }
 
 type serverInfo struct {
@@ -108,9 +113,9 @@ func WithMarshalerRegistry(registry marshaler.Registry) Option {
 
 // NewServer creates a new ServeMux.
 func NewServer(opts ...Option) (Server, error) {
-	cfg := &Config{}
-	if err := config.Get(config.Join(config.KeyBase, "rest")).Scan(cfg); err != nil {
-		return nil, err
+	cfg := CurrentConfig()
+	if cfg == nil {
+		cfg = &Config{}
 	}
 
 	host, err := internalutils.NormalizeListenHost(cfg.Host)

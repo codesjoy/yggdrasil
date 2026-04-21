@@ -18,8 +18,6 @@ package resolver
 import (
 	"fmt"
 	"sync"
-
-	"github.com/codesjoy/yggdrasil/v2/config"
 )
 
 // BaseEndpoint is the base endpoint.
@@ -116,10 +114,17 @@ const (
 // Builder is a function that creates a resolver.
 type Builder func(name string) (Resolver, error)
 
+// Spec describes a resolver extension envelope.
+type Spec struct {
+	Type   string         `mapstructure:"type"`
+	Config map[string]any `mapstructure:"config"`
+}
+
 var (
 	resolver = map[string]Resolver{}
 	builder  = map[string]Builder{}
 	mu       sync.RWMutex
+	specs    = map[string]Spec{}
 )
 
 // RegisterBuilder registers a resolver builder.
@@ -127,6 +132,32 @@ func RegisterBuilder(typeName string, f func(string) (Resolver, error)) {
 	mu.Lock()
 	defer mu.Unlock()
 	builder[typeName] = f
+}
+
+// HasBuilder reports whether a resolver builder exists.
+func HasBuilder(typeName string) bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	_, ok := builder[typeName]
+	return ok
+}
+
+// Configure replaces the configured resolver specs.
+func Configure(next map[string]Spec) {
+	mu.Lock()
+	defer mu.Unlock()
+	if next == nil {
+		next = map[string]Spec{}
+	}
+	specs = next
+	resolver = map[string]Resolver{}
+}
+
+// CurrentSpec returns the configured resolver spec by name.
+func CurrentSpec(name string) Spec {
+	mu.RLock()
+	defer mu.RUnlock()
+	return specs[name]
 }
 
 // Get returns the resolver by name.
@@ -142,7 +173,8 @@ func Get(name string) (Resolver, error) {
 	if r, ok := resolver[name]; ok {
 		return r, nil
 	}
-	typeName := config.Get(config.Join(config.KeyBase, "resolver", name, "type")).String("")
+	spec := specs[name]
+	typeName := spec.Type
 
 	// Handle "default" resolver without configuration
 	if typeName == "" {

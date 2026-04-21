@@ -24,7 +24,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/remote/credentials"
 )
 
@@ -88,26 +87,7 @@ func newCredentials(serviceName string, client bool) credentials.TransportCreden
 }
 
 func loadBuilderConfig(serviceName string) builderConfig {
-	keyGlobal := config.Join(config.KeyBase, "remote", "credentials", name)
-	var global builderConfig
-	if err := config.Get(keyGlobal).Scan(&global); err != nil {
-		slog.Warn(
-			"failed to scan tls global config",
-			slog.Any("error", err),
-			slog.String("key", keyGlobal),
-		)
-	}
-	if serviceName == "" {
-		return global
-	}
-
-	keySvc := config.Join(keyGlobal, "{"+serviceName+"}")
-	var svc builderConfig
-	if err := config.Get(keySvc).Scan(&svc); err != nil {
-		return global
-	}
-	mergeBuilderConfig(&global, svc)
-	return global
+	return currentBuilderConfig(serviceName)
 }
 
 func mergeBuilderConfig(dst *builderConfig, src builderConfig) {

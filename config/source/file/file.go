@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package file provides functionality for reading configuration from a file
+// Package file provides functionality for reading configuration from a file.
 package file
 
 import (
@@ -31,7 +31,6 @@ import (
 
 	"github.com/codesjoy/pkg/utils/xgo"
 	"github.com/fsnotify/fsnotify"
-	"github.com/mitchellh/mapstructure"
 	"github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
 
@@ -53,32 +52,6 @@ type file struct {
 	fw      *fsnotify.Watcher
 }
 
-type builderConfig struct {
-	Path   string `mapstructure:"path"`
-	Watch  bool   `mapstructure:"watch"`
-	Parser string `mapstructure:"parser"`
-}
-
-func init() {
-	source.RegisterBuilder("file", func(cfg map[string]any) (source.Source, error) {
-		buildCfg := &builderConfig{}
-		if err := mapstructure.Decode(cfg, buildCfg); err != nil {
-			return nil, err
-		}
-		if strings.TrimSpace(buildCfg.Path) == "" {
-			return nil, errors.New("file source path is required")
-		}
-		if strings.TrimSpace(buildCfg.Parser) == "" {
-			return NewSource(buildCfg.Path, buildCfg.Watch), nil
-		}
-		parser, err := source.ParseParser(buildCfg.Parser)
-		if err != nil {
-			return nil, err
-		}
-		return NewSource(buildCfg.Path, buildCfg.Watch, parser), nil
-	})
-}
-
 func (f *file) Read() (source.Data, error) {
 	fh, err := os.Open(f.path)
 	if err != nil {
@@ -98,14 +71,13 @@ func (f *file) Read() (source.Data, error) {
 		if err != nil {
 			return nil, err
 		}
-		return source.NewMapSourceData(source.PriorityFile, parsed), nil
+		return source.NewMapData(parsed), nil
 	}
 	b, err = source.ExpandEnvPlaceholders(fmt.Sprintf("file %q", f.path), b)
 	if err != nil {
 		return nil, err
 	}
-	cs := source.NewBytesSourceData(source.PriorityFile, b, f.parser)
-	return cs, nil
+	return source.NewBytesData(b, f.parser), nil
 }
 
 func isStructuredTextParser(parser source.Parser) bool {
@@ -133,25 +105,24 @@ func expandStringValues(scope string, value map[string]any) (map[string]any, err
 }
 
 func (f *file) Name() string {
-	return filepath.Base(f.path)
+	return f.path
 }
 
-func (f *file) Type() string {
+func (f *file) Kind() string {
 	return "file"
-}
-
-func (f *file) Changeable() bool {
-	return f.enableWatcher
 }
 
 func (f *file) Watch() (<-chan source.Data, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if !f.enableWatcher {
+		return nil, nil
+	}
 	if f.stopped {
-		return nil, fmt.Errorf("the file source is stopped")
+		return nil, errors.New("the file source is stopped")
 	}
 	if f.watched {
-		return nil, fmt.Errorf("file watcher is already enabled")
+		return nil, errors.New("file watcher is already enabled")
 	}
 	f.watched = true
 	fw, err := fsnotify.NewWatcher()
@@ -162,9 +133,7 @@ func (f *file) Watch() (<-chan source.Data, error) {
 	f.fw = fw
 	change := make(chan source.Data, 1)
 	xgo.Go(func() {
-		defer func() {
-			close(change)
-		}()
+		defer close(change)
 		for {
 			chg, err := f.watch()
 			if err != nil {
@@ -189,11 +158,9 @@ func (f *file) watch() (source.Data, error) {
 		return nil, errSourceClosed
 	default:
 	}
-	// try to get the event
 	select {
 	case event := <-f.fw.Events:
 		if event.Op == fsnotify.Rename {
-			// check existence of file, and add watch again
 			_, err := os.Stat(event.Name)
 			if err == nil || !errors.Is(err, os.ErrNotExist) {
 				if err = f.fw.Add(f.path); err != nil {
@@ -232,11 +199,7 @@ func (f *file) watch() (source.Data, error) {
 		if err != nil {
 			return nil, err
 		}
-		c, err := f.Read()
-		if err != nil {
-			return nil, err
-		}
-		return c, nil
+		return f.Read()
 	case err := <-f.fw.Errors:
 		return nil, err
 	case <-f.exit:
@@ -255,7 +218,7 @@ func (f *file) Close() error {
 	return nil
 }
 
-// NewSource returns a new file source
+// NewSource returns a new file source.
 func NewSource(path string, watchable bool, parser ...source.Parser) source.Source {
 	var p source.Parser
 	if len(parser) > 0 {

@@ -70,9 +70,9 @@ func (m *multiRegistry) Deregister(ctx context.Context, inst Instance) error {
 	return multiErr
 }
 
-func newMultiRegistry(cfgVal config.Value) (Registry, error) {
+func newMultiRegistry(cfgVal map[string]any) (Registry, error) {
 	var cfg multiRegistryConfig
-	if err := cfgVal.Scan(&cfg); err != nil {
+	if err := config.NewSnapshot(cfgVal).Decode(&cfg); err != nil {
 		return nil, err
 	}
 
@@ -81,18 +81,11 @@ func newMultiRegistry(cfgVal config.Value) (Registry, error) {
 		if item.Type == "" {
 			return nil, errors.New("multi_registry: empty child type")
 		}
-		childCfgVal := valueFromMap(item.Config)
-		r, err := New(item.Type, childCfgVal)
+		r, err := New(item.Type, item.Config)
 		if err != nil {
 			return nil, err
 		}
 		registries = append(registries, r)
 	}
 	return &multiRegistry{failFast: cfg.FailFast, registries: registries}, nil
-}
-
-func valueFromMap(m map[string]any) config.Value {
-	c := config.NewConfig(".")
-	_ = c.Set("x", m)
-	return c.Get("x")
 }

@@ -391,15 +391,15 @@ func addrString(addr net.Addr) string {
 }
 
 type clientTransportOptions struct {
-	UserAgent             string
-	CredsProto            string
-	Authority             string
-	KeepaliveParams       gkeepalive.ClientParameters
-	InitialWindowSize     int32
-	InitialConnWindowSize int32
-	WriteBufferSize       int
-	ReadBufferSize        int
-	MaxHeaderListSize     *uint32
+	UserAgent             string                      `mapstructure:"user_agent"`
+	CredsProto            string                      `mapstructure:"creds_proto"`
+	Authority             string                      `mapstructure:"authority"`
+	KeepaliveParams       gkeepalive.ClientParameters `mapstructure:"keepalive_params"`
+	InitialWindowSize     int32                       `mapstructure:"initial_window_size"`
+	InitialConnWindowSize int32                       `mapstructure:"initial_conn_window_size"`
+	WriteBufferSize       int                         `mapstructure:"write_buffer_size"`
+	ReadBufferSize        int                         `mapstructure:"read_buffer_size"`
+	MaxHeaderListSize     *uint32                     `mapstructure:"max_header_list_size"`
 }
 
 func buildIncomingContext(ctx context.Context) context.Context {

@@ -29,7 +29,6 @@ import (
 	"github.com/codesjoy/pkg/basic/xerror"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/governor"
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
 	"github.com/codesjoy/yggdrasil/v2/internal/constant"
@@ -95,13 +94,14 @@ type server struct {
 
 // NewServer creates a new server.
 func NewServer() (Server, error) {
+	cfg := CurrentSettings()
 	svr = &server{
 		services:       map[string]*ServiceInfo{},
 		servicesDesc:   map[string][]methodInfo{},
 		restRouterDesc: []restRouterInfo{},
 		stats:          stats.GetServerHandler(),
 	}
-	if config.GetBool(config.Join(config.KeyBase, "rest", "enable"), false) {
+	if cfg.RestEnabled {
 		svr.restEnable = true
 		var err error
 		svr.restSvr, err = rest.NewServer()
@@ -377,42 +377,19 @@ func (s *server) Endpoints() []Endpoint {
 }
 
 func (s *server) initInterceptor() {
-	unaryNames := loadInterceptorNames(config.Join(config.KeyBase, "interceptor", "unary_server"))
+	cfg := CurrentSettings()
+	unaryNames := append([]string(nil), cfg.Interceptors.Unary...)
 	s.unaryInterceptor = interceptor.ChainUnaryServerInterceptors(
 		internalutils.DedupStableStrings(unaryNames),
 	)
-	streamNames := loadInterceptorNames(config.Join(config.KeyBase, "interceptor", "stream_server"))
+	streamNames := append([]string(nil), cfg.Interceptors.Stream...)
 	s.streamInterceptor = interceptor.ChainStreamServerInterceptors(
 		internalutils.DedupStableStrings(streamNames),
 	)
 }
 
-func loadInterceptorNames(key string) []string {
-	val := config.Get(key)
-	names := val.StringSlice()
-
-	var raw any
-	_ = val.Scan(&raw)
-	switch v := raw.(type) {
-	case nil, []string, []interface{}:
-		return names
-	case string:
-		if len(v) > 0 {
-			slog.Warn("interceptor config value is string, fallback parser is applied", slog.String("key", key))
-		}
-		return names
-	default:
-		slog.Warn(
-			"interceptor config value is not list-like, fallback to empty list",
-			slog.String("key", key),
-			slog.String("type", fmt.Sprintf("%T", v)),
-		)
-		return names
-	}
-}
-
 func (s *server) initRemoteServer() error {
-	protocols := config.Get(config.Join(config.KeyBase, "server", "protocol")).StringSlice()
+	protocols := CurrentSettings().Transports
 	if len(protocols) == 0 {
 		return nil
 	}

@@ -27,7 +27,6 @@ import (
 	gcredentials "google.golang.org/grpc/credentials"
 	gkeepalive "google.golang.org/grpc/keepalive"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
@@ -44,24 +43,24 @@ const (
 )
 
 type serverOptions struct {
-	Network               string
-	Address               string
-	CredsProto            string
-	CodeProto             string
-	MaxConcurrentStreams  uint32
-	MaxReceiveMessageSize int
-	MaxSendMessageSize    int
-	KeepaliveParams       gkeepalive.ServerParameters
-	KeepalivePolicy       gkeepalive.EnforcementPolicy
-	InitialWindowSize     int32
-	InitialConnWindowSize int32
-	WriteBufferSize       int
-	ReadBufferSize        int
-	ConnectionTimeout     time.Duration
-	MaxHeaderListSize     *uint32
-	HeaderTableSize       *uint32
+	Network               string                       `mapstructure:"network"`
+	Address               string                       `mapstructure:"address"`
+	CredsProto            string                       `mapstructure:"creds_proto"`
+	CodeProto             string                       `mapstructure:"code_proto"`
+	MaxConcurrentStreams  uint32                       `mapstructure:"max_concurrent_streams"`
+	MaxReceiveMessageSize int                          `mapstructure:"max_receive_message_size"`
+	MaxSendMessageSize    int                          `mapstructure:"max_send_message_size"`
+	KeepaliveParams       gkeepalive.ServerParameters  `mapstructure:"keepalive_params"`
+	KeepalivePolicy       gkeepalive.EnforcementPolicy `mapstructure:"keepalive_policy"`
+	InitialWindowSize     int32                        `mapstructure:"initial_window_size"`
+	InitialConnWindowSize int32                        `mapstructure:"initial_conn_window_size"`
+	WriteBufferSize       int                          `mapstructure:"write_buffer_size"`
+	ReadBufferSize        int                          `mapstructure:"read_buffer_size"`
+	ConnectionTimeout     time.Duration                `mapstructure:"connection_timeout"`
+	MaxHeaderListSize     *uint32                      `mapstructure:"max_header_list_size"`
+	HeaderTableSize       *uint32                      `mapstructure:"header_table_size"`
 
-	Attr map[string]string
+	Attr map[string]string `mapstructure:"attr"`
 
 	creds gcredentials.TransportCredentials
 	codec encoding.Codec
@@ -127,11 +126,7 @@ type server struct {
 }
 
 func newServer(handle remote.MethodHandle) (remote.Server, error) {
-	opts := serverOptions{}
-	key := config.Join(config.KeyBase, "remote", "protocol", scheme)
-	if err := config.Get(key).Scan(&opts); err != nil {
-		return nil, err
-	}
+	opts := currentSettings().Server
 	if err := opts.SetDefault(); err != nil {
 		return nil, err
 	}

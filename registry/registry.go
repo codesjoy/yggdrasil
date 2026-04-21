@@ -21,8 +21,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-
-	"github.com/codesjoy/yggdrasil/v2/config"
 )
 
 const (
@@ -30,9 +28,14 @@ const (
 	MDServerKind = "serverKind"
 )
 
-// Builder is the interface for registry builder.
-// cfg is read from yggdrasil.registry.config (or child config for multi_registry).
-type Builder func(cfg config.Value) (Registry, error)
+// Spec describes a registry extension envelope.
+type Spec struct {
+	Type   string         `mapstructure:"type"`
+	Config map[string]any `mapstructure:"config"`
+}
+
+// Builder builds a registry from its config subsection.
+type Builder func(cfg map[string]any) (Registry, error)
 
 // Registry is the interface for registry
 type Registry interface {
@@ -78,6 +81,7 @@ var (
 	builders   = make(map[string]Builder)
 	mu         sync.RWMutex
 	defaultReg Registry
+	specV      Spec
 )
 
 // RegisterBuilder registers a registry builder.
@@ -96,7 +100,7 @@ func GetBuilder(typeName string) Builder {
 }
 
 // New creates a registry instance by type and config value.
-func New(typeName string, cfg config.Value) (Registry, error) {
+func New(typeName string, cfg map[string]any) (Registry, error) {
 	mu.RLock()
 	f, ok := builders[typeName]
 	mu.RUnlock()
@@ -106,7 +110,22 @@ func New(typeName string, cfg config.Value) (Registry, error) {
 	return f(cfg)
 }
 
-// Get returns the default registry defined by yggdrasil.registry.{type,config}.
+// Configure installs the default registry spec resolved by the assembly layer.
+func Configure(spec Spec) {
+	mu.Lock()
+	defer mu.Unlock()
+	specV = spec
+	defaultReg = nil
+}
+
+// CurrentSpec returns the currently configured default registry spec.
+func CurrentSpec() Spec {
+	mu.RLock()
+	defer mu.RUnlock()
+	return specV
+}
+
+// Get returns the default registry defined by yggdrasil.discovery.registry.
 func Get() (Registry, error) {
 	mu.RLock()
 	if defaultReg != nil {
@@ -116,12 +135,12 @@ func Get() (Registry, error) {
 	}
 	mu.RUnlock()
 
-	typeName := config.Get(config.Join(config.KeyBase, "registry", "type")).String("")
+	spec := CurrentSpec()
+	typeName := spec.Type
 	if typeName == "" {
 		return nil, fmt.Errorf("not found registry type")
 	}
-	cfgVal := config.Get(config.Join(config.KeyBase, "registry", "config"))
-	r, err := New(typeName, cfgVal)
+	r, err := New(typeName, spec.Config)
 	if err != nil {
 		return nil, err
 	}

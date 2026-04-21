@@ -24,10 +24,10 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v2/application"
 	"github.com/codesjoy/yggdrasil/v2/client"
-	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/governor"
 	"github.com/codesjoy/yggdrasil/v2/internal/instance"
 	"github.com/codesjoy/yggdrasil/v2/internal/remotelog"
+	"github.com/codesjoy/yggdrasil/v2/internal/settings"
 	"github.com/codesjoy/yggdrasil/v2/logger"
 	xotel "github.com/codesjoy/yggdrasil/v2/otel"
 	"github.com/codesjoy/yggdrasil/v2/registry"
@@ -99,7 +99,7 @@ func initLocked(appName string, ops ...Option) (err error) {
 		return err
 	}
 
-	initInstanceInfo(appName)
+	initInstanceInfo(appName, opts.resolvedSettings)
 	if err = validateStartup(opts); err != nil {
 		slog.Error("startup validation failed", slog.Any("error", err))
 		return err
@@ -134,7 +134,10 @@ func Serve(ops ...Option) (err error) {
 		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
 		return err
 	}
-	dropServeStageConfigSources(opts)
+	if err = validateServeStageConfigOptions(opts); err != nil {
+		initMu.Unlock()
+		return err
+	}
 	if err = validateStartup(opts); err != nil {
 		initMu.Unlock()
 		slog.Error("startup validation failed", slog.Any("error", err))
@@ -228,7 +231,7 @@ func Stop() error {
 }
 
 func initRegistry(opts *options) {
-	typeName := config.GetString(config.Join(config.KeyBase, "registry", "type"))
+	typeName := opts.resolvedSettings.Discovery.Registry.Type
 	if typeName == "" {
 		return
 	}
@@ -253,7 +256,7 @@ func initRegistry(opts *options) {
 }
 
 func initTracer(opts *options) {
-	if tracerName := config.GetString(config.Join(config.KeyBase, "tracer")); len(tracerName) > 0 {
+	if tracerName := opts.resolvedSettings.Telemetry.Tracer; len(tracerName) > 0 {
 		constructor, ok := xotel.GetTracerProviderBuilder(tracerName)
 		if !ok {
 			slog.Warn("not found tracer provider", slog.String("name", tracerName))
@@ -274,7 +277,7 @@ func initTracer(opts *options) {
 }
 
 func initMeter(opts *options) {
-	if meterName := config.GetString(config.Join(config.KeyBase, "meter")); len(meterName) > 0 {
+	if meterName := opts.resolvedSettings.Telemetry.Meter; len(meterName) > 0 {
 		constructor, ok := xotel.GetMeterProviderBuilder(meterName)
 		if !ok {
 			slog.Warn("not found meter provider", slog.String("name", meterName))
@@ -294,43 +297,34 @@ func initMeter(opts *options) {
 	}
 }
 
-func initInstanceInfo(appName string) {
-	instance.InitInstanceInfo(appName)
+func initInstanceInfo(appName string, resolved settings.Resolved) {
+	instance.InitInstanceInfo(appName, resolved.Admin.Application)
 }
 
 func initLogger() error {
-	loggerKeyBase := config.Join(config.KeyBase, "logger")
-	vals := config.ValueToValues(config.Get(config.Join(loggerKeyBase, "handler", "default")))
-	typeName := vals.Get("type").String("text")
-	writerName := vals.Get("writer").String("default")
-	if writerName == "default" {
-		writerType := config.GetString(
-			config.Join("yggdrasil", "logger", "writer", "default", "type"),
-		)
-		if writerType == "" {
-			err := config.Set(
-				config.Join("yggdrasil", "logger", "writer", "default", "type"),
-				"console",
-			)
-			if err != nil {
-				return err
-			}
-		}
+	spec := logger.CurrentSettings().Handlers["default"]
+	typeName := spec.Type
+	if typeName == "" {
+		typeName = "text"
+	}
+	writerName := spec.Writer
+	if writerName == "" {
+		writerName = "default"
 	}
 
 	handlerBuilder, err := logger.GetHandlerBuilder(typeName)
 	if err != nil {
 		return err
 	}
-	h, err := handlerBuilder(writerName, vals.Get("config"))
+	h, err := handlerBuilder(writerName, spec.Config)
 	if err != nil {
 		return err
 	}
 	slog.SetDefault(slog.New(h))
-	remoteLoggerLvStr := config.GetString(
-		config.Join(config.KeyBase, "remote", "logger_level"),
-		"error",
-	)
+	remoteLoggerLvStr := logger.CurrentSettings().RemoteLevel
+	if remoteLoggerLvStr == "" {
+		remoteLoggerLvStr = "error"
+	}
 	var remoteLoggerLv slog.Level
 	if err = remoteLoggerLv.UnmarshalText([]byte(remoteLoggerLvStr)); err != nil {
 		return err

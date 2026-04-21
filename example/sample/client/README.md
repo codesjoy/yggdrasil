@@ -109,11 +109,6 @@ yggdrasil:
 
 ```go
 func main() {
-    if err := config.LoadSource(file.NewSource("./config.yaml", false)); err != nil {
-        slog.Error("failed to load config file", slog.Any("error", err))
-        os.Exit(1)
-    }
-    
     if err := yggdrasil.Init("github.com.codesjoy.yggdrasil.example.sample.client"); err != nil {
         os.Exit(1)
     }

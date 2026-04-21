@@ -1,26 +1,27 @@
 yggdrasil:
   server:
-    protocol:
+    transports:
       - "grpc"
+    interceptors:
+      unary:
+        - "logging"
+      stream:
+        - "logging"
 
-  remote:
-    protocol:
-      grpc:
+  transports:
+    grpc:
+      server:
         address: "127.0.0.1:55884"
 
-  interceptor:
-    unary_server: "logging"
-    stream_server: "logging"
-    config:
+  logging:
+    interceptors:
       logging:
         print_req_and_res: true
-
-  logger:
-    handler:
+    handlers:
       default:
         type: "text"
         config:
           level: "debug"
-    writer:
+    writers:
       default:
         type: "console"

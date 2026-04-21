@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/metadata"
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/stats"
@@ -48,11 +47,8 @@ type server struct {
 }
 
 func newServer(handle remote.MethodHandle) (remote.Server, error) {
-	opts := &ServerConfig{}
-	key := config.Join(config.KeyBase, "remote", "protocol", scheme, "server")
-	if err := config.Get(key).Scan(opts); err != nil {
-		return nil, err
-	}
+	current := currentSettings()
+	opts := &current.Server
 	if opts.Attr == nil {
 		opts.Attr = map[string]string{}
 	}

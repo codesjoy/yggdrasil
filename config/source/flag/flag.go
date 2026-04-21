@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package flag provides a  source for loading configuration from flags.
+// Package flag provides a source for loading configuration from flags.
 package flag
 
 import (
@@ -29,12 +29,6 @@ type flag struct {
 	fs *flag2.FlagSet
 }
 
-func init() {
-	source.RegisterBuilder("flag", func(map[string]any) (source.Source, error) {
-		return NewSource(), nil
-	})
-}
-
 func (fs *flag) Read() (source.Data, error) {
 	if !fs.fs.Parsed() {
 		_ = fs.fs.Parse(os.Args[1:])
@@ -42,13 +36,13 @@ func (fs *flag) Read() (source.Data, error) {
 			_ = fs.fs.Parse(fs.fs.Args()[1:])
 		}
 	}
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 	visitFn := func(f *flag2.Flag) {
 		n := strings.ToLower(f.Name)
 		keys := strings.FieldsFunc(n, split)
 		reverse(keys)
 
-		tmp := make(map[string]interface{})
+		tmp := make(map[string]any)
 		for i, k := range keys {
 			if i == 0 {
 				if v, ok := f.Value.(flag2.Getter); ok {
@@ -59,13 +53,12 @@ func (fs *flag) Read() (source.Data, error) {
 				continue
 			}
 
-			tmp = map[string]interface{}{k: tmp}
+			tmp = map[string]any{k: tmp}
 		}
 		xmap.MergeStringMap(result, tmp)
 	}
 	fs.fs.VisitAll(visitFn)
-	cs := source.NewMapSourceData(source.PriorityFlag, result)
-	return cs, nil
+	return source.NewMapData(result), nil
 }
 
 func split(r rune) bool {
@@ -79,14 +72,6 @@ func reverse(ss []string) {
 	}
 }
 
-func (fs *flag) Changeable() bool {
-	return false
-}
-
-func (fs *flag) Watch() (<-chan source.Data, error) {
-	return nil, nil
-}
-
 func (fs *flag) Name() string {
 	if fs.fs == nil {
 		return ""
@@ -94,7 +79,7 @@ func (fs *flag) Name() string {
 	return fs.fs.Name()
 }
 
-func (fs *flag) Type() string {
+func (fs *flag) Kind() string {
 	return "flag"
 }
 
@@ -102,7 +87,7 @@ func (fs *flag) Close() error {
 	return nil
 }
 
-// NewSource create a new flag source
+// NewSource creates a new flag source.
 func NewSource(fs ...*flag2.FlagSet) source.Source {
 	if len(fs) == 0 || fs[0] == nil {
 		return &flag{fs: flag2.CommandLine}

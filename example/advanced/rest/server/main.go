@@ -227,7 +227,7 @@ func (s *LibraryImpl) MoveBook(
 }
 
 func main() {
-	if err := config.LoadSource(file.NewSource("./config.yaml", false)); err != nil {
+	if err := config.Default().LoadLayer("example:file", config.PriorityFile, file.NewSource("./config.yaml", false)); err != nil {
 		slog.Error("failed to load config file", slog.Any("error", err))
 		os.Exit(1)
 	}

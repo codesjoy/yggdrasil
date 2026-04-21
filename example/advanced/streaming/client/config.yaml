@@ -1,18 +1,22 @@
 yggdrasil:
-  application:
-    namespace: "dev"
-  client:
-    github.com.codesjoy.yggdrasil.example.advanced.streaming:
-      remote:
-        endpoints:
-          - address: "127.0.0.1:55880"
-            protocol: "grpc"
-  interceptor:
-    unary_client: "logging"
-    stream_client: "logging"
-    config:
+  admin:
+    application:
+      namespace: "dev"
+  clients:
+    defaults:
+      interceptors:
+        unary:
+          - "logging"
+        stream:
+          - "logging"
+    services:
+      github.com.codesjoy.yggdrasil.example.advanced.streaming:
+        remote:
+          endpoints:
+            - address: "127.0.0.1:55880"
+              protocol: "grpc"
+  logging:
+    remote_level: debug
+    interceptors:
       logging:
         print_req_and_res: true
-
-  remote:
-    logger_level: debug
