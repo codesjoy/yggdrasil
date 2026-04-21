@@ -127,6 +127,7 @@ type client struct {
 	channelState  atomic.Int32
 
 	remoteClientManager *remoteClientManager
+	balancerClient      *balancerClient
 	closed              atomic.Bool
 }
 
@@ -285,6 +286,9 @@ func (c *client) watchUpdateState() {
 }
 
 func (c *client) updateState(state resolver.State) {
+	if c.balancerClient != nil {
+		c.balancerClient.syncActiveEndpoints(state)
+	}
 	c.balancer.UpdateState(state)
 	c.resolvedEvent.Fire()
 }
@@ -313,18 +317,21 @@ func (c *client) initResolverAndBalancer(cfg ServiceConfig) error {
 	if balancerName == "" {
 		balancerName = "default"
 	}
+	bc := &balancerClient{
+		cli:          c,
+		serializer:   xsync.NewSerializer(c.ctx),
+		remoteStates: make(map[string]remote.State),
+		activeNames:  make(map[string]struct{}),
+	}
 	b, err := balancer.New(
 		c.appName,
 		balancerName,
-		&balancerClient{
-			cli:          c,
-			serializer:   xsync.NewSerializer(c.ctx),
-			remoteStates: make(map[string]remote.State),
-		},
+		bc,
 	)
 	if err != nil {
 		return err
 	}
+	c.balancerClient = bc
 	c.balancer = b
 	resolverName := cfg.Resolver
 	if resolverName != "" {
@@ -357,24 +364,6 @@ func (c *client) newStream(
 	for {
 		r, err := c.pick(c.fastFail, pickInfo)
 		if err != nil {
-			if errors.Is(err, balancer.ErrNoAvailableInstance) {
-				// Add backoff and context check for ErrNoAvailableInstance
-				t := time.NewTimer(c.streamBackoff.Backoff(retries))
-				select {
-				case <-c.ctx.Done():
-					t.Stop()
-					return nil, ErrClientClosing
-				case <-ctx.Done():
-					t.Stop()
-					return nil, xerror.New(
-						code.Code_DEADLINE_EXCEEDED,
-						"context done while waiting for available instance",
-					)
-				case <-t.C:
-					retries++
-					continue
-				}
-			}
 			return nil, err
 		}
 
@@ -432,8 +421,8 @@ func (c *client) initInterceptor() {
 	c.streamInterceptor = interceptor.ChainStreamClientInterceptors(c.appName, streamNames)
 }
 
-// waitForResolved blocks until the resolver provides addresses or the
-// context expires, whichever happens first.
+// waitForResolved blocks until the client has received its initial state update
+// (static or resolver-driven), or the context expires.
 func (c *client) waitForResolved(ctx context.Context) error {
 	// This is on the RPC path, so we use a fast path to avoid the
 	// more-expensive "select" below after the resolver has returned once.

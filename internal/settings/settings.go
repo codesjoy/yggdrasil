@@ -28,6 +28,7 @@ import (
 	configbootstrap "github.com/codesjoy/yggdrasil/v2/config/bootstrap"
 	"github.com/codesjoy/yggdrasil/v2/governor"
 	"github.com/codesjoy/yggdrasil/v2/interceptor"
+	"github.com/codesjoy/yggdrasil/v2/internal/backoff"
 	"github.com/codesjoy/yggdrasil/v2/internal/instance"
 	"github.com/codesjoy/yggdrasil/v2/logger"
 	xotel "github.com/codesjoy/yggdrasil/v2/otel"
@@ -100,10 +101,20 @@ type ClientDefaults struct {
 	Transports           ClientTransports `mapstructure:"transports"`
 }
 
+// clientServiceConfigOverlay keeps service-level override presence information.
+type clientServiceConfigOverlay struct {
+	FastFail     *bool                    `mapstructure:"fast_fail"`
+	Resolver     string                   `mapstructure:"resolver"`
+	Balancer     string                   `mapstructure:"balancer"`
+	Backoff      backoff.Config           `mapstructure:"backoff"`
+	Remote       client.RemoteConfig      `mapstructure:"remote"`
+	Interceptors client.InterceptorConfig `mapstructure:"interceptors"`
+}
+
 // ClientServiceSpec contains one configured client service subtree.
 type ClientServiceSpec struct {
-	client.ServiceConfig `mapstructure:",squash"`
-	Transports           ClientTransports `mapstructure:"transports"`
+	ServiceConfig clientServiceConfigOverlay `mapstructure:",squash"`
+	Transports    ClientTransports           `mapstructure:"transports"`
 }
 
 // Clients contains all client settings.
@@ -497,10 +508,10 @@ func Validate(resolved Resolved) error {
 	return multiErr
 }
 
-func mergeClientServiceConfig(base, overlay client.ServiceConfig) client.ServiceConfig {
+func mergeClientServiceConfig(base client.ServiceConfig, overlay clientServiceConfigOverlay) client.ServiceConfig {
 	out := base
-	if overlay.FastFail {
-		out.FastFail = true
+	if overlay.FastFail != nil {
+		out.FastFail = *overlay.FastFail
 	}
 	if overlay.Resolver != "" {
 		out.Resolver = overlay.Resolver
