@@ -11,10 +11,10 @@ import (
 	v5 "github.com/go-chi/chi/v5"
 	code "google.golang.org/genproto/googleapis/rpc/code"
 
-	interceptor "github.com/codesjoy/yggdrasil/v2/interceptor"
-	marshaler "github.com/codesjoy/yggdrasil/v2/remote/marshaler"
-	rest "github.com/codesjoy/yggdrasil/v2/remote/rest"
-	server "github.com/codesjoy/yggdrasil/v2/server"
+	interceptor "github.com/codesjoy/yggdrasil/v3/interceptor"
+	marshaler "github.com/codesjoy/yggdrasil/v3/remote/marshaler"
+	rest "github.com/codesjoy/yggdrasil/v3/server/rest"
+	server "github.com/codesjoy/yggdrasil/v3/server"
 )
 
 // This is a compile-time assertion to ensure that this generated file

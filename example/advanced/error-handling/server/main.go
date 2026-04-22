@@ -26,12 +26,10 @@ import (
 	"github.com/codesjoy/pkg/basic/xerror"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
-	"github.com/codesjoy/yggdrasil/v2"
-	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/config/source/file"
-	errorhandlingpb "github.com/codesjoy/yggdrasil/v2/example/protogen/error-handling"
-	_ "github.com/codesjoy/yggdrasil/v2/interceptor/logging"
-	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
+	"github.com/codesjoy/yggdrasil/v3"
+	"github.com/codesjoy/yggdrasil/v3/config"
+	"github.com/codesjoy/yggdrasil/v3/config/source/file"
+	errorhandlingpb "github.com/codesjoy/yggdrasil/v3/example/protogen/error-handling"
 )
 
 // LibraryServer implements the LibraryService
@@ -446,14 +444,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := yggdrasil.Init("github.com.codesjoy.yggdrasil.example.protogen.error-handling"); err != nil {
+	ss := NewLibraryServer()
+	app, err := yggdrasil.New(
+		"github.com.codesjoy.yggdrasil.example.protogen.error-handling",
+		yggdrasil.WithRPCService(&errorhandlingpb.LibraryServiceServiceDesc, ss),
+	)
+	if err != nil {
 		os.Exit(1)
 	}
-
-	ss := NewLibraryServer()
-	if err := yggdrasil.Serve(
-		yggdrasil.WithServiceDesc(&errorhandlingpb.LibraryServiceServiceDesc, ss),
-	); err != nil {
+	if err := app.Start(context.Background()); err != nil {
 		os.Exit(1)
 	}
 }

@@ -21,13 +21,11 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/codesjoy/yggdrasil/v2"
-	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/config/source/file"
-	helloworldpb "github.com/codesjoy/yggdrasil/v2/example/protogen/helloworld"
-	_ "github.com/codesjoy/yggdrasil/v2/interceptor/logging"
-	"github.com/codesjoy/yggdrasil/v2/metadata"
-	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
+	"github.com/codesjoy/yggdrasil/v3"
+	"github.com/codesjoy/yggdrasil/v3/config"
+	"github.com/codesjoy/yggdrasil/v3/config/source/file"
+	helloworldpb "github.com/codesjoy/yggdrasil/v3/example/protogen/helloworld"
+	"github.com/codesjoy/yggdrasil/v3/metadata"
 )
 
 var (
@@ -151,17 +149,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := yggdrasil.Init(fmt.Sprintf("github.com.codesjoy.yggdrasil.example.advanced.load-balancing.%d", port)); err != nil {
-		os.Exit(1)
-	}
-
 	ss := &GreeterServer{
 		instanceID: instanceID,
 	}
-
-	if err := yggdrasil.Serve(
-		yggdrasil.WithServiceDesc(&helloworldpb.GreeterServiceServiceDesc, ss),
-	); err != nil {
+	app, err := yggdrasil.New(
+		fmt.Sprintf("github.com.codesjoy.yggdrasil.example.advanced.load-balancing.%d", port),
+		yggdrasil.WithRPCService(&helloworldpb.GreeterServiceServiceDesc, ss),
+	)
+	if err != nil {
+		os.Exit(1)
+	}
+	if err := app.Start(context.Background()); err != nil {
 		os.Exit(1)
 	}
 }

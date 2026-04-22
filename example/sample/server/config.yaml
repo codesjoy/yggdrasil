@@ -23,7 +23,8 @@ yggdrasil:
     remote_level: debug
     interceptors:
       logging:
-        print_req_and_res: true
+        PrintReqAndRes: true
+
     handlers:
       default:
         type: "text"

@@ -21,13 +21,11 @@ import (
 	"os"
 	"sync"
 
-	"github.com/codesjoy/yggdrasil/v2"
-	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/config/source/file"
-	helloworldpb "github.com/codesjoy/yggdrasil/v2/example/protogen/helloworld"
-	_ "github.com/codesjoy/yggdrasil/v2/interceptor/logging"
-	"github.com/codesjoy/yggdrasil/v2/metadata"
-	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
+	"github.com/codesjoy/yggdrasil/v3"
+	"github.com/codesjoy/yggdrasil/v3/config"
+	"github.com/codesjoy/yggdrasil/v3/config/source/file"
+	helloworldpb "github.com/codesjoy/yggdrasil/v3/example/protogen/helloworld"
+	"github.com/codesjoy/yggdrasil/v3/metadata"
 )
 
 type LoadBalancerStats struct {
@@ -82,11 +80,12 @@ func main() {
 		slog.Error("failed to load config file", slog.Any("error", err))
 		os.Exit(1)
 	}
-	if err := yggdrasil.Init("github.com.codesjoy.yggdrasil.example.advanced.load-balancing.client"); err != nil {
+	app, err := yggdrasil.New("github.com.codesjoy.yggdrasil.example.advanced.load-balancing.client")
+	if err != nil {
 		os.Exit(1)
 	}
 
-	cli, err := yggdrasil.NewClient("github.com.codesjoy.yggdrasil.example.advanced.load-balancing")
+	cli, err := app.NewClient("github.com.codesjoy.yggdrasil.example.advanced.load-balancing")
 	if err != nil {
 		slog.Error("failed to create client", slog.Any("error", err))
 		os.Exit(1)

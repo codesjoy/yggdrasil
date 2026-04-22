@@ -18,7 +18,7 @@ package codesjoy.yggdrasil.example.proto.errorhandling;
 
 import "codesjoy/reason/v1/reason.proto";
 
-option go_package = "github.com/codesjoy/yggdrasil/v2/example/protogen/error-handling;error_handling";
+option go_package = "github.com/codesjoy/yggdrasil/v3/example/protogen/error-handling;error_handling";
 
 enum Reason {
   option (codesjoy.reason.v1.default_reason) = 500;

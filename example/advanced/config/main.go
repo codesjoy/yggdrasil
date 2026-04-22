@@ -22,10 +22,10 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/codesjoy/yggdrasil/v2"
-	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/config/source/env"
-	"github.com/codesjoy/yggdrasil/v2/config/source/file"
+	"github.com/codesjoy/yggdrasil/v3"
+	"github.com/codesjoy/yggdrasil/v3/config"
+	"github.com/codesjoy/yggdrasil/v3/config/source/env"
+	"github.com/codesjoy/yggdrasil/v3/config/source/file"
 )
 
 type AppConfig struct {
@@ -56,7 +56,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := yggdrasil.Init("github.com.codesjoy.yggdrasil.example.advanced.config"); err != nil {
+	app, err := yggdrasil.New("github.com.codesjoy.yggdrasil.example.advanced.config")
+	if err != nil {
 		os.Exit(1)
 	}
 
@@ -81,7 +82,7 @@ func main() {
 	<-sigChan
 
 	slog.Info("Shutting down...")
-	_ = yggdrasil.Stop()
+	_ = app.Stop(nil)
 	slog.Info("Shutdown complete")
 }
 

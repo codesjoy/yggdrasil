@@ -23,13 +23,11 @@ import (
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/codesjoy/yggdrasil/v2"
-	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/config/source/file"
-	libraryv1 "github.com/codesjoy/yggdrasil/v2/example/protogen/library/v1"
-	_ "github.com/codesjoy/yggdrasil/v2/interceptor/logging"
-	"github.com/codesjoy/yggdrasil/v2/metadata"
-	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
+	"github.com/codesjoy/yggdrasil/v3"
+	"github.com/codesjoy/yggdrasil/v3/config"
+	"github.com/codesjoy/yggdrasil/v3/config/source/file"
+	libraryv1 "github.com/codesjoy/yggdrasil/v3/example/protogen/library/v1"
+	"github.com/codesjoy/yggdrasil/v3/metadata"
 )
 
 type LibraryImpl struct {
@@ -232,16 +230,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := yggdrasil.Init("github.com.codesjoy.yggdrasil.example.advanced.rest"); err != nil {
+	lib := &LibraryImpl{}
+	app, err := yggdrasil.New(
+		"github.com.codesjoy.yggdrasil.example.advanced.rest",
+		yggdrasil.WithRPCService(&libraryv1.LibraryServiceServiceDesc, lib),
+		yggdrasil.WithRESTService(&libraryv1.LibraryServiceRestServiceDesc, lib),
+	)
+	if err != nil {
 		os.Exit(1)
 	}
 
-	lib := &LibraryImpl{}
-
-	if err := yggdrasil.Serve(
-		yggdrasil.WithServiceDesc(&libraryv1.LibraryServiceServiceDesc, lib),
-		yggdrasil.WithRestServiceDesc(&libraryv1.LibraryServiceRestServiceDesc, lib),
-	); err != nil {
+	if err := app.Start(context.Background()); err != nil {
 		slog.Error("failed to start server", slog.Any("error", err))
 		os.Exit(1)
 	}

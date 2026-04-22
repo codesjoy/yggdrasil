@@ -93,10 +93,12 @@ yggdrasil:
 ### 注册 REST 服务
 
 ```go
-yggdrasil.Serve(
-    yggdrasil.WithServiceDesc(&librarypb.LibraryServiceServiceDesc, ss),
-    yggdrasil.WithRestServiceDesc(&librarypb.LibraryServiceRestServiceDesc, ss),
+app, err := yggdrasil.New("advanced-rest-server",
+    yggdrasil.WithRPCService(&librarypb.LibraryServiceServiceDesc, ss),
+    yggdrasil.WithRESTService(&librarypb.LibraryServiceRestServiceDesc, ss),
 )
+if err != nil { panic(err) }
+if err := app.Start(context.Background()); err != nil { panic(err) }
 ```
 
 ## 使用 REST API
@@ -217,13 +219,15 @@ func CustomHandler(w http.ResponseWriter, r *http.Request) {
     })
 }
 
-yggdrasil.Serve(
-    yggdrasil.WithRestRawHandleDesc(&server.RestRawHandlerDesc{
+app, err := yggdrasil.New("advanced-rest-custom",
+    yggdrasil.WithRESTHandlers(&server.RestRawHandlerDesc{
         Method:  http.MethodGet,
         Path:    "/custom",
         Handler: CustomHandler,
     }),
 )
+if err != nil { panic(err) }
+if err := app.Start(context.Background()); err != nil { panic(err) }
 ```
 
 ### 使用自定义处理器
@@ -263,7 +267,7 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 ### 注册中间件
 
 ```go
-import "github.com/codesjoy/yggdrasil/v2/remote/rest/middleware"
+import "github.com/codesjoy/yggdrasil/v3/server/rest/middleware"
 
 middleware.Register("logger", LoggingMiddleware)
 ```
@@ -387,10 +391,12 @@ curl http://localhost:3000/v1/shelves/invalid-id
 A: 注册两个服务描述：
 
 ```go
-yggdrasil.Serve(
-    yggdrasil.WithServiceDesc(&librarypb.LibraryServiceServiceDesc, ss),
-    yggdrasil.WithRestServiceDesc(&librarypb.LibraryServiceRestServiceDesc, ss),
+app, err := yggdrasil.New("advanced-rest-server",
+    yggdrasil.WithRPCService(&librarypb.LibraryServiceServiceDesc, ss),
+    yggdrasil.WithRESTService(&librarypb.LibraryServiceRestServiceDesc, ss),
 )
+if err != nil { panic(err) }
+if err := app.Start(context.Background()); err != nil { panic(err) }
 ```
 
 **Q: 如何禁用 REST API？**

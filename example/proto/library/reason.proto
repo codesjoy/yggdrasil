@@ -16,7 +16,7 @@ syntax = "proto3";
 
 package codesjoy.yggdrasil.example.proto.library;
 
-option go_package = "github.com/codesjoy/yggdrasil/v2/example/protogen/library;library";
+option go_package = "github.com/codesjoy/yggdrasil/v3/example/protogen/library;library";
 
 import "codesjoy/reason/v1/reason.proto";
 

@@ -1,6 +1,6 @@
 # JSON Raw gRPC (`[]byte`) 模式
 
-`remote/protocol/grpc` 现在支持通过 `jsonraw` content-subtype 直接收发 JSON 文本字节，
+`remote/transport/grpc` 现在支持通过 `jsonraw` content-subtype 直接收发 JSON 文本字节，
 底层仍然是 `[]byte` / `*[]byte` 直通，不做结构化 JSON 编解码。
 
 推荐用法：

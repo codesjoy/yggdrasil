@@ -165,20 +165,21 @@ func WebHandler(w http.ResponseWriter, _ *http.Request) {
 
 // 4. 主函数
 func main() {
-    if err := yggdrasil.Init("github.com.codesjoy.yggdrasil.example.sample"); err != nil {
-        os.Exit(1)
-    }
-
     ss := &LibraryImpl{}
-    if err := yggdrasil.Serve(
-        yggdrasil.WithServiceDesc(&librarypb2.LibraryServiceServiceDesc, ss),
-        yggdrasil.WithRestServiceDesc(&librarypb2.LibraryServiceRestServiceDesc, ss),
-        yggdrasil.WithRestRawHandleDesc(&server.RestRawHandlerDesc{
+    app, err := yggdrasil.New(
+        "github.com.codesjoy.yggdrasil.example.sample",
+        yggdrasil.WithRPCService(&librarypb2.LibraryServiceServiceDesc, ss),
+        yggdrasil.WithRESTService(&librarypb2.LibraryServiceRestServiceDesc, ss),
+        yggdrasil.WithRESTHandlers(&server.RestRawHandlerDesc{
             Method:  http.MethodGet,
             Path:    "/web",
             Handler: WebHandler,
         }),
-    ); err != nil {
+    )
+    if err != nil {
+        os.Exit(1)
+    }
+    if err := app.Start(context.Background()); err != nil {
         os.Exit(1)
     }
 }
@@ -231,13 +232,15 @@ time=2025-01-26T10:00:01.050Z level=INFO msg="request completed" method=CreateSh
 
 ### 1. 服务注册
 
-使用 `yggdrasil.Serve()` 启动服务，可以注册多个服务描述：
+使用 `yggdrasil.New(...)+app.Start(...)` 启动服务，可以注册多个服务描述：
 
 ```go
-yggdrasil.Serve(
-    yggdrasil.WithServiceDesc(&librarypb2.LibraryServiceServiceDesc, ss),
-    yggdrasil.WithRestServiceDesc(&librarypb2.LibraryServiceRestServiceDesc, ss),
+app, err := yggdrasil.New("sample-server",
+    yggdrasil.WithRPCService(&librarypb2.LibraryServiceServiceDesc, ss),
+    yggdrasil.WithRESTService(&librarypb2.LibraryServiceRestServiceDesc, ss),
 )
+if err != nil { panic(err) }
+if err := app.Start(context.Background()); err != nil { panic(err) }
 ```
 
 ### 2. REST API 支持
@@ -246,10 +249,10 @@ Yggdrasil 自动从 proto 文件生成 REST API，支持 Google API 规范。
 
 ### 3. 自定义 HTTP 处理器
 
-可以使用 `WithRestRawHandleDesc` 注册自定义 HTTP 处理器：
+可以使用 `WithRESTHandlers` 注册自定义 HTTP 处理器：
 
 ```go
-yggdrasil.WithRestRawHandleDesc(&server.RestRawHandlerDesc{
+yggdrasil.WithRESTHandlers(&server.RestRawHandlerDesc{
     Method:  http.MethodGet,
     Path:    "/web",
     Handler: WebHandler,
@@ -315,9 +318,12 @@ A: 修改 `config.yaml` 中的 `logger.handler.default.config.level` 字段（de
 
 A: 实现拦截器接口并注册：
 ```go
-yggdrasil.Serve(
+app, err := yggdrasil.New(
+    "sample-server",
     yggdrasil.WithServerUnaryInterceptor(myInterceptor),
 )
+if err != nil { panic(err) }
+if err := app.Start(context.Background()); err != nil { panic(err) }
 ```
 
 ## 最佳实践

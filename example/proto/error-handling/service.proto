@@ -18,7 +18,7 @@ package codesjoy.yggdrasil.example.proto.errorhandling;
 
 import "error-handling/reason.proto";
 
-option go_package = "github.com/codesjoy/yggdrasil/v2/example/protogen/error-handling;error_handling";
+option go_package = "github.com/codesjoy/yggdrasil/v3/example/protogen/error-handling;error_handling";
 
 // Library management service - demonstrates comprehensive error handling
 service LibraryService {

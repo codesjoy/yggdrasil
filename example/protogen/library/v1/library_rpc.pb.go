@@ -9,10 +9,10 @@ import (
 	code "google.golang.org/genproto/googleapis/rpc/code"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 
-	client "github.com/codesjoy/yggdrasil/v2/client"
-	interceptor "github.com/codesjoy/yggdrasil/v2/interceptor"
-	metadata "github.com/codesjoy/yggdrasil/v2/metadata"
-	server "github.com/codesjoy/yggdrasil/v2/server"
+	client "github.com/codesjoy/yggdrasil/v3/client"
+	interceptor "github.com/codesjoy/yggdrasil/v3/interceptor"
+	metadata "github.com/codesjoy/yggdrasil/v3/metadata"
+	server "github.com/codesjoy/yggdrasil/v3/server"
 )
 
 // This is a compile-time assertion to ensure that this generated file

@@ -25,13 +25,11 @@ import (
 	"github.com/codesjoy/pkg/basic/xerror"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
-	"github.com/codesjoy/yggdrasil/v2"
-	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/config/source/file"
-	errorhandlingpb "github.com/codesjoy/yggdrasil/v2/example/protogen/error-handling"
-	_ "github.com/codesjoy/yggdrasil/v2/interceptor/logging"
-	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
-	"github.com/codesjoy/yggdrasil/v2/status"
+	"github.com/codesjoy/yggdrasil/v3"
+	"github.com/codesjoy/yggdrasil/v3/config"
+	"github.com/codesjoy/yggdrasil/v3/config/source/file"
+	errorhandlingpb "github.com/codesjoy/yggdrasil/v3/example/protogen/error-handling"
+	"github.com/codesjoy/yggdrasil/v3/status"
 )
 
 func main() {
@@ -40,11 +38,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := yggdrasil.Init("github.com.codesjoy.yggdrasil.example.protogen.error-handling.client"); err != nil {
+	app, err := yggdrasil.New("github.com.codesjoy.yggdrasil.example.protogen.error-handling.client")
+	if err != nil {
 		os.Exit(1)
 	}
 
-	cli, err := yggdrasil.NewClient("github.com.codesjoy.yggdrasil.example.protogen.error-handling")
+	cli, err := app.NewClient("github.com.codesjoy.yggdrasil.example.protogen.error-handling")
 	if err != nil {
 		slog.Error("failed to create client", slog.Any("error", err))
 		os.Exit(1)

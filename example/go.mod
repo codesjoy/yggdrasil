@@ -1,11 +1,11 @@
-module github.com/codesjoy/yggdrasil/v2/example
+module github.com/codesjoy/yggdrasil/v3/example
 
 go 1.25.7
 
 require (
 	github.com/codesjoy/pkg/basic/xerror v0.0.0-20260225033528-924cf61d0622
-	github.com/codesjoy/yggdrasil/v2 v2.0.0
-	github.com/codesjoy/yggdrasil/v2/example/protogen v0.0.0-00010101000000-000000000000
+	github.com/codesjoy/yggdrasil/v3 v3.0.0
+	github.com/codesjoy/yggdrasil/v3/example/protogen v0.0.0-00010101000000-000000000000
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260122232226-8e98ce8d340d
 	google.golang.org/protobuf v1.36.11
 )
@@ -34,6 +34,6 @@ require (
 )
 
 replace (
-	github.com/codesjoy/yggdrasil/v2 => ../
-	github.com/codesjoy/yggdrasil/v2/example/protogen => ./protogen
+	github.com/codesjoy/yggdrasil/v3 => ../
+	github.com/codesjoy/yggdrasil/v3/example/protogen => ./protogen
 )

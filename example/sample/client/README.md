@@ -109,11 +109,12 @@ yggdrasil:
 
 ```go
 func main() {
-    if err := yggdrasil.Init("github.com.codesjoy.yggdrasil.example.sample.client"); err != nil {
+    app, err := yggdrasil.New("github.com.codesjoy.yggdrasil.example.sample.client")
+    if err != nil {
         os.Exit(1)
     }
     
-    cli, err := yggdrasil.NewClient("github.com.codesjoy.yggdrasil.example.sample")
+    cli, err := app.NewClient("github.com.codesjoy.yggdrasil.example.sample")
     if err != nil {
         os.Exit(1)
     }
@@ -155,7 +156,12 @@ func main() {
 ### 创建客户端
 
 ```go
-cli, err := yggdrasil.NewClient("github.com.codesjoy.yggdrasil.example.sample")
+app, err := yggdrasil.New("sample-client")
+if err != nil {
+    slog.Error("init failed", slog.Any("error", err))
+    return
+}
+cli, err := app.NewClient("github.com.codesjoy.yggdrasil.example.sample")
 if err != nil {
     slog.Error("failed to create client", slog.Any("error", err))
     return
@@ -235,10 +241,12 @@ Yggdrasil 使用标准的 gRPC 错误码：
 
 ### 1. 创建客户端
 
-使用 `yggdrasil.NewClient()` 创建客户端：
+使用 `app.NewClient()` 创建客户端：
 
 ```go
-cli, err := yggdrasil.NewClient("service-name")
+app, err := yggdrasil.New("client")
+if err != nil { panic(err) }
+cli, err := app.NewClient("service-name")
 defer cli.Close()
 ```
 

@@ -19,7 +19,7 @@ import (
 	"strings"
 	"testing"
 
-	libraryv1 "github.com/codesjoy/yggdrasil/v2/example/protogen/library/v1"
+	libraryv1 "github.com/codesjoy/yggdrasil/v3/example/protogen/library/v1"
 )
 
 func TestLibraryImplMethods(t *testing.T) {

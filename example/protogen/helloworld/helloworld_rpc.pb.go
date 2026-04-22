@@ -5,11 +5,11 @@ package helloworld
 import (
 	context "context"
 	xerror "github.com/codesjoy/pkg/basic/xerror"
-	client "github.com/codesjoy/yggdrasil/v2/client"
-	interceptor "github.com/codesjoy/yggdrasil/v2/interceptor"
-	metadata "github.com/codesjoy/yggdrasil/v2/metadata"
-	server "github.com/codesjoy/yggdrasil/v2/server"
-	stream "github.com/codesjoy/yggdrasil/v2/stream"
+	client "github.com/codesjoy/yggdrasil/v3/client"
+	interceptor "github.com/codesjoy/yggdrasil/v3/interceptor"
+	metadata "github.com/codesjoy/yggdrasil/v3/metadata"
+	server "github.com/codesjoy/yggdrasil/v3/server"
+	stream "github.com/codesjoy/yggdrasil/v3/stream"
 	code "google.golang.org/genproto/googleapis/rpc/code"
 )
 

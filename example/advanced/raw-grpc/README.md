@@ -1,6 +1,6 @@
 # Raw gRPC (`[]byte`) 模式
 
-`remote/protocol/grpc` 现在支持通过 per-call codec 直接收发 `[]byte`，不经过 protobuf 编解码。
+`remote/transport/grpc` 现在支持通过 per-call codec 直接收发 `[]byte`，不经过 protobuf 编解码。
 
 推荐用法：
 

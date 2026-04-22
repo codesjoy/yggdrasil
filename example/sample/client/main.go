@@ -21,19 +21,18 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/codesjoy/yggdrasil/v2"
-	librarypb "github.com/codesjoy/yggdrasil/v2/example/protogen/library/v1"
-	_ "github.com/codesjoy/yggdrasil/v2/interceptor/logging"
-	"github.com/codesjoy/yggdrasil/v2/metadata"
-	_ "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
-	"github.com/codesjoy/yggdrasil/v2/status"
+	"github.com/codesjoy/yggdrasil/v3"
+	librarypb "github.com/codesjoy/yggdrasil/v3/example/protogen/library/v1"
+	"github.com/codesjoy/yggdrasil/v3/metadata"
+	"github.com/codesjoy/yggdrasil/v3/status"
 )
 
 func main() {
-	if err := yggdrasil.Init("github.com.codesjoy.yggdrasil.example.sample.client"); err != nil {
+	app, err := yggdrasil.New("github.com.codesjoy.yggdrasil.example.sample.client")
+	if err != nil {
 		os.Exit(1)
 	}
-	cli, err := yggdrasil.NewClient("github.com.codesjoy.yggdrasil.example.sample")
+	cli, err := app.NewClient("github.com.codesjoy.yggdrasil.example.sample")
 	if err != nil {
 		os.Exit(1)
 	}

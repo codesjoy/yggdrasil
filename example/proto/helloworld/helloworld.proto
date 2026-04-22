@@ -16,7 +16,7 @@ syntax = "proto3";
 
 package codesjoy.yggdrasil.example.proto.helloword;
 
-option go_package = "github.com/codesjoy/yggdrasil/v2/example/protogen/helloworld;helloworld";
+option go_package = "github.com/codesjoy/yggdrasil/v3/example/protogen/helloworld;helloworld";
 
 service GreeterService {
   rpc SayHello(SayHelloRequest) returns (SayHelloResponse) {}

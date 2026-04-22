@@ -24,7 +24,7 @@ Yggdrasil 支持以下类型的元数据：
 ### 客户端设置 Request Metadata
 
 ```go
-import "github.com/codesjoy/yggdrasil/v2/metadata"
+import "github.com/codesjoy/yggdrasil/v3/metadata"
 
 ctx := metadata.NewContext(context.Background(),
     metadata.Pairs(
@@ -40,7 +40,7 @@ resp, err := client.Call(ctx, req)
 ### 服务端读取 Request Metadata
 
 ```go
-import "github.com/codesjoy/yggdrasil/v2/metadata"
+import "github.com/codesjoy/yggdrasil/v3/metadata"
 
 func (s *Server) Method(ctx context.Context, req *pb.Request) (*pb.Response, error) {
     md, ok := metadata.FromInContext(ctx)

@@ -126,11 +126,11 @@ example/
 
 ```bash
 # 安装 Yggdrasil
-go get -u github.com/codesjoy/yggdrasil/v2
+go get -u github.com/codesjoy/yggdrasil/v3
 
 # 安装代码生成工具
-go install github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rpc@latest
-go install github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rest@latest
+go install github.com/codesjoy/yggdrasil/v3/cmd/protoc-gen-yggdrasil-rpc@latest
+go install github.com/codesjoy/yggdrasil/v3/cmd/protoc-gen-yggdrasil-rest@latest
 
 # 从 codesjoy/pkg 安装 reason 插件
 git clone https://github.com/codesjoy/pkg.git
