@@ -32,6 +32,7 @@ type remoteClientManager struct {
 	ctx          context.Context
 	appName      string
 	statsHandler stats.Handler
+	runtime      Runtime
 
 	mu            sync.RWMutex
 	remoteClients map[string]*rcWrapper // key: endpoint name
@@ -43,11 +44,13 @@ func newRemoteClientManager(
 	ctx context.Context,
 	appName string,
 	statsHandler stats.Handler,
+	runtime Runtime,
 ) *remoteClientManager {
 	return &remoteClientManager{
 		ctx:           ctx,
 		appName:       appName,
 		statsHandler:  statsHandler,
+		runtime:       runtime,
 		remoteClients: make(map[string]*rcWrapper),
 	}
 }
@@ -85,12 +88,12 @@ func (m *remoteClientManager) GetOrCreate(
 	}
 
 	// Create new connection
-	builder := remote.GetClientBuilder(endpoint.GetProtocol())
-	if builder == nil {
-		return nil, fmt.Errorf("no client builder found for protocol %s", endpoint.GetProtocol())
+	provider := m.runtime.TransportClientProvider(endpoint.GetProtocol())
+	if provider == nil {
+		return nil, fmt.Errorf("no client transport provider found for protocol %s", endpoint.GetProtocol())
 	}
 
-	rc, err := builder(m.ctx, m.appName, endpoint, m.statsHandler, stateListener)
+	rc, err := provider.NewClient(m.ctx, m.appName, endpoint, m.statsHandler, stateListener)
 	if err != nil {
 		slog.Error("failed to build client",
 			slog.String("protocol", endpoint.GetProtocol()),

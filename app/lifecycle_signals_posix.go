@@ -12,17 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package server
+//go:build !windows
 
-// InterceptorSettings contains interceptor names for the server side.
-type InterceptorSettings struct {
-	Unary  []string `mapstructure:"unary"`
-	Stream []string `mapstructure:"stream"`
-}
+package app
 
-// Settings contains resolved server settings.
-type Settings struct {
-	Transports   []string            `mapstructure:"transports"`
-	Interceptors InterceptorSettings `mapstructure:"interceptors"`
-	RestEnabled  bool
-}
+import (
+	"os"
+	"syscall"
+)
+
+var shutdownSignals = []os.Signal{syscall.SIGQUIT, os.Interrupt, syscall.SIGTERM}

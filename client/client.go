@@ -20,9 +20,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"slices"
 	"sync/atomic"
-	"time"
 
 	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/codesjoy/pkg/utils/xgo"
@@ -32,7 +30,6 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/balancer"
 	"github.com/codesjoy/yggdrasil/v3/interceptor"
 	"github.com/codesjoy/yggdrasil/v3/internal/backoff"
-	internalutils "github.com/codesjoy/yggdrasil/v3/internal/utils"
 	"github.com/codesjoy/yggdrasil/v3/metadata"
 	"github.com/codesjoy/yggdrasil/v3/remote"
 	"github.com/codesjoy/yggdrasil/v3/resolver"
@@ -45,16 +42,20 @@ var ErrClientClosing = xerror.New(code.Code_CANCELLED, "the client is closing")
 
 // Client is the client interface.
 type Client interface {
-	// Invoke performs a unary RPC and returns after the response is received into reply.
 	Invoke(ctx context.Context, method string, args, reply interface{}) error
-	// NewStream begins a streaming RPC.
-	NewStream(
-		ctx context.Context,
-		desc *stream.Desc,
-		method string,
-	) (stream.ClientStream, error)
-	// Close destroy the client resource.
+	NewStream(ctx context.Context, desc *stream.Desc, method string) (stream.ClientStream, error)
 	Close() error
+}
+
+// Runtime exposes the App-scoped runtime dependencies needed by the client package.
+type Runtime interface {
+	ClientSettings(serviceName string) ServiceSettings
+	ClientStatsHandler() stats.Handler
+	TransportClientProvider(protocol string) remote.TransportClientProvider
+	NewResolver(name string) (resolver.Resolver, error)
+	NewBalancer(serviceName, balancerName string, cli balancer.Client) (balancer.Balancer, error)
+	BuildUnaryClientInterceptor(serviceName string, names []string) interceptor.UnaryClientInterceptor
+	BuildStreamClientInterceptor(serviceName string, names []string) interceptor.StreamClientInterceptor
 }
 
 type clientStream struct {
@@ -129,23 +130,28 @@ type client struct {
 	remoteClientManager *remoteClientManager
 	balancerClient      *balancerClient
 	closed              atomic.Bool
+	runtime             Runtime
 }
 
-// NewClient creates a new client.
-func NewClient(ctx context.Context, appName string) (_ Client, err error) {
-	cfg := CurrentConfig(appName)
-	statsHandler := stats.GetClientHandler()
+// New creates a new client from one explicit runtime snapshot.
+func New(ctx context.Context, appName string, runtimeSnapshot Runtime) (_ Client, err error) {
+	if runtimeSnapshot == nil {
+		return nil, errors.New("client runtime is required")
+	}
+	cfg := runtimeSnapshot.ClientSettings(appName)
+	statsHandler := runtimeSnapshot.ClientStatsHandler()
 	cli := &client{
 		appName:       appName,
 		fastFail:      cfg.FastFail,
 		statsHandler:  statsHandler,
 		stateChange:   make(chan resolver.State, 1),
 		resolvedEvent: xsync.NewEvent(),
+		runtime:       runtimeSnapshot,
 	}
 	cli.ctx, cli.cancel = context.WithCancel(ctx)
 	cli.channelState.Store(int32(remote.Idle))
 
-	cli.remoteClientManager = newRemoteClientManager(cli.ctx, appName, statsHandler)
+	cli.remoteClientManager = newRemoteClientManager(cli.ctx, appName, statsHandler, runtimeSnapshot)
 	watchRegistered := false
 	defer func() {
 		if err == nil {
@@ -172,7 +178,6 @@ func NewClient(ctx context.Context, appName string) (_ Client, err error) {
 	}()
 
 	cli.streamBackoff = backoff.Exponential{Config: cfg.Backoff}
-	// Initialize pickerSnap to avoid nil pointer panic on first updatePicker call
 	cli.pickerSnap.Store(&pickerSnap{
 		picker:     nil,
 		blockingCh: make(chan struct{}),
@@ -193,263 +198,4 @@ func NewClient(ctx context.Context, appName string) (_ Client, err error) {
 		}
 	}
 	return cli, nil
-}
-
-// Invoke performs a unary RPC and returns after the response is received into reply.
-func (c *client) Invoke(ctx context.Context, method string, args, reply interface{}) error {
-	ctx = metadata.WithStreamContext(ctx)
-	if c.unaryInterceptor != nil {
-		return c.unaryInterceptor(ctx, method, args, reply, c.invoke)
-	}
-	return c.invoke(ctx, method, args, reply)
-}
-
-// NewStream creates a new stream.
-func (c *client) NewStream(
-	ctx context.Context,
-	desc *stream.Desc,
-	method string,
-) (stream.ClientStream, error) {
-	if c.streamInterceptor != nil {
-		return c.streamInterceptor(ctx, desc, method, c.newStream)
-	}
-	return c.newStream(ctx, desc, method)
-}
-
-// Close closes the client.
-func (c *client) Close() error {
-	if !c.closed.CompareAndSwap(false, true) {
-		return ErrClientClosing
-	}
-	var multiErr error
-	// Remove resolver watch first to stop receiving updates
-	if c.resolver != nil {
-		if err := c.resolver.DelWatch(c.appName, c); err != nil {
-			multiErr = errors.Join(multiErr, err)
-		}
-	}
-	// Close balancer (no longer manages connections)
-	if err := c.balancer.Close(); err != nil {
-		multiErr = errors.Join(multiErr, err)
-	}
-	// Cancel context to stop watchUpdateState goroutine
-	c.cancel()
-	// Close all connections through centralized manager
-	if err := c.remoteClientManager.Close(); err != nil {
-		multiErr = errors.Join(multiErr, err)
-	}
-	return multiErr
-}
-
-// UpdateState implements resolver.ClientConn interface
-func (c *client) UpdateState(state resolver.State) {
-	select {
-	case <-c.ctx.Done():
-		return
-	case c.stateChange <- state:
-		return
-	default:
-	}
-
-	// Try to send the state, if channel is full, drain it first then send
-	select {
-	case <-c.ctx.Done():
-		return
-	default:
-	}
-
-	// Channel is full, try to drain the old value.
-	select {
-	case <-c.ctx.Done():
-		return
-	case <-c.stateChange:
-	default:
-	}
-
-	// Now try to send again.
-	select {
-	case <-c.ctx.Done():
-	case c.stateChange <- state:
-	default:
-	}
-}
-
-func (c *client) watchUpdateState() {
-	for {
-		select {
-		case <-c.ctx.Done():
-			return
-		case state := <-c.stateChange:
-			c.updateState(state)
-		}
-	}
-}
-
-func (c *client) updateState(state resolver.State) {
-	if c.balancerClient != nil {
-		c.balancerClient.syncActiveEndpoints(state)
-	}
-	c.balancer.UpdateState(state)
-	c.resolvedEvent.Fire()
-}
-
-func (c *client) updateConnectivityState(state remote.State) {
-	c.channelState.Store(int32(state))
-}
-
-func (c *client) updateStaticState(cfg ServiceConfig) error {
-	if len(cfg.Remote.Endpoints) == 0 {
-		return errors.New("no endpoints provided")
-	}
-	state := resolver.BaseState{
-		Attributes: cfg.Remote.Attributes,
-		Endpoints:  make([]resolver.Endpoint, 0, len(cfg.Remote.Endpoints)),
-	}
-	for _, endpoint := range cfg.Remote.Endpoints {
-		state.Endpoints = append(state.Endpoints, endpoint)
-	}
-	c.updateState(state)
-	return nil
-}
-
-func (c *client) initResolverAndBalancer(cfg ServiceConfig) error {
-	balancerName := cfg.Balancer
-	if balancerName == "" {
-		balancerName = "default"
-	}
-	bc := &balancerClient{
-		cli:          c,
-		serializer:   xsync.NewSerializer(c.ctx),
-		remoteStates: make(map[string]remote.State),
-		activeNames:  make(map[string]struct{}),
-	}
-	b, err := balancer.New(
-		c.appName,
-		balancerName,
-		bc,
-	)
-	if err != nil {
-		return err
-	}
-	c.balancerClient = bc
-	c.balancer = b
-	resolverName := cfg.Resolver
-	if resolverName != "" {
-		r, err := resolver.Get(resolverName)
-		if err != nil {
-			return err
-		}
-		// r can be nil for "default" with no config (use static endpoints)
-		if r != nil {
-			c.resolver = r
-		}
-		// If r is nil (no dynamic resolver), will use updateStaticState() below
-	}
-	return nil
-}
-
-func (c *client) newStream(
-	ctx context.Context,
-	desc *stream.Desc,
-	method string,
-) (stream.ClientStream, error) {
-	if err := c.waitForResolved(ctx); err != nil {
-		return nil, err
-	}
-	pickInfo := &balancer.RPCInfo{
-		Ctx:    ctx,
-		Method: method,
-	}
-	retries := 0
-	for {
-		r, err := c.pick(c.fastFail, pickInfo)
-		if err != nil {
-			return nil, err
-		}
-
-		st, err := r.RemoteClient().NewStream(ctx, desc, method)
-		if err == nil {
-			return &clientStream{
-				desc:         desc,
-				ClientStream: st,
-				report:       r.Report,
-			}, nil
-		}
-		r.Report(err)
-		t := time.NewTimer(c.streamBackoff.Backoff(retries))
-		select {
-		case <-c.ctx.Done():
-			t.Stop()
-			return nil, ErrClientClosing
-		case <-ctx.Done():
-			t.Stop()
-			return nil, err
-		case <-t.C:
-			retries++
-		}
-	}
-}
-
-func (c *client) invoke(ctx context.Context, method string, args, reply interface{}) error {
-	cs, err := c.newStream(
-		ctx,
-		&stream.Desc{ServerStreams: false, ClientStreams: false},
-		method,
-	)
-	if err != nil {
-		return err
-	}
-	if err = cs.SendMsg(args); err != nil {
-		return err
-	}
-	err = cs.RecvMsg(reply)
-	return err
-}
-
-func (c *client) initInterceptor() {
-	cfg := CurrentConfig(c.appName)
-	unaryNames := append([]string(nil), cfg.Interceptors.Unary...)
-	unaryNames = internalutils.DedupStableStrings(
-		slices.DeleteFunc(unaryNames, func(s string) bool { return s == "" }),
-	)
-	c.unaryInterceptor = interceptor.ChainUnaryClientInterceptors(c.appName, unaryNames)
-
-	streamNames := append([]string(nil), cfg.Interceptors.Stream...)
-	streamNames = internalutils.DedupStableStrings(
-		slices.DeleteFunc(streamNames, func(s string) bool { return s == "" }),
-	)
-	c.streamInterceptor = interceptor.ChainStreamClientInterceptors(c.appName, streamNames)
-}
-
-// waitForResolved blocks until the client has received its initial state update
-// (static or resolver-driven), or the context expires.
-func (c *client) waitForResolved(ctx context.Context) error {
-	// This is on the RPC path, so we use a fast path to avoid the
-	// more-expensive "select" below after the resolver has returned once.
-	if c.resolvedEvent.HasFired() {
-		return nil
-	}
-	select {
-	case <-c.resolvedEvent.Done():
-		return nil
-	case <-ctx.Done():
-		switch {
-		case errors.Is(ctx.Err(), context.DeadlineExceeded):
-			return xerror.Wrap(ctx.Err(), code.Code_DEADLINE_EXCEEDED, "")
-		case errors.Is(ctx.Err(), context.Canceled):
-			return xerror.Wrap(ctx.Err(), code.Code_CANCELLED, "")
-		default:
-			return xerror.Wrap(ctx.Err(), code.Code_UNKNOWN, "")
-		}
-	case <-c.ctx.Done():
-		return ErrClientClosing
-	}
-}
-
-func (c *client) resolveNow() {
-	rn, ok := c.resolver.(resolver.ResolveNower)
-	if !ok {
-		return
-	}
-	rn.ResolveNow()
 }

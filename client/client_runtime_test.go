@@ -201,11 +201,11 @@ func TestClientWatchUpdateStateAndStaticState(t *testing.T) {
 			resolvedEvent: xsync.NewEvent(),
 		}
 
-		err := cli.updateStaticState(ServiceConfig{})
+		err := cli.updateStaticState(ServiceSettings{})
 		require.ErrorContains(t, err, "no endpoints provided")
 
-		err = cli.updateStaticState(ServiceConfig{
-			Remote: RemoteConfig{
+		err = cli.updateStaticState(ServiceSettings{
+			Remote: RemoteSettings{
 				Endpoints: []resolver.BaseEndpoint{
 					{Address: "127.0.0.1:1001", Protocol: "test"},
 				},
@@ -302,20 +302,16 @@ func TestNewStream_NoAvailableInstanceDoesNotBackoff(t *testing.T) {
 }
 
 func TestNewClientStaticAndClose(t *testing.T) {
-	preserveClientSettings(t)
-	Configure(Settings{
-		Services: map[string]ServiceConfig{
-			"svc": {
-				Remote: RemoteConfig{
-					Endpoints: []resolver.BaseEndpoint{
-						{Address: "127.0.0.1:1001", Protocol: "test"},
-					},
-				},
+	runtime := newTestRuntime()
+	runtime.configs["svc"] = ServiceSettings{
+		Remote: RemoteSettings{
+			Endpoints: []resolver.BaseEndpoint{
+				{Address: "127.0.0.1:1001", Protocol: "test"},
 			},
 		},
-	})
+	}
 
-	cliRaw, err := NewClient(context.Background(), "svc")
+	cliRaw, err := New(context.Background(), "svc", runtime)
 	require.NoError(t, err)
 	require.NotNil(t, cliRaw)
 	cli := cliRaw.(*client)
@@ -326,14 +322,10 @@ func TestNewClientStaticAndClose(t *testing.T) {
 }
 
 func TestNewClientNoEndpoints(t *testing.T) {
-	preserveClientSettings(t)
-	Configure(Settings{
-		Services: map[string]ServiceConfig{
-			"svc": {},
-		},
-	})
+	runtime := newTestRuntime()
+	runtime.configs["svc"] = ServiceSettings{}
 
-	cli, err := NewClient(context.Background(), "svc")
+	cli, err := New(context.Background(), "svc", runtime)
 	require.ErrorContains(t, err, "no endpoints provided")
 	require.Nil(t, cli)
 }
@@ -342,11 +334,21 @@ func TestInitResolverAndBalancerErrors(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cli := &client{ctx: ctx, appName: "svc"}
-	err := cli.initResolverAndBalancer(ServiceConfig{Balancer: "not-exist"})
+	runtime := newTestRuntime()
+	runtime.newBalancer = func(string, string, balancer.Client) (balancer.Balancer, error) {
+		return nil, errors.New("balancer not found")
+	}
+	cli := &client{ctx: ctx, appName: "svc", runtime: runtime}
+	err := cli.initResolverAndBalancer(ServiceSettings{Balancer: "not-exist"})
 	require.Error(t, err)
 
-	err = cli.initResolverAndBalancer(ServiceConfig{
+	runtime.newBalancer = func(string, string, balancer.Client) (balancer.Balancer, error) {
+		return newMockBalancer(), nil
+	}
+	runtime.newResolver = func(string) (resolver.Resolver, error) {
+		return nil, errors.New("resolver not found")
+	}
+	err = cli.initResolverAndBalancer(ServiceSettings{
 		Balancer: "default",
 		Resolver: "not-exist",
 	})
@@ -367,7 +369,7 @@ func TestBalancerClientMethods(t *testing.T) {
 
 	t.Run("NewRemoteClient delegates to manager", func(t *testing.T) {
 		ctx := context.Background()
-		manager := newRemoteClientManager(ctx, "svc", newMockStatsHandler())
+		manager := newRemoteClientManager(ctx, "svc", newMockStatsHandler(), newTestRuntime())
 		cli := &client{
 			ctx:                 ctx,
 			appName:             "svc",
@@ -444,7 +446,7 @@ func TestClientCloseAggregatesErrors(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	manager := newRemoteClientManager(ctx, "svc", newMockStatsHandler())
+	manager := newRemoteClientManager(ctx, "svc", newMockStatsHandler(), newTestRuntime())
 	manager.remoteClients["close-err"] = &rcWrapper{
 		name:                "close-err",
 		remoteClientManager: manager,

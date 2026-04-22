@@ -12,375 +12,93 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package yggdrasil integrate core modules into the yggdrasil entry package
 package yggdrasil
 
 import (
 	"context"
-	"errors"
-	"io"
-	"log/slog"
-	"sync"
 
-	"github.com/codesjoy/yggdrasil/v3/application"
-	"github.com/codesjoy/yggdrasil/v3/client"
-	"github.com/codesjoy/yggdrasil/v3/governor"
-	"github.com/codesjoy/yggdrasil/v3/internal/instance"
-	"github.com/codesjoy/yggdrasil/v3/internal/remotelog"
-	"github.com/codesjoy/yggdrasil/v3/internal/settings"
-	"github.com/codesjoy/yggdrasil/v3/logger"
-	xotel "github.com/codesjoy/yggdrasil/v3/otel"
-	"github.com/codesjoy/yggdrasil/v3/registry"
+	yapp "github.com/codesjoy/yggdrasil/v3/app"
+	"github.com/codesjoy/yggdrasil/v3/config"
+	"github.com/codesjoy/yggdrasil/v3/config/source"
+	"github.com/codesjoy/yggdrasil/v3/module"
 	"github.com/codesjoy/yggdrasil/v3/server"
-	_ "github.com/codesjoy/yggdrasil/v3/stats/otel"
-
-	"go.opentelemetry.io/otel"
 )
 
-type lifecycleState uint32
+// App is the framework application composition root.
+type App = yapp.App
 
-const (
-	lifecycleStateNew lifecycleState = iota
-	lifecycleStateInitialized
-	lifecycleStateRunning
-	lifecycleStateStopped
-)
+// Option configures one App instance.
+type Option = yapp.Option
 
-var (
-	errApplicationAlreadyRunning = errors.New("application is already running")
-	errApplicationNotInitialized = errors.New("please initialize yggdrasil before serve")
-	errRestartUnsupported        = errors.New("restarting yggdrasil in the same process is not supported")
-)
+// InternalServer is managed by the App lifecycle alongside the main server.
+type InternalServer = yapp.InternalServer
 
-var (
-	// Package-level lifecycle state enforces a single application instance per process.
-	app, _ = application.New()
-	initMu sync.Mutex
-	state  = lifecycleStateNew
-	opts   = &options{
-		serviceDesc:     map[*server.ServiceDesc]interface{}{},
-		restServiceDesc: map[*server.RestServiceDesc]restServiceDesc{},
-	}
-)
-
-// NewClient create a new client
-func NewClient(name string) (client.Client, error) {
-	cli, err := client.NewClient(context.Background(), name)
-	if err != nil {
-		slog.Error("fault to new client", slog.String("name", name), slog.Any("error", err))
-		return nil, err
-	}
-	return cli, nil
+// New creates one App instance.
+func New(appName string, opts ...Option) (*App, error) {
+	return yapp.New(appName, opts...)
 }
 
-// Init initialize application.
-func Init(appName string, ops ...Option) (err error) {
-	initMu.Lock()
-	defer initMu.Unlock()
-
-	return initLocked(appName, ops...)
+// WithRPCServices registers a batch of RPC services.
+func WithRPCServices(desc map[*server.ServiceDesc]interface{}) Option {
+	return yapp.WithRPCServices(desc)
 }
 
-func initLocked(appName string, ops ...Option) (err error) {
-	switch state {
-	case lifecycleStateInitialized, lifecycleStateRunning:
-		return nil
-	case lifecycleStateStopped:
-		return errRestartUnsupported
-	}
-	if err = applyOpt(opts, ops...); err != nil {
-		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
-		return err
-	}
-	if err = initConfigChain(opts); err != nil {
-		slog.Error("fault to load startup config", slog.Any("error", err))
-		return err
-	}
-	if err = validateStartup(opts); err != nil {
-		slog.Error("startup validation failed", slog.Any("error", err))
-		return err
-	}
-	applyResolvedSettings(opts.resolvedSettings)
-	if err = initLogger(); err != nil {
-		slog.Error("fault to initialize logger", slog.Any("error", err))
-		return err
-	}
-
-	initInstanceInfo(appName, opts.resolvedSettings)
-	if err = initGovernor(opts); err != nil {
-		slog.Error("fault to initialize governor", slog.Any("error", err))
-		return err
-	}
-	initRegistry(opts)
-	initTracer(opts)
-	initMeter(opts)
-	state = lifecycleStateInitialized
-	return nil
+// WithRPCService registers one RPC service.
+func WithRPCService(desc *server.ServiceDesc, impl interface{}) Option {
+	return yapp.WithRPCService(desc, impl)
 }
 
-// Serve serves the application.
-func Serve(ops ...Option) (err error) {
-	initMu.Lock()
-	switch state {
-	case lifecycleStateNew:
-		initMu.Unlock()
-		return errApplicationNotInitialized
-	case lifecycleStateRunning:
-		initMu.Unlock()
-		return errApplicationAlreadyRunning
-	case lifecycleStateStopped:
-		initMu.Unlock()
-		return errRestartUnsupported
-	}
-	if err = applyOpt(opts, ops...); err != nil {
-		initMu.Unlock()
-		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
-		return err
-	}
-	if err = validateServeStageConfigOptions(opts); err != nil {
-		initMu.Unlock()
-		return err
-	}
-	if err = validateStartup(opts); err != nil {
-		initMu.Unlock()
-		slog.Error("startup validation failed", slog.Any("error", err))
-		return err
-	}
-	applyResolvedSettings(opts.resolvedSettings)
-	if err = initServer(opts); err != nil {
-		initMu.Unlock()
-		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
-		return err
-	}
-	if err = app.Init(opts.getAppOpts()...); err != nil {
-		initMu.Unlock()
-		return err
-	}
-	state = lifecycleStateRunning
-	initMu.Unlock()
-
-	if err = app.Run(); err != nil {
-		initMu.Lock()
-		state = lifecycleStateStopped
-		initMu.Unlock()
-		slog.Error("the application was ended forcefully", slog.Any("error", err))
-		return err
-	}
-	initMu.Lock()
-	state = lifecycleStateStopped
-	initMu.Unlock()
-	return nil
+// WithRESTService registers one REST service.
+func WithRESTService(desc *server.RestServiceDesc, impl interface{}, prefix ...string) Option {
+	return yapp.WithRESTService(desc, impl, prefix...)
 }
 
-// Run runs the application.
-func Run(appName string, ops ...Option) (err error) {
-	initMu.Lock()
-	switch state {
-	case lifecycleStateRunning:
-		initMu.Unlock()
-		return errApplicationAlreadyRunning
-	case lifecycleStateStopped:
-		initMu.Unlock()
-		return errRestartUnsupported
-	}
-	if state == lifecycleStateNew {
-		if err = initLocked(appName, ops...); err != nil {
-			initMu.Unlock()
-			return err
-		}
-	}
-	if err = initServer(opts); err != nil {
-		initMu.Unlock()
-		slog.Error("fault to initialize yggdrasil", slog.Any("error", err))
-		return err
-	}
-	if err = app.Init(opts.getAppOpts()...); err != nil {
-		initMu.Unlock()
-		return err
-	}
-	state = lifecycleStateRunning
-	initMu.Unlock()
-
-	if err = app.Run(); err != nil {
-		initMu.Lock()
-		state = lifecycleStateStopped
-		initMu.Unlock()
-		slog.Error("fault to run yggdrasil application", slog.Any("error", err))
-		return err
-	}
-	initMu.Lock()
-	state = lifecycleStateStopped
-	initMu.Unlock()
-	return nil
+// WithRESTHandlers registers raw REST handlers.
+func WithRESTHandlers(desc ...*server.RestRawHandlerDesc) Option {
+	return yapp.WithRESTHandlers(desc...)
 }
 
-// Stop stops the application.
-func Stop() error {
-	initMu.Lock()
-	if state != lifecycleStateNew {
-		state = lifecycleStateStopped
-	}
-	initMu.Unlock()
-
-	var err error
-	if stopErr := app.Stop(); stopErr != nil {
-		err = errors.Join(err, stopErr)
-		slog.Error("fault to stop yggdrasil application", slog.Any("error", err))
-	}
-	if opts != nil && opts.governor != nil {
-		if govErr := opts.governor.Stop(); govErr != nil {
-			err = errors.Join(err, govErr)
-			slog.Error("fault to stop governor", slog.Any("error", govErr))
-		}
-	}
-	if closeErr := closeManagedConfigSources(opts); closeErr != nil {
-		err = errors.Join(err, closeErr)
-		slog.Error("fault to close config sources", slog.Any("error", closeErr))
-	}
-	return err
+// WithBeforeStartHook registers before-start hooks.
+func WithBeforeStartHook(fns ...func(context.Context) error) Option {
+	return yapp.WithBeforeStartHook(fns...)
 }
 
-func initRegistry(opts *options) {
-	typeName := opts.resolvedSettings.Discovery.Registry.Type
-	if typeName == "" {
-		return
-	}
-	r, err := registry.Get()
-	if err != nil {
-		slog.Warn(
-			"fault to initialize registry",
-			slog.String("type", typeName),
-			slog.Any("error", err),
-		)
-		return
-	}
-	opts.registry = r
-	if c, ok := r.(io.Closer); ok {
-		opts.appOpts = append(
-			opts.appOpts,
-			application.WithCleanup("registry", func(context.Context) error {
-				return c.Close()
-			}),
-		)
-	}
+// WithBeforeStopHook registers before-stop hooks.
+func WithBeforeStopHook(fns ...func(context.Context) error) Option {
+	return yapp.WithBeforeStopHook(fns...)
 }
 
-func initTracer(opts *options) {
-	if tracerName := opts.resolvedSettings.Telemetry.Tracer; len(tracerName) > 0 {
-		constructor, ok := xotel.GetTracerProviderBuilder(tracerName)
-		if !ok {
-			slog.Warn("not found tracer provider", slog.String("name", tracerName))
-			return
-		}
-		tp := constructor(InstanceName())
-		otel.SetTracerProvider(tp)
-		if opts != nil {
-			if s, ok := tp.(interface{ Shutdown(context.Context) error }); ok {
-				opts.appOpts = append(opts.appOpts, application.WithCleanup("tracer", s.Shutdown))
-			} else if c, ok := tp.(io.Closer); ok {
-				opts.appOpts = append(opts.appOpts, application.WithCleanup("tracer", func(context.Context) error {
-					return c.Close()
-				}))
-			}
-		}
-	}
+// WithAfterStopHook registers after-stop hooks.
+func WithAfterStopHook(fns ...func(context.Context) error) Option {
+	return yapp.WithAfterStopHook(fns...)
 }
 
-func initMeter(opts *options) {
-	if meterName := opts.resolvedSettings.Telemetry.Meter; len(meterName) > 0 {
-		constructor, ok := xotel.GetMeterProviderBuilder(meterName)
-		if !ok {
-			slog.Warn("not found meter provider", slog.String("name", meterName))
-			return
-		}
-		mp := constructor(InstanceName())
-		otel.SetMeterProvider(mp)
-		if opts != nil {
-			if s, ok := mp.(interface{ Shutdown(context.Context) error }); ok {
-				opts.appOpts = append(opts.appOpts, application.WithCleanup("meter", s.Shutdown))
-			} else if c, ok := mp.(io.Closer); ok {
-				opts.appOpts = append(opts.appOpts, application.WithCleanup("meter", func(context.Context) error {
-					return c.Close()
-				}))
-			}
-		}
-	}
+// WithInternalServer registers internal servers managed by the app lifecycle.
+func WithInternalServer(svr ...InternalServer) Option {
+	return yapp.WithInternalServer(svr...)
 }
 
-func initInstanceInfo(appName string, resolved settings.Resolved) {
-	instance.InitInstanceInfo(appName, resolved.Admin.Application)
+// WithCleanup registers additional cleanup hooks.
+func WithCleanup(name string, fn func(context.Context) error) Option {
+	return yapp.WithCleanup(name, fn)
 }
 
-func initLogger() error {
-	spec := logger.CurrentSettings().Handlers["default"]
-	typeName := spec.Type
-	if typeName == "" {
-		typeName = "text"
-	}
-	writerName := spec.Writer
-	if writerName == "" {
-		writerName = "default"
-	}
-
-	handlerBuilder, err := logger.GetHandlerBuilder(typeName)
-	if err != nil {
-		return err
-	}
-	h, err := handlerBuilder(writerName, spec.Config)
-	if err != nil {
-		return err
-	}
-	slog.SetDefault(slog.New(h))
-	remoteLoggerLvStr := logger.CurrentSettings().RemoteLevel
-	if remoteLoggerLvStr == "" {
-		remoteLoggerLvStr = "error"
-	}
-	var remoteLoggerLv slog.Level
-	if err = remoteLoggerLv.UnmarshalText([]byte(remoteLoggerLvStr)); err != nil {
-		return err
-	}
-	remotelog.Init(remoteLoggerLv, h)
-	return nil
+// WithConfigManager injects one config manager instance.
+func WithConfigManager(manager *config.Manager) Option {
+	return yapp.WithConfigManager(manager)
 }
 
-func initGovernor(opts *options) error {
-	svr, err := governor.NewServerWithConfig(opts.resolvedSettings.Admin.Governor, opts.configManager)
-	if err != nil {
-		return err
-	}
-	opts.governor = svr
-	return nil
+// WithBootstrapPath overrides the bootstrap config path.
+func WithBootstrapPath(path string) Option {
+	return yapp.WithBootstrapPath(path)
 }
 
-func initServer(opts *options) error {
-	if len(opts.serviceDesc) == 0 && len(opts.restServiceDesc) == 0 &&
-		len(opts.restRawHandleDesc) == 0 {
-		return nil
-	}
-	svr, err := server.NewServer()
-	if err != nil {
-		return err
-	}
-	server.RegisterGovernorRoutes(opts.governor, svr)
-	for k, v := range opts.serviceDesc {
-		svr.RegisterService(k, v)
-	}
-	for k, v := range opts.restServiceDesc {
-		svr.RegisterRestService(k, v.ss, v.Prefix...)
-	}
-
-	if len(opts.restRawHandleDesc) > 0 {
-		svr.RegisterRestRawHandlers(opts.restRawHandleDesc...)
-	}
-	opts.server = svr
-	return nil
+// WithBootstrapSource registers one bootstrap source layer.
+func WithBootstrapSource(name string, priority config.Priority, src source.Source) Option {
+	return yapp.WithBootstrapSource(name, priority, src)
 }
 
-func applyOpt(opts *options, ops ...Option) error {
-	for _, f := range ops {
-		if err := f(opts); err != nil {
-			return err
-		}
-	}
-	return nil
+// WithModules registers extra modules into the app hub.
+func WithModules(mods ...module.Module) Option {
+	return yapp.WithModules(mods...)
 }

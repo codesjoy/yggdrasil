@@ -36,14 +36,9 @@ func testClientBuilder(
 	return newMockRemoteClient(endpoint.Name(), remote.Ready), nil
 }
 
-func init() {
-	// Register the test client builder
-	remote.RegisterClientBuilder("test", testClientBuilder)
-}
-
 func TestNewRemoteClientManager(t *testing.T) {
 	ctx := context.Background()
-	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler())
+	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler(), newTestRuntime())
 
 	if manager == nil {
 		t.Fatal("expected manager to be non-nil")
@@ -58,7 +53,7 @@ func TestNewRemoteClientManager(t *testing.T) {
 
 func TestRemoteClientManager_GetOrCreate_NewClient(t *testing.T) {
 	ctx := context.Background()
-	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler())
+	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler(), newTestRuntime())
 
 	endpoint := newMockEndpoint("endpoint1", "localhost:8080", "test")
 	stateListener := func(state remote.ClientState) {}
@@ -74,7 +69,7 @@ func TestRemoteClientManager_GetOrCreate_NewClient(t *testing.T) {
 
 func TestRemoteClientManager_GetOrCreate_ExistingClient(t *testing.T) {
 	ctx := context.Background()
-	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler())
+	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler(), newTestRuntime())
 
 	endpoint := newMockEndpoint("endpoint1", "localhost:8080", "test")
 	stateListener := func(state remote.ClientState) {}
@@ -99,7 +94,7 @@ func TestRemoteClientManager_GetOrCreate_ExistingClient(t *testing.T) {
 
 func TestRemoteClientManager_GetOrCreate_AfterClose(t *testing.T) {
 	ctx := context.Background()
-	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler())
+	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler(), newTestRuntime())
 
 	// Close the manager
 	_ = manager.Close()
@@ -115,7 +110,7 @@ func TestRemoteClientManager_GetOrCreate_AfterClose(t *testing.T) {
 
 func TestRemoteClientManager_GetOrCreate_NoBuilder(t *testing.T) {
 	ctx := context.Background()
-	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler())
+	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler(), newTestRuntime())
 
 	// Use a protocol without a registered builder
 	endpoint := newMockEndpoint("endpoint1", "localhost:8080", "unknown_protocol")
@@ -129,7 +124,7 @@ func TestRemoteClientManager_GetOrCreate_NoBuilder(t *testing.T) {
 
 func TestRemoteClientManager_Remove(t *testing.T) {
 	ctx := context.Background()
-	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler())
+	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler(), newTestRuntime())
 
 	endpoint := newMockEndpoint("endpoint1", "localhost:8080", "test")
 	stateListener := func(state remote.ClientState) {}
@@ -162,7 +157,7 @@ func TestRemoteClientManager_Remove(t *testing.T) {
 
 func TestRemoteClientManager_Remove_NotFound(t *testing.T) {
 	ctx := context.Background()
-	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler())
+	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler(), newTestRuntime())
 
 	// Remove non-existent client should not error
 	err := manager.Remove("non_existent")
@@ -173,7 +168,7 @@ func TestRemoteClientManager_Remove_NotFound(t *testing.T) {
 
 func TestRemoteClientManager_Close(t *testing.T) {
 	ctx := context.Background()
-	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler())
+	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler(), newTestRuntime())
 
 	endpoint1 := newMockEndpoint("endpoint1", "localhost:8080", "test")
 	endpoint2 := newMockEndpoint("endpoint2", "localhost:8081", "test")
@@ -207,7 +202,7 @@ func TestRemoteClientManager_Close(t *testing.T) {
 
 func TestRemoteClientManager_Close_Idempotent(t *testing.T) {
 	ctx := context.Background()
-	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler())
+	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler(), newTestRuntime())
 
 	// Close multiple times should not error
 	err := manager.Close()
@@ -223,7 +218,7 @@ func TestRemoteClientManager_Close_Idempotent(t *testing.T) {
 
 func TestRemoteClientManager_Concurrent(t *testing.T) {
 	ctx := context.Background()
-	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler())
+	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler(), newTestRuntime())
 
 	var wg sync.WaitGroup
 	numGoroutines := 50
@@ -253,7 +248,7 @@ func TestRemoteClientManager_Concurrent(t *testing.T) {
 
 func TestRcWrapper_Close(t *testing.T) {
 	ctx := context.Background()
-	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler())
+	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler(), newTestRuntime())
 
 	endpoint := newMockEndpoint("endpoint1", "localhost:8080", "test")
 	stateListener := func(state remote.ClientState) {}
@@ -285,7 +280,7 @@ func TestRcWrapper_Close(t *testing.T) {
 
 func TestRcWrapper_Connect(t *testing.T) {
 	ctx := context.Background()
-	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler())
+	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler(), newTestRuntime())
 
 	endpoint := newMockEndpoint("endpoint1", "localhost:8080", "test")
 	stateListener := func(state remote.ClientState) {}
@@ -302,7 +297,7 @@ func TestRcWrapper_Connect(t *testing.T) {
 
 func TestRcWrapper_NewStream(t *testing.T) {
 	ctx := context.Background()
-	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler())
+	manager := newRemoteClientManager(ctx, "test-app", newMockStatsHandler(), newTestRuntime())
 
 	endpoint := newMockEndpoint("endpoint1", "localhost:8080", "test")
 	stateListener := func(state remote.ClientState) {}
