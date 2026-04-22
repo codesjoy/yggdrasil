@@ -65,6 +65,13 @@ type handler struct {
 
 func newHandler(isSvr bool) handler {
 	cfg := getCfg()
+	return newHandlerWithConfig(cfg, isSvr)
+}
+
+func newHandlerWithConfig(cfg *Config, isSvr bool) handler {
+	if cfg == nil {
+		cfg = &Config{}
+	}
 	tracer := otel.Tracer(
 		"github.com/codesjoy/yggdrasil/v3",
 		trace.WithInstrumentationVersion("semver:"+constant.Version),
@@ -149,6 +156,16 @@ func newHandler(isSvr bool) handler {
 	}
 
 	return h
+}
+
+func newSvrHandlerWithConfig(cfg *Config) stats.Handler {
+	h := newHandlerWithConfig(cfg, true)
+	return &serverHandler{handler: h}
+}
+
+func newCliHandlerWithConfig(cfg *Config) stats.Handler {
+	h := newHandlerWithConfig(cfg, false)
+	return &clientHandler{handler: h}
 }
 
 func (h *handler) handleWithMetrics(ctx context.Context, rs stats.RPCStats, isServer bool) {

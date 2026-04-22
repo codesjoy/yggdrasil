@@ -16,6 +16,7 @@
 package resolver
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 )
@@ -114,6 +115,29 @@ const (
 // Builder is a function that creates a resolver.
 type Builder func(name string) (Resolver, error)
 
+// Provider is the capability-oriented resolver provider.
+type Provider interface {
+	Type() string
+	New(name string) (Resolver, error)
+}
+
+type provider struct {
+	typeName string
+	builder  Builder
+}
+
+func (p provider) Type() string { return p.typeName }
+
+func (p provider) New(name string) (Resolver, error) { return p.builder(name) }
+
+// NewProvider wraps a resolver builder as a capability provider.
+func NewProvider(typeName string, builder Builder) Provider {
+	return provider{
+		typeName: typeName,
+		builder:  builder,
+	}
+}
+
 // Spec describes a resolver extension envelope.
 type Spec struct {
 	Type   string         `mapstructure:"type"`
@@ -121,25 +145,40 @@ type Spec struct {
 }
 
 var (
-	resolver = map[string]Resolver{}
-	builder  = map[string]Builder{}
-	mu       sync.RWMutex
-	specs    = map[string]Spec{}
+	resolver  = map[string]Resolver{}
+	providers = map[string]Provider{}
+	mu        sync.RWMutex
+	specs     = map[string]Spec{}
 )
 
-// RegisterBuilder registers a resolver builder.
-func RegisterBuilder(typeName string, f func(string) (Resolver, error)) {
+// ConfigureProviders replaces all resolver providers.
+func ConfigureProviders(next []Provider) error {
+	target := map[string]Provider{}
+	for _, item := range next {
+		if item == nil {
+			continue
+		}
+		typeName := item.Type()
+		if typeName == "" {
+			return errors.New("resolver provider type is empty")
+		}
+		if _, exists := target[typeName]; exists {
+			return fmt.Errorf("duplicate resolver provider for type %q", typeName)
+		}
+		target[typeName] = item
+	}
 	mu.Lock()
-	defer mu.Unlock()
-	builder[typeName] = f
+	providers = target
+	resolver = map[string]Resolver{}
+	mu.Unlock()
+	return nil
 }
 
-// HasBuilder reports whether a resolver builder exists.
-func HasBuilder(typeName string) bool {
+// GetProvider returns a resolver provider by type.
+func GetProvider(typeName string) Provider {
 	mu.RLock()
 	defer mu.RUnlock()
-	_, ok := builder[typeName]
-	return ok
+	return providers[typeName]
 }
 
 // Configure replaces the configured resolver specs.
@@ -185,11 +224,11 @@ func Get(name string) (Resolver, error) {
 		return nil, fmt.Errorf("not found resolver type, name: %s", name)
 	}
 
-	f, ok := builder[typeName]
+	p, ok := providers[typeName]
 	if !ok {
-		return nil, fmt.Errorf("not found resolver builder, type: %s", typeName)
+		return nil, fmt.Errorf("not found resolver provider, type: %s", typeName)
 	}
-	r, err := f(name)
+	r, err := p.New(name)
 	if err != nil {
 		return nil, err
 	}

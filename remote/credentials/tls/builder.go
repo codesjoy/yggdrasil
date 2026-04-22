@@ -27,8 +27,31 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
 )
 
-func init() {
-	credentials.RegisterBuilder(name, newCredentials)
+// RegisterBuilder registers the tls credentials builder.
+func RegisterBuilder() {
+	credentials.RegisterBuilder(name, BuiltinBuilder())
+}
+
+// BuiltinBuilder returns the framework built-in tls credentials builder.
+func BuiltinBuilder() credentials.Builder {
+	return newCredentials
+}
+
+// BuiltinBuilderWithConfig returns the framework built-in tls credentials builder bound to explicit config.
+func BuiltinBuilderWithConfig(global BuilderConfig, services map[string]BuilderConfig) credentials.Builder {
+	serviceCopy := map[string]BuilderConfig{}
+	for name, cfg := range services {
+		serviceCopy[name] = cfg
+	}
+	return func(serviceName string, client bool) credentials.TransportCredentials {
+		cfg := global
+		if serviceName != "" {
+			if svc, ok := serviceCopy[serviceName]; ok {
+				mergeBuilderConfig(&cfg, svc)
+			}
+		}
+		return buildCredentialsFromConfig(cfg, client)
+	}
 }
 
 type builderConfig struct {
@@ -52,7 +75,10 @@ type sideCfg struct {
 
 func newCredentials(serviceName string, client bool) credentials.TransportCredentials {
 	cfg := loadBuilderConfig(serviceName)
+	return buildCredentialsFromConfig(cfg, client)
+}
 
+func buildCredentialsFromConfig(cfg builderConfig, client bool) credentials.TransportCredentials {
 	tlsCfg := &tls.Config{
 		MinVersion: tls.VersionTLS12,
 	}

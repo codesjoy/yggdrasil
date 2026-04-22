@@ -187,3 +187,13 @@ func RegisterBuilder(name string, f Builder) {
 	defer mu.Unlock()
 	builders[name] = f
 }
+
+// ConfigureBuilders replaces all credential builders in one shot.
+func ConfigureBuilders(next map[string]Builder) {
+	mu.Lock()
+	defer mu.Unlock()
+	builders = map[string]Builder{}
+	for name, builder := range next {
+		builders[name] = builder
+	}
+}

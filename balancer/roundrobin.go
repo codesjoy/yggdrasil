@@ -33,8 +33,15 @@ import (
 
 const name = "round_robin"
 
-func init() {
-	RegisterBuilder(name, newRoundRobin)
+// BuiltinProvider returns the built-in round_robin balancer provider.
+func BuiltinProvider() Provider {
+	return NewProvider(name, newRoundRobin)
+}
+
+func defaultProviders() map[string]Provider {
+	return map[string]Provider{
+		name: BuiltinProvider(),
+	}
 }
 
 type rrBalancer struct {

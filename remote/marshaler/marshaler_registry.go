@@ -42,6 +42,29 @@ func BuildMarshalerRegistry(scheme ...string) Registry {
 	return mr
 }
 
+// BuildMarshalerRegistryWithBuilders builds a marshaler registry from explicit builders.
+func BuildMarshalerRegistryWithBuilders(
+	builders map[string]MarshallerBuilder,
+	jsonpbCfg *JSONPbConfig,
+	scheme ...string,
+) Registry {
+	scheme = internalutils.DedupStableStrings(scheme)
+	mr := NewRegistry()
+	for _, item := range scheme {
+		m, err := BuildMarshallerWithBuilders(builders, item, jsonpbCfg)
+		if err != nil {
+			slog.Warn(
+				"failed to build marshaler",
+				slog.String("scheme", item),
+				slog.Any("error", err),
+			)
+			continue
+		}
+		_ = mr.Register(item, m)
+	}
+	return mr
+}
+
 var defaultMarshaler = NewJSONPbMarshalerWithConfig(nil)
 
 var (

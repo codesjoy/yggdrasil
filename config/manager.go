@@ -204,6 +204,12 @@ func (m *Manager) watch(path []string, fn func(Snapshot)) func() {
 	}
 }
 
+// Watch subscribes changes for a snapshot subsection.
+// The callback is invoked once immediately with the current snapshot.
+func (m *Manager) Watch(path []string, fn func(Snapshot)) func() {
+	return m.watch(path, fn)
+}
+
 func (m *Manager) watchLayer(name string, changeCh <-chan source.Data, stop <-chan struct{}) {
 	for {
 		select {

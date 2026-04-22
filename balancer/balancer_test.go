@@ -17,6 +17,7 @@ package balancer
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -85,4 +86,20 @@ func TestRegisterBuilder_Override(t *testing.T) {
 	if err == nil || err.Error() != "builder2" {
 		t.Fatalf("expected error 'builder2', got %v", err)
 	}
+}
+
+func RegisterBuilder(typeName string, f Builder) {
+	mu.Lock()
+	defer mu.Unlock()
+	providers[typeName] = NewProvider(typeName, f)
+}
+
+func GetBuilder(typeName string) (Builder, error) {
+	mu.RLock()
+	defer mu.RUnlock()
+	p, ok := providers[typeName]
+	if !ok {
+		return nil, fmt.Errorf("not found balancer builder, type: %s", typeName)
+	}
+	return p.New, nil
 }

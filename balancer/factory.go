@@ -92,9 +92,9 @@ func New(serviceName, balancerName string, cli Client) (Balancer, error) {
 	if err != nil {
 		return nil, err
 	}
-	builder, err := GetBuilder(typeName)
-	if err != nil {
-		return nil, err
+	provider, ok := GetProvider(typeName)
+	if !ok {
+		return nil, fmt.Errorf("not found balancer provider, type: %s", typeName)
 	}
-	return builder(serviceName, balancerName, cli)
+	return provider.New(serviceName, balancerName, cli)
 }

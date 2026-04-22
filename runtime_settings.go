@@ -27,6 +27,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/remote/rest/middleware"
 	"github.com/codesjoy/yggdrasil/v3/resolver"
 	"github.com/codesjoy/yggdrasil/v3/server"
+	serverrest "github.com/codesjoy/yggdrasil/v3/server/rest"
 	"github.com/codesjoy/yggdrasil/v3/stats"
 )
 
@@ -51,9 +52,20 @@ func applyResolvedSettings(resolved settings.Resolved) {
 	balancer.Configure(resolved.Balancers.Defaults, resolved.Balancers.Services)
 	client.Configure(resolved.Clients)
 	server.Configure(resolved.Server)
-	grpcprotocol.Configure(resolved.Transports.GRPC)
-	protocolhttp.Configure(resolved.Transports.HTTP)
-	rest.Configure(resolved.Transports.Rest)
+	grpcCfg := grpcprotocol.Settings{}
+	_ = settings.DecodePayload(&grpcCfg, resolved.Transports.GRPC)
+	grpcprotocol.Configure(grpcCfg)
+	httpCfg := protocolhttp.Settings{}
+	_ = settings.DecodePayload(&httpCfg, resolved.Transports.HTTP)
+	protocolhttp.Configure(httpCfg)
+	var restCfg *rest.Config
+	if resolved.Transports.Rest != nil {
+		cfg := &serverrest.Config{}
+		_ = settings.DecodePayload(cfg, resolved.Transports.Rest)
+		restCfg = &rest.Config{}
+		_ = settings.DecodePayload(restCfg, cfg)
+	}
+	rest.Configure(restCfg)
 	stats.Configure(resolved.Telemetry.Stats)
 
 	var tlsGlobal ytls.BuilderConfig

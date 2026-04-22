@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codesjoy.github.io/yggdrasil/module-hub-diagnostics.schema.json",
+  "title": "Yggdrasil Module Hub Diagnostics",
+  "type": "object",
+  "required": [
+    "modules",
+    "topology",
+    "last_stable_topology",
+    "started_modules",
+    "reload_state",
+    "dependency_errors",
+    "capability_conflicts",
+    "capabilities",
+    "bindings"
+  ],
+  "properties": {
+    "modules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/module_diag"
+      }
+    },
+    "topology": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "last_stable_topology": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "started_modules": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "reload_state": {
+      "$ref": "#/$defs/reload_state"
+    },
+    "dependency_errors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "capability_conflicts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/capability_diag"
+      }
+    },
+    "bindings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/capability_binding_diag"
+      }
+    }
+  },
+  "$defs": {
+    "module_diag": {
+      "type": "object",
+      "required": [
+        "name",
+        "depends_on",
+        "topo_index",
+        "topo_layer",
+        "started",
+        "restart_required",
+        "reload_phase",
+        "last_reload_error",
+        "capability_conflicts",
+        "dependency_errors"
+      ],
+      "properties": {
+        "name": { "type": "string" },
+        "depends_on": { "type": "array", "items": { "type": "string" } },
+        "topo_index": { "type": "integer" },
+        "topo_layer": { "type": "integer" },
+        "started": { "type": "boolean" },
+        "restart_required": { "type": "boolean" },
+        "reload_phase": { "type": "string" },
+        "last_reload_error": { "type": "string" },
+        "capability_conflicts": { "type": "array", "items": { "type": "string" } },
+        "dependency_errors": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "reload_state": {
+      "type": "object",
+      "required": [
+        "phase",
+        "restart_required",
+        "diverged",
+        "failed_module",
+        "failed_stage",
+        "last_error"
+      ],
+      "properties": {
+        "phase": { "type": "string" },
+        "restart_required": { "type": "boolean" },
+        "diverged": { "type": "boolean" },
+        "failed_module": { "type": "string" },
+        "failed_stage": { "type": "string" },
+        "last_error": { "type": "string" }
+      }
+    },
+    "capability_provider_diag": {
+      "type": "object",
+      "required": ["module", "name", "type"],
+      "properties": {
+        "module": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" }
+      }
+    },
+    "capability_diag": {
+      "type": "object",
+      "required": ["spec", "cardinality", "providers", "conflicts"],
+      "properties": {
+        "spec": { "type": "string" },
+        "cardinality": { "type": "string" },
+        "providers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/capability_provider_diag" }
+        },
+        "conflicts": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "capability_binding_diag": {
+      "type": "object",
+      "required": ["spec", "requested", "resolved", "missing", "conflicts"],
+      "properties": {
+        "spec": { "type": "string" },
+        "requested": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "resolved": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "missing": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "conflicts": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

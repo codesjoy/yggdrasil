@@ -23,9 +23,19 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/config"
 )
 
-func init() {
-	RegisterHandlerBuilder("json", newJSONHandler)
-	RegisterHandlerBuilder("text", newConsoleHandler)
+// RegisterBuiltinHandlers registers built-in handler builders.
+func RegisterBuiltinHandlers() {
+	for name, builder := range BuiltinHandlerBuilders() {
+		RegisterHandlerBuilder(name, builder)
+	}
+}
+
+// BuiltinHandlerBuilders returns framework built-in handler providers.
+func BuiltinHandlerBuilders() map[string]HandlerBuilder {
+	return map[string]HandlerBuilder{
+		"json": newJSONHandler,
+		"text": newConsoleHandler,
+	}
 }
 
 // HandlerBuilder is the interface for building a slog.Handler.
@@ -39,6 +49,17 @@ func RegisterHandlerBuilder(typeName string, f HandlerBuilder) {
 	handlerBuilderMu.Lock()
 	defer handlerBuilderMu.Unlock()
 	handlerBuilder[typeName] = f
+}
+
+// ConfigureHandlerBuilders replaces all handler builders in one shot.
+func ConfigureHandlerBuilders(builders map[string]HandlerBuilder) {
+	handlerBuilderMu.Lock()
+	defer handlerBuilderMu.Unlock()
+	next := make(map[string]HandlerBuilder, len(builders))
+	for name, builder := range builders {
+		next[name] = builder
+	}
+	handlerBuilder = next
 }
 
 // GetHandlerBuilder returns the handler builder for the given type.

@@ -20,12 +20,15 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/client"
 	"github.com/codesjoy/yggdrasil/v3/internal/backoff"
-	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc"
-	protocolhttp "github.com/codesjoy/yggdrasil/v3/remote/protocol/http"
+	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/transport/grpc"
+	rpchttp "github.com/codesjoy/yggdrasil/v3/remote/transport/rpchttp"
 	"github.com/codesjoy/yggdrasil/v3/resolver"
 )
 
-func mergeClientServiceConfig(base client.ServiceConfig, overlay clientServiceConfigOverlay) client.ServiceConfig {
+func mergeClientServiceSettings(
+	base client.ServiceSettings,
+	overlay clientServiceConfigOverlay,
+) client.ServiceSettings {
 	out := base
 	if overlay.FastFail != nil {
 		out.FastFail = *overlay.FastFail
@@ -58,7 +61,7 @@ func mergeClientServiceConfig(base client.ServiceConfig, overlay clientServiceCo
 	return out
 }
 
-func mergeHTTPClientConfig(base protocolhttp.ClientConfig, overlay HTTPClientTransport) protocolhttp.ClientConfig {
+func mergeHTTPClientConfig(base rpchttp.ClientConfig, overlay HTTPClientTransport) rpchttp.ClientConfig {
 	out := base
 	if overlay.Timeout != nil {
 		out.Timeout = *overlay.Timeout

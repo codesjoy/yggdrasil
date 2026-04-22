@@ -20,7 +20,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-func init() {
+// ConfigureDefaultPropagator installs the default trace propagator.
+func ConfigureDefaultPropagator() {
 	otel.SetTextMapPropagator(
 		propagation.NewCompositeTextMapPropagator(
 			propagation.TraceContext{}, propagation.Baggage{}))
@@ -34,6 +35,14 @@ var tracerBuilders = make(map[string]TracerProviderBuilder)
 // RegisterTracerProviderBuilder registers a TracerProviderBuilder.
 func RegisterTracerProviderBuilder(name string, constructor TracerProviderBuilder) {
 	tracerBuilders[name] = constructor
+}
+
+// ConfigureTracerProviderBuilders replaces all tracer provider builders in one shot.
+func ConfigureTracerProviderBuilders(builders map[string]TracerProviderBuilder) {
+	tracerBuilders = make(map[string]TracerProviderBuilder, len(builders))
+	for name, constructor := range builders {
+		tracerBuilders[name] = constructor
+	}
 }
 
 // GetTracerProviderBuilder returns a TracerProviderBuilder.

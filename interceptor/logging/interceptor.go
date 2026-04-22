@@ -20,14 +20,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"runtime"
-	"sync"
 	"time"
 
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/interceptor"
-	"github.com/codesjoy/yggdrasil/v3/logger"
 	"github.com/codesjoy/yggdrasil/v3/status"
 	"github.com/codesjoy/yggdrasil/v3/stream"
 )
@@ -37,71 +34,98 @@ const (
 	typeLogger  = "logger"
 )
 
-var (
-	global *logging
-	once   sync.Once
-)
-
 // Config defines the logger configuration.
 type Config struct {
 	SlowThreshold  time.Duration `default:"1s"`
 	PrintReqAndRes bool
 }
 
-func initGlobalLogging() {
-	once.Do(func() {
-		cfg := Config{}
-		var source any
-		switch {
-		case logger.InterceptorConfig(typeLogging) != nil:
-			source = logger.InterceptorConfig(typeLogging)
-		case logger.InterceptorConfig(typeLogger) != nil:
-			source = logger.InterceptorConfig(typeLogger)
-		default:
-			source = nil
-		}
-		if err := config.NewSnapshot(source).Decode(&cfg); err != nil {
-			slog.Error("fault to load logging config", slog.String("type", typeLogging), slog.Any("error", err))
-			os.Exit(1)
-		}
-		global = &logging{cfg: &cfg}
-	})
+func providerNames() []string {
+	return []string{typeLogging, typeLogger}
 }
 
-func init() {
-	register := func(typeName string) {
-		interceptor.RegisterUnaryClientIntBuilder(
-			typeName,
-			func(_ string) interceptor.UnaryClientInterceptor {
-				initGlobalLogging()
-				return global.UnaryClientInterceptor
-			},
-		)
-		interceptor.RegisterStreamClientIntBuilder(
-			typeName,
-			func(string) interceptor.StreamClientInterceptor {
-				initGlobalLogging()
-				return global.StreamClientInterceptor
-			},
-		)
-		interceptor.RegisterUnaryServerIntBuilder(
-			typeName,
-			func() interceptor.UnaryServerInterceptor {
-				initGlobalLogging()
-				return global.UnaryServerInterceptor
-			},
-		)
-		interceptor.RegisterStreamServerIntBuilder(
-			typeName,
-			func() interceptor.StreamServerInterceptor {
-				initGlobalLogging()
-				return global.StreamServerInterceptor
-			},
-		)
-	}
+// BuiltinUnaryClientProviders returns built-in unary client interceptor providers.
+func BuiltinUnaryClientProviders() []interceptor.UnaryClientInterceptorProvider {
+	return BuiltinUnaryClientProvidersWithConfig(nil)
+}
 
-	register(typeLogging)
-	register(typeLogger)
+// BuiltinUnaryClientProvidersWithConfig returns built-in unary client interceptor providers bound to explicit config.
+func BuiltinUnaryClientProvidersWithConfig(source any) []interceptor.UnaryClientInterceptorProvider {
+	loggingCfg := mustLoadConfig(source)
+	names := providerNames()
+	out := make([]interceptor.UnaryClientInterceptorProvider, 0, len(names))
+	for _, name := range names {
+		l := &logging{cfg: loggingCfg}
+		out = append(out, interceptor.NewUnaryClientInterceptorProvider(name, func(string) interceptor.UnaryClientInterceptor {
+			return l.UnaryClientInterceptor
+		}))
+	}
+	return out
+}
+
+// BuiltinStreamClientProviders returns built-in stream client interceptor providers.
+func BuiltinStreamClientProviders() []interceptor.StreamClientInterceptorProvider {
+	return BuiltinStreamClientProvidersWithConfig(nil)
+}
+
+// BuiltinStreamClientProvidersWithConfig returns built-in stream client interceptor providers bound to explicit config.
+func BuiltinStreamClientProvidersWithConfig(source any) []interceptor.StreamClientInterceptorProvider {
+	loggingCfg := mustLoadConfig(source)
+	names := providerNames()
+	out := make([]interceptor.StreamClientInterceptorProvider, 0, len(names))
+	for _, name := range names {
+		l := &logging{cfg: loggingCfg}
+		out = append(out, interceptor.NewStreamClientInterceptorProvider(name, func(string) interceptor.StreamClientInterceptor {
+			return l.StreamClientInterceptor
+		}))
+	}
+	return out
+}
+
+// BuiltinUnaryServerProviders returns built-in unary server interceptor providers.
+func BuiltinUnaryServerProviders() []interceptor.UnaryServerInterceptorProvider {
+	return BuiltinUnaryServerProvidersWithConfig(nil)
+}
+
+// BuiltinUnaryServerProvidersWithConfig returns built-in unary server interceptor providers bound to explicit config.
+func BuiltinUnaryServerProvidersWithConfig(source any) []interceptor.UnaryServerInterceptorProvider {
+	loggingCfg := mustLoadConfig(source)
+	names := providerNames()
+	out := make([]interceptor.UnaryServerInterceptorProvider, 0, len(names))
+	for _, name := range names {
+		l := &logging{cfg: loggingCfg}
+		out = append(out, interceptor.NewUnaryServerInterceptorProvider(name, func() interceptor.UnaryServerInterceptor {
+			return l.UnaryServerInterceptor
+		}))
+	}
+	return out
+}
+
+// BuiltinStreamServerProviders returns built-in stream server interceptor providers.
+func BuiltinStreamServerProviders() []interceptor.StreamServerInterceptorProvider {
+	return BuiltinStreamServerProvidersWithConfig(nil)
+}
+
+// BuiltinStreamServerProvidersWithConfig returns built-in stream server interceptor providers bound to explicit config.
+func BuiltinStreamServerProvidersWithConfig(source any) []interceptor.StreamServerInterceptorProvider {
+	loggingCfg := mustLoadConfig(source)
+	names := providerNames()
+	out := make([]interceptor.StreamServerInterceptorProvider, 0, len(names))
+	for _, name := range names {
+		l := &logging{cfg: loggingCfg}
+		out = append(out, interceptor.NewStreamServerInterceptorProvider(name, func() interceptor.StreamServerInterceptor {
+			return l.StreamServerInterceptor
+		}))
+	}
+	return out
+}
+
+func mustLoadConfig(source any) *Config {
+	cfg := Config{}
+	if err := config.NewSnapshot(source).Decode(&cfg); err != nil {
+		panic(fmt.Sprintf("load logging interceptor config: %v", err))
+	}
+	return &cfg
 }
 
 type logging struct {

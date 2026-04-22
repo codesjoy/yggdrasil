@@ -19,6 +19,7 @@ package registry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 )
@@ -36,6 +37,29 @@ type Spec struct {
 
 // Builder builds a registry from its config subsection.
 type Builder func(cfg map[string]any) (Registry, error)
+
+// Provider is the capability-oriented registry provider.
+type Provider interface {
+	Type() string
+	New(cfg map[string]any) (Registry, error)
+}
+
+type provider struct {
+	typeName string
+	builder  Builder
+}
+
+func (p provider) Type() string { return p.typeName }
+
+func (p provider) New(cfg map[string]any) (Registry, error) { return p.builder(cfg) }
+
+// NewProvider wraps a registry builder as a capability provider.
+func NewProvider(typeName string, builder Builder) Provider {
+	return provider{
+		typeName: typeName,
+		builder:  builder,
+	}
+}
 
 // Registry is the interface for registry
 type Registry interface {
@@ -78,36 +102,51 @@ type Instance interface {
 }
 
 var (
-	builders   = make(map[string]Builder)
+	providers  = make(map[string]Provider)
 	mu         sync.RWMutex
 	defaultReg Registry
 	specV      Spec
 )
 
-// RegisterBuilder registers a registry builder.
-func RegisterBuilder(typeName string, constructor Builder) {
+// ConfigureProviders replaces all registry providers.
+func ConfigureProviders(next []Provider) error {
+	target := map[string]Provider{}
+	for _, item := range next {
+		if item == nil {
+			continue
+		}
+		typeName := item.Type()
+		if typeName == "" {
+			return errors.New("registry provider type is empty")
+		}
+		if _, exists := target[typeName]; exists {
+			return fmt.Errorf("duplicate registry provider for type %q", typeName)
+		}
+		target[typeName] = item
+	}
 	mu.Lock()
-	defer mu.Unlock()
-	builders[typeName] = constructor
+	providers = target
+	defaultReg = nil
+	mu.Unlock()
+	return nil
 }
 
-// GetBuilder returns a registry builder.
-func GetBuilder(typeName string) Builder {
+// GetProvider returns a registry provider by type.
+func GetProvider(typeName string) Provider {
 	mu.RLock()
 	defer mu.RUnlock()
-	constructor := builders[typeName]
-	return constructor
+	return providers[typeName]
 }
 
 // New creates a registry instance by type and config value.
 func New(typeName string, cfg map[string]any) (Registry, error) {
 	mu.RLock()
-	f, ok := builders[typeName]
+	p, ok := providers[typeName]
 	mu.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("not found registry builder, type: %s", typeName)
+		return nil, fmt.Errorf("not found registry provider, type: %s", typeName)
 	}
-	return f(cfg)
+	return p.New(cfg)
 }
 
 // Configure installs the default registry spec resolved by the assembly layer.

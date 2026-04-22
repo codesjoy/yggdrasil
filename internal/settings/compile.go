@@ -15,12 +15,16 @@
 package settings
 
 import (
+	"slices"
+	"sort"
+
 	"github.com/codesjoy/yggdrasil/v3/balancer"
 	"github.com/codesjoy/yggdrasil/v3/client"
 	"github.com/codesjoy/yggdrasil/v3/logger"
-	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc"
-	protocolhttp "github.com/codesjoy/yggdrasil/v3/remote/protocol/http"
+	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/transport/grpc"
+	rpchttp "github.com/codesjoy/yggdrasil/v3/remote/transport/rpchttp"
 	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/stats"
 )
 
 // Compile normalizes the raw framework root into per-module resolved settings.
@@ -34,8 +38,12 @@ func Compile(root Root) (Resolved, error) {
 		Balancers: fw.Balancers,
 		Telemetry: fw.Telemetry,
 		Admin:     fw.Admin,
+		Extensions: Extensions{
+			Interceptors: fw.Extensions.Interceptors,
+			Middleware:   fw.Extensions.Middleware,
+		},
 		Clients: client.Settings{
-			Services: map[string]client.ServiceConfig{},
+			Services: map[string]client.ServiceSettings{},
 		},
 		Transports: ResolvedTransports{
 			GRPC: grpcprotocol.Settings{
@@ -43,25 +51,58 @@ func Compile(root Root) (Resolved, error) {
 				ClientServices: map[string]grpcprotocol.Config{},
 				Server:         fw.Transports.GRPC.Server,
 			},
-			HTTP: protocolhttp.Settings{
+			HTTP: rpchttp.Settings{
 				Client:         fw.Transports.HTTP.Client,
-				ClientServices: map[string]protocolhttp.ClientConfig{},
+				ClientServices: map[string]rpchttp.ClientConfig{},
 				Server:         fw.Transports.HTTP.Server,
 			},
 			Rest:                   fw.Transports.HTTP.Rest,
 			GRPCCredentials:        cloneNestedMap(fw.Transports.GRPC.Credentials),
 			GRPCServiceCredentials: map[string]map[string]map[string]any{},
 		},
+		ModuleViews: map[string]string{
+			"logging":                 "yggdrasil.logging",
+			"telemetry":               "yggdrasil.telemetry",
+			"telemetry.stats":         "yggdrasil.telemetry.stats",
+			"transport.credentials":   "yggdrasil.transports.grpc.credentials",
+			"transport.marshaler":     "yggdrasil.transports.http.rest.marshaler",
+			"server.transports":       "yggdrasil.server.transports",
+			"extensions.interceptors": "yggdrasil.extensions.interceptors",
+			"server.rest.middleware":  "yggdrasil.extensions.middleware",
+			"discovery.registry":      "yggdrasil.discovery.registry",
+			"discovery.resolvers":     "yggdrasil.discovery.resolvers",
+			"discovery.balancers":     "yggdrasil.balancers",
+		},
+		CapabilityBindings: map[string][]string{},
 	}
 
 	normalizeLogging(&resolved.Logging)
 	ensureCollections(&resolved)
 
+	if items := normalizeOrderList(fw.Extensions.Interceptors.UnaryServer); len(items) != 0 {
+		resolved.Server.Interceptors.Unary = items
+		resolved.OrderedExtensions.UnaryServer = append([]string(nil), items...)
+	}
+	if items := normalizeOrderList(fw.Extensions.Interceptors.StreamServer); len(items) != 0 {
+		resolved.Server.Interceptors.Stream = items
+		resolved.OrderedExtensions.StreamServer = append([]string(nil), items...)
+	}
+
+	defaultClientSettings := fw.Clients.Defaults.ServiceSettings
+	if items := normalizeOrderList(fw.Extensions.Interceptors.UnaryClient); len(items) != 0 {
+		defaultClientSettings.Interceptors.Unary = items
+		resolved.OrderedExtensions.UnaryClient = append([]string(nil), items...)
+	}
+	if items := normalizeOrderList(fw.Extensions.Interceptors.StreamClient); len(items) != 0 {
+		defaultClientSettings.Interceptors.Stream = items
+		resolved.OrderedExtensions.StreamClient = append([]string(nil), items...)
+	}
+
 	resolved.Server.RestEnabled = resolved.Transports.Rest != nil
 	for serviceName, spec := range fw.Clients.Services {
-		resolved.Clients.Services[serviceName] = mergeClientServiceConfig(
-			fw.Clients.Defaults.ServiceConfig,
-			spec.ServiceConfig,
+		resolved.Clients.Services[serviceName] = mergeClientServiceSettings(
+			defaultClientSettings,
+			spec.ServiceSettings,
 		)
 		resolved.Transports.GRPC.ClientServices[serviceName] = mergeGRPCClientConfig(
 			fw.Transports.GRPC.Client,
@@ -77,6 +118,22 @@ func Compile(root Root) (Resolved, error) {
 			)
 		}
 	}
+	if resolved.Transports.Rest != nil {
+		if items := normalizeOrderList(fw.Extensions.Middleware.RestAll); len(items) != 0 {
+			resolved.Transports.Rest.Middleware.All = items
+			resolved.OrderedExtensions.RestAll = append([]string(nil), items...)
+		}
+		if items := normalizeOrderList(fw.Extensions.Middleware.RestRPC); len(items) != 0 {
+			resolved.Transports.Rest.Middleware.RPC = items
+			resolved.OrderedExtensions.RestRPC = append([]string(nil), items...)
+		}
+		if items := normalizeOrderList(fw.Extensions.Middleware.RestWeb); len(items) != 0 {
+			resolved.Transports.Rest.Middleware.Web = items
+			resolved.OrderedExtensions.RestWeb = append([]string(nil), items...)
+		}
+	}
+
+	resolved.CapabilityBindings = compileCapabilityBindings(resolved)
 
 	return resolved, nil
 }
@@ -120,4 +177,172 @@ func ensureCollections(resolved *Resolved) {
 	if resolved.Root.Yggdrasil.Clients.Services == nil {
 		resolved.Root.Yggdrasil.Clients.Services = map[string]ClientServiceSpec{}
 	}
+}
+
+func normalizeOrderList(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	seen := map[string]struct{}{}
+	for _, item := range items {
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		out = append(out, item)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return slices.Clip(out)
+}
+
+func compileCapabilityBindings(resolved Resolved) map[string][]string {
+	out := map[string][]string{}
+	out["logger.handler"] = sortedHandlerTypes(resolved.Logging.Handlers)
+	out["logger.writer"] = sortedWriterTypes(resolved.Logging.Writers)
+	if resolved.Telemetry.Tracer != "" {
+		out["otel.tracer_provider"] = []string{resolved.Telemetry.Tracer}
+	}
+	if resolved.Telemetry.Meter != "" {
+		out["otel.meter_provider"] = []string{resolved.Telemetry.Meter}
+	}
+	statsNames := dedupStrings(append(
+		stats.ParseHandlerNames(resolved.Telemetry.Stats.Server),
+		stats.ParseHandlerNames(resolved.Telemetry.Stats.Client)...,
+	))
+	if len(statsNames) > 0 {
+		out["stats.handler"] = statsNames
+	}
+	credentialNames := map[string]struct{}{}
+	if resolved.Transports.GRPC.Server.CredsProto != "" {
+		credentialNames[resolved.Transports.GRPC.Server.CredsProto] = struct{}{}
+	}
+	if resolved.Transports.GRPC.Client.Transport.CredsProto != "" {
+		credentialNames[resolved.Transports.GRPC.Client.Transport.CredsProto] = struct{}{}
+	}
+	for _, cfg := range resolved.Transports.GRPC.ClientServices {
+		if cfg.Transport.CredsProto != "" {
+			credentialNames[cfg.Transport.CredsProto] = struct{}{}
+		}
+	}
+	for name := range resolved.Transports.GRPCCredentials {
+		credentialNames[name] = struct{}{}
+	}
+	for _, items := range resolved.Transports.GRPCServiceCredentials {
+		for name := range items {
+			credentialNames[name] = struct{}{}
+		}
+	}
+	if len(credentialNames) > 0 {
+		names := make([]string, 0, len(credentialNames))
+		for name := range credentialNames {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		out["credentials.transport"] = names
+	}
+	if resolved.Transports.Rest != nil {
+		schemes := slices.Clone(resolved.Transports.Rest.Marshaler.Support)
+		if len(schemes) == 0 {
+			schemes = []string{"jsonpb"}
+		}
+		out["marshaler.scheme"] = dedupStrings(schemes)
+	}
+
+	serverProtocols := dedupStrings(append([]string(nil), resolved.Server.Transports...))
+	if len(serverProtocols) > 0 {
+		out["transport.server.provider"] = serverProtocols
+	}
+
+	clientProtocols := []string{grpcprotocol.Protocol, rpchttp.Protocol}
+	for _, cfg := range resolved.Clients.Services {
+		for _, endpoint := range cfg.Remote.Endpoints {
+			if endpoint.Protocol != "" {
+				clientProtocols = append(clientProtocols, endpoint.Protocol)
+			}
+		}
+	}
+	out["transport.client.provider"] = dedupStrings(clientProtocols)
+
+	out["interceptor.unary_server"] = dedupStrings(append([]string(nil), resolved.Server.Interceptors.Unary...))
+	out["interceptor.stream_server"] = dedupStrings(append([]string(nil), resolved.Server.Interceptors.Stream...))
+	clientUnary := append([]string(nil), resolved.Root.Yggdrasil.Clients.Defaults.Interceptors.Unary...)
+	clientStream := append([]string(nil), resolved.Root.Yggdrasil.Clients.Defaults.Interceptors.Stream...)
+	for _, cfg := range resolved.Clients.Services {
+		clientUnary = append(clientUnary, cfg.Interceptors.Unary...)
+		clientStream = append(clientStream, cfg.Interceptors.Stream...)
+	}
+	out["interceptor.unary_client"] = dedupStrings(clientUnary)
+	out["interceptor.stream_client"] = dedupStrings(clientStream)
+
+	restMiddlewares := []string{"marshaler"}
+	if resolved.Transports.Rest != nil {
+		restMiddlewares = append(restMiddlewares, resolved.Transports.Rest.Middleware.All...)
+		restMiddlewares = append(restMiddlewares, resolved.Transports.Rest.Middleware.RPC...)
+		restMiddlewares = append(restMiddlewares, resolved.Transports.Rest.Middleware.Web...)
+	}
+	out["rest.middleware"] = dedupStrings(restMiddlewares)
+
+	if resolved.Discovery.Registry.Type != "" {
+		out["registry.provider"] = []string{resolved.Discovery.Registry.Type}
+	}
+	resolverTypes := make([]string, 0, len(resolved.Discovery.Resolvers))
+	for _, spec := range resolved.Discovery.Resolvers {
+		if spec.Type == "" {
+			continue
+		}
+		resolverTypes = append(resolverTypes, spec.Type)
+	}
+	out["resolver.provider"] = dedupStrings(resolverTypes)
+
+	balancerTypes := []string{balancer.DefaultBalancerType}
+	for _, spec := range resolved.Balancers.Defaults {
+		if spec.Type != "" {
+			balancerTypes = append(balancerTypes, spec.Type)
+		}
+	}
+	for _, items := range resolved.Balancers.Services {
+		for _, spec := range items {
+			if spec.Type != "" {
+				balancerTypes = append(balancerTypes, spec.Type)
+			}
+		}
+	}
+	out["balancer.provider"] = dedupStrings(balancerTypes)
+	return out
+}
+
+func sortedHandlerTypes(in map[string]logger.HandlerSpec) []string {
+	keys := make([]string, 0, len(in))
+	for _, spec := range in {
+		if spec.Type == "" {
+			continue
+		}
+		keys = append(keys, spec.Type)
+	}
+	if len(keys) == 0 {
+		keys = append(keys, "text")
+	}
+	sort.Strings(keys)
+	return dedupStrings(keys)
+}
+
+func sortedWriterTypes(in map[string]logger.WriterSpec) []string {
+	keys := make([]string, 0, len(in))
+	for _, spec := range in {
+		if spec.Type == "" {
+			continue
+		}
+		keys = append(keys, spec.Type)
+	}
+	if len(keys) == 0 {
+		keys = append(keys, "console")
+	}
+	sort.Strings(keys)
+	return dedupStrings(keys)
 }

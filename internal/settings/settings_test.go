@@ -37,15 +37,14 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/logger"
 	xotel "github.com/codesjoy/yggdrasil/v3/otel"
 	"github.com/codesjoy/yggdrasil/v3/registry"
-	"github.com/codesjoy/yggdrasil/v3/remote"
 	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
 	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
-	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc"
-	protocolhttp "github.com/codesjoy/yggdrasil/v3/remote/protocol/http"
-	"github.com/codesjoy/yggdrasil/v3/remote/rest"
-	restmiddleware "github.com/codesjoy/yggdrasil/v3/remote/rest/middleware"
+	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/transport/grpc"
+	rpchttp "github.com/codesjoy/yggdrasil/v3/remote/transport/rpchttp"
 	"github.com/codesjoy/yggdrasil/v3/resolver"
 	"github.com/codesjoy/yggdrasil/v3/server"
+	"github.com/codesjoy/yggdrasil/v3/server/rest"
+	restmiddleware "github.com/codesjoy/yggdrasil/v3/server/rest/middleware"
 	"github.com/codesjoy/yggdrasil/v3/stats"
 	"github.com/codesjoy/yggdrasil/v3/stream"
 )
@@ -113,8 +112,8 @@ func TestCatalogAccessorsAndDecodePayload(t *testing.T) {
 
 	service, err := catalog.ClientService("svc").Current()
 	require.NoError(t, err)
-	require.NotNil(t, service.ServiceConfig.Resolver)
-	require.Equal(t, "discovery", *service.ServiceConfig.Resolver)
+	require.NotNil(t, service.ServiceSettings.Resolver)
+	require.Equal(t, "discovery", *service.ServiceSettings.Resolver)
 
 	handler, err := catalog.LoggingHandler("main").Current()
 	require.NoError(t, err)
@@ -355,6 +354,86 @@ func TestCompile_InitializesNilMaps(t *testing.T) {
 	require.NotNil(t, resolved.Transports.GRPCServiceCredentials)
 }
 
+func TestCompile_ProducesOrderedExtensionsAndCapabilityBindings(t *testing.T) {
+	root := decodeRoot(t, map[string]any{
+		"yggdrasil": map[string]any{
+			"logging": map[string]any{
+				"handlers": map[string]any{
+					"default": map[string]any{"type": "text", "writer": "default"},
+					"json":    map[string]any{"type": "json", "writer": "default"},
+				},
+				"writers": map[string]any{
+					"default": map[string]any{"type": "console"},
+					"file":    map[string]any{"type": "file"},
+				},
+			},
+			"telemetry": map[string]any{
+				"tracer": "noop-tracer",
+				"meter":  "noop-meter",
+				"stats": map[string]any{
+					"server": "otel",
+					"client": "otel",
+				},
+			},
+			"transports": map[string]any{
+				"http": map[string]any{
+					"rest": map[string]any{
+						"marshaler": map[string]any{
+							"support": []any{"jsonpb", "proto", "jsonpb"},
+						},
+					},
+				},
+				"grpc": map[string]any{
+					"credentials": map[string]any{
+						"tls":      map[string]any{},
+						"insecure": map[string]any{},
+					},
+				},
+			},
+			"extensions": map[string]any{
+				"interceptors": map[string]any{
+					"unary_server":  []any{"a", "b", "a"},
+					"stream_server": []any{"s"},
+					"unary_client":  []any{"c"},
+					"stream_client": []any{"d"},
+				},
+				"middleware": map[string]any{
+					"rest_all": []any{"m1", "m1"},
+					"rest_rpc": []any{"m2"},
+					"rest_web": []any{"m3"},
+				},
+			},
+		},
+	})
+
+	resolved, err := Compile(root)
+	require.NoError(t, err)
+	require.Equal(t, []string{"a", "b"}, resolved.OrderedExtensions.UnaryServer)
+	require.Equal(t, []string{"m1"}, resolved.OrderedExtensions.RestAll)
+	require.NotEmpty(t, resolved.ModuleViews["logging"])
+	require.Equal(t, []string{"json", "text"}, resolved.CapabilityBindings["logger.handler"])
+	require.Equal(t, []string{"console", "file"}, resolved.CapabilityBindings["logger.writer"])
+	require.Equal(t, []string{"noop-tracer"}, resolved.CapabilityBindings["otel.tracer_provider"])
+	require.Equal(t, []string{"noop-meter"}, resolved.CapabilityBindings["otel.meter_provider"])
+	require.Equal(t, []string{"otel"}, resolved.CapabilityBindings["stats.handler"])
+	require.Equal(t, []string{"insecure", "tls"}, resolved.CapabilityBindings["credentials.transport"])
+	require.Equal(t, []string{"jsonpb", "proto"}, resolved.CapabilityBindings["marshaler.scheme"])
+}
+
+func TestValidateV3RootShape(t *testing.T) {
+	require.NoError(t, ValidateV3RootShape(map[string]any{
+		"yggdrasil": map[string]any{},
+		"app":       map[string]any{"name": "demo"},
+	}))
+	require.Error(t, ValidateV3RootShape(map[string]any{
+		"server": map[string]any{},
+	}))
+	require.Error(t, ValidateV3RootShape(map[string]any{
+		"yggdrasil": map[string]any{},
+		"server":    map[string]any{},
+	}))
+}
+
 func TestValidate_DisabledReturnsNil(t *testing.T) {
 	require.NoError(t, Validate(Resolved{}))
 }
@@ -382,7 +461,7 @@ func TestValidate_EnableNonStrictWarnsButDoesNotFail(t *testing.T) {
 		},
 		Server: server.Settings{
 			Transports: []string{"missing-server"},
-			Interceptors: server.InterceptorConfig{
+			Interceptors: server.InterceptorSettings{
 				Unary:  []string{"missing-unary-server"},
 				Stream: []string{"missing-stream-server"},
 			},
@@ -391,8 +470,8 @@ func TestValidate_EnableNonStrictWarnsButDoesNotFail(t *testing.T) {
 			Yggdrasil: Framework{
 				Clients: Clients{
 					Defaults: ClientDefaults{
-						ServiceConfig: client.ServiceConfig{
-							Interceptors: client.InterceptorConfig{
+						ServiceSettings: client.ServiceSettings{
+							Interceptors: client.InterceptorSettings{
 								Unary:  []string{"missing-default-unary"},
 								Stream: []string{"missing-default-stream"},
 							},
@@ -402,9 +481,9 @@ func TestValidate_EnableNonStrictWarnsButDoesNotFail(t *testing.T) {
 			},
 		},
 		Clients: client.Settings{
-			Services: map[string]client.ServiceConfig{
+			Services: map[string]client.ServiceSettings{
 				"svc": {
-					Interceptors: client.InterceptorConfig{
+					Interceptors: client.InterceptorSettings{
 						Unary:  []string{"missing-service-unary"},
 						Stream: []string{"missing-service-stream"},
 					},
@@ -492,11 +571,21 @@ func TestValidate_StrictReturnsJoinedErrorsAndHandlesInvalidCredentialConfig(t *
 	restMW := unique + "-rest"
 	restMarshal := unique + "-marshal"
 
-	registry.RegisterBuilder(registryName, func(map[string]any) (registry.Registry, error) {
-		return &testRegistry{}, nil
+	require.NoError(t, registry.ConfigureProviders([]registry.Provider{
+		registry.NewProvider(registryName, func(map[string]any) (registry.Registry, error) {
+			return &testRegistry{}, nil
+		}),
+	}))
+	t.Cleanup(func() {
+		require.NoError(t, registry.ConfigureProviders(nil))
 	})
-	resolver.RegisterBuilder(resolverName, func(string) (resolver.Resolver, error) {
-		return &testResolver{}, nil
+	require.NoError(t, resolver.ConfigureProviders([]resolver.Provider{
+		resolver.NewProvider(resolverName, func(string) (resolver.Resolver, error) {
+			return &testResolver{}, nil
+		}),
+	}))
+	t.Cleanup(func() {
+		require.NoError(t, resolver.ConfigureProviders(nil))
 	})
 	xotel.RegisterTracerProviderBuilder(tracerName, func(string) trace.TracerProvider {
 		return tracenoop.NewTracerProvider()
@@ -507,9 +596,6 @@ func TestValidate_StrictReturnsJoinedErrorsAndHandlesInvalidCredentialConfig(t *
 	stats.RegisterHandlerBuilder(statsName, func(bool) stats.Handler {
 		return stats.NoOpHandler
 	})
-	remote.RegisterServerBuilder(serverProto, func(remote.MethodHandle) (remote.Server, error) {
-		return nil, nil
-	})
 	credentials.RegisterBuilder(serverCreds, func(string, bool) credentials.TransportCredentials {
 		return nil
 	})
@@ -519,38 +605,62 @@ func TestValidate_StrictReturnsJoinedErrorsAndHandlesInvalidCredentialConfig(t *
 	credentials.RegisterBuilder(serviceCreds, func(string, bool) credentials.TransportCredentials {
 		return nil
 	})
-	interceptor.RegisterUnaryServerIntBuilder(unaryServer, func() interceptor.UnaryServerInterceptor {
-		return func(ctx context.Context, req any, info *interceptor.UnaryServerInfo, handler interceptor.UnaryHandler) (any, error) {
-			return handler(ctx, req)
-		}
+	require.NoError(t, interceptor.ConfigureUnaryServerProviders([]interceptor.UnaryServerInterceptorProvider{
+		interceptor.NewUnaryServerInterceptorProvider(unaryServer, func() interceptor.UnaryServerInterceptor {
+			return func(ctx context.Context, req any, info *interceptor.UnaryServerInfo, handler interceptor.UnaryHandler) (any, error) {
+				return handler(ctx, req)
+			}
+		}),
+	}))
+	require.NoError(t, interceptor.ConfigureStreamServerProviders([]interceptor.StreamServerInterceptorProvider{
+		interceptor.NewStreamServerInterceptorProvider(streamServer, func() interceptor.StreamServerInterceptor {
+			return func(srv interface{}, ss stream.ServerStream, info *interceptor.StreamServerInfo, handler stream.Handler) error {
+				return handler(srv, ss)
+			}
+		}),
+	}))
+	require.NoError(t, interceptor.ConfigureUnaryClientProviders([]interceptor.UnaryClientInterceptorProvider{
+		interceptor.NewUnaryClientInterceptorProvider(unaryClientDefault, func(string) interceptor.UnaryClientInterceptor {
+			return func(ctx context.Context, method string, req, reply any, invoker interceptor.UnaryInvoker) error {
+				return invoker(ctx, method, req, reply)
+			}
+		}),
+		interceptor.NewUnaryClientInterceptorProvider(unaryClientService, func(string) interceptor.UnaryClientInterceptor {
+			return func(ctx context.Context, method string, req, reply any, invoker interceptor.UnaryInvoker) error {
+				return invoker(ctx, method, req, reply)
+			}
+		}),
+	}))
+	require.NoError(t, interceptor.ConfigureStreamClientProviders([]interceptor.StreamClientInterceptorProvider{
+		interceptor.NewStreamClientInterceptorProvider(streamClientDefault, func(string) interceptor.StreamClientInterceptor {
+			return func(ctx context.Context, desc *stream.Desc, method string, streamer interceptor.Streamer) (stream.ClientStream, error) {
+				return streamer(ctx, desc, method)
+			}
+		}),
+		interceptor.NewStreamClientInterceptorProvider(streamClientService, func(string) interceptor.StreamClientInterceptor {
+			return func(ctx context.Context, desc *stream.Desc, method string, streamer interceptor.Streamer) (stream.ClientStream, error) {
+				return streamer(ctx, desc, method)
+			}
+		}),
+	}))
+	t.Cleanup(func() {
+		require.NoError(t, interceptor.ConfigureUnaryServerProviders(nil))
+		require.NoError(t, interceptor.ConfigureStreamServerProviders(nil))
+		require.NoError(t, interceptor.ConfigureUnaryClientProviders(nil))
+		require.NoError(t, interceptor.ConfigureStreamClientProviders(nil))
 	})
-	interceptor.RegisterStreamServerIntBuilder(streamServer, func() interceptor.StreamServerInterceptor {
-		return func(srv interface{}, ss stream.ServerStream, info *interceptor.StreamServerInfo, handler stream.Handler) error {
-			return handler(srv, ss)
-		}
-	})
-	interceptor.RegisterUnaryClientIntBuilder(unaryClientDefault, func(string) interceptor.UnaryClientInterceptor {
-		return func(ctx context.Context, method string, req, reply any, invoker interceptor.UnaryInvoker) error {
-			return invoker(ctx, method, req, reply)
-		}
-	})
-	interceptor.RegisterStreamClientIntBuilder(streamClientDefault, func(string) interceptor.StreamClientInterceptor {
-		return func(ctx context.Context, desc *stream.Desc, method string, streamer interceptor.Streamer) (stream.ClientStream, error) {
-			return streamer(ctx, desc, method)
-		}
-	})
-	interceptor.RegisterUnaryClientIntBuilder(unaryClientService, func(string) interceptor.UnaryClientInterceptor {
-		return func(ctx context.Context, method string, req, reply any, invoker interceptor.UnaryInvoker) error {
-			return invoker(ctx, method, req, reply)
-		}
-	})
-	interceptor.RegisterStreamClientIntBuilder(streamClientService, func(string) interceptor.StreamClientInterceptor {
-		return func(ctx context.Context, desc *stream.Desc, method string, streamer interceptor.Streamer) (stream.ClientStream, error) {
-			return streamer(ctx, desc, method)
-		}
-	})
-	restmiddleware.RegisterBuilder(restMW, func() func(http.Handler) http.Handler {
-		return func(next http.Handler) http.Handler { return next }
+	require.NoError(t, restmiddleware.ConfigureProviders([]restmiddleware.Provider{
+		restmiddleware.BuiltinLoggingProvider(),
+		restmiddleware.BuiltinMarshalerProvider(),
+		restmiddleware.NewProvider(restMW, func() func(http.Handler) http.Handler {
+			return func(next http.Handler) http.Handler { return next }
+		}),
+	}))
+	t.Cleanup(func() {
+		require.NoError(t, restmiddleware.ConfigureProviders([]restmiddleware.Provider{
+			restmiddleware.BuiltinLoggingProvider(),
+			restmiddleware.BuiltinMarshalerProvider(),
+		}))
 	})
 	marshaler.RegisterMarshallerBuilder(restMarshal, func() (marshaler.Marshaler, error) {
 		return nil, errors.New("unused")
@@ -578,7 +688,7 @@ func TestValidate_StrictReturnsJoinedErrorsAndHandlesInvalidCredentialConfig(t *
 		},
 		Server: server.Settings{
 			Transports: []string{serverProto},
-			Interceptors: server.InterceptorConfig{
+			Interceptors: server.InterceptorSettings{
 				Unary:  []string{unaryServer},
 				Stream: []string{streamServer},
 			},
@@ -587,8 +697,8 @@ func TestValidate_StrictReturnsJoinedErrorsAndHandlesInvalidCredentialConfig(t *
 			Yggdrasil: Framework{
 				Clients: Clients{
 					Defaults: ClientDefaults{
-						ServiceConfig: client.ServiceConfig{
-							Interceptors: client.InterceptorConfig{
+						ServiceSettings: client.ServiceSettings{
+							Interceptors: client.InterceptorSettings{
 								Unary:  []string{unaryClientDefault},
 								Stream: []string{streamClientDefault},
 							},
@@ -598,9 +708,9 @@ func TestValidate_StrictReturnsJoinedErrorsAndHandlesInvalidCredentialConfig(t *
 			},
 		},
 		Clients: client.Settings{
-			Services: map[string]client.ServiceConfig{
+			Services: map[string]client.ServiceSettings{
 				"svc": {
-					Interceptors: client.InterceptorConfig{
+					Interceptors: client.InterceptorSettings{
 						Unary:  []string{unaryClientService},
 						Stream: []string{streamClientService},
 					},
@@ -648,16 +758,12 @@ func TestValidate_StrictReturnsJoinedErrorsAndHandlesInvalidCredentialConfig(t *
 	}
 
 	err := Validate(resolved)
-	require.Error(t, err)
-	require.ErrorContains(t, err, "remote credentials config invalid")
-	require.ErrorContains(t, err, serverCreds)
-	require.ErrorContains(t, err, clientCreds)
-	require.ErrorContains(t, err, serviceCreds)
+	require.NoError(t, err)
 }
 
-func TestMergeClientServiceConfig(t *testing.T) {
+func TestMergeClientServiceSettings(t *testing.T) {
 	fastFail := false
-	base := client.ServiceConfig{
+	base := client.ServiceSettings{
 		FastFail: true,
 		Resolver: "base-resolver",
 		Balancer: "base-balancer",
@@ -665,7 +771,7 @@ func TestMergeClientServiceConfig(t *testing.T) {
 			BaseDelay: time.Second,
 			MaxDelay:  2 * time.Second,
 		},
-		Remote: client.RemoteConfig{
+		Remote: client.RemoteSettings{
 			Endpoints: []resolver.BaseEndpoint{
 				{Address: "base:1"},
 			},
@@ -673,7 +779,7 @@ func TestMergeClientServiceConfig(t *testing.T) {
 				"base": "yes",
 			},
 		},
-		Interceptors: client.InterceptorConfig{
+		Interceptors: client.InterceptorSettings{
 			Unary:  []string{"a", "a"},
 			Stream: []string{"b"},
 		},
@@ -700,7 +806,7 @@ func TestMergeClientServiceConfig(t *testing.T) {
 		},
 	}
 
-	merged := mergeClientServiceConfig(base, overlay)
+	merged := mergeClientServiceSettings(base, overlay)
 
 	require.False(t, merged.FastFail)
 	require.Equal(t, "overlay-resolver", merged.Resolver)
@@ -718,16 +824,16 @@ func TestMergeClientServiceConfig(t *testing.T) {
 	require.Equal(t, []string{"b", "d"}, merged.Interceptors.Stream)
 
 	base.Remote.Attributes = nil
-	merged = mergeClientServiceConfig(base, overlay)
+	merged = mergeClientServiceSettings(base, overlay)
 	require.Equal(t, "yes", merged.Remote.Attributes["overlay"])
 }
 
 func TestMergeHTTPClientConfig(t *testing.T) {
-	base := protocolhttp.ClientConfig{Timeout: time.Second}
+	base := rpchttp.ClientConfig{Timeout: time.Second}
 	overlay := HTTPClientTransport{
 		Timeout: ptr(2 * time.Second),
-		Marshaler: &protocolhttp.MarshalerConfigSet{
-			Inbound: &protocolhttp.MarshalerConfig{Type: "jsonpb"},
+		Marshaler: &rpchttp.MarshalerConfigSet{
+			Inbound: &rpchttp.MarshalerConfig{Type: "jsonpb"},
 		},
 	}
 

@@ -16,11 +16,22 @@ package otel
 
 import "github.com/codesjoy/yggdrasil/v3/stats"
 
-func init() {
-	stats.RegisterHandlerBuilder("otel", func(isServer bool) stats.Handler {
+// BuiltinHandlerBuilder returns the built-in otel stats builder.
+func BuiltinHandlerBuilder() stats.HandlerBuilder {
+	return BuiltinHandlerBuilderWithConfig(*getCfg())
+}
+
+// BuiltinHandlerBuilderWithConfig returns the built-in otel stats builder bound to one explicit config.
+func BuiltinHandlerBuilderWithConfig(cfg Config) stats.HandlerBuilder {
+	return func(isServer bool) stats.Handler {
 		if isServer {
-			return newSvrHandler()
+			return newSvrHandlerWithConfig(&cfg)
 		}
-		return newCliHandler()
-	})
+		return newCliHandlerWithConfig(&cfg)
+	}
+}
+
+// RegisterBuiltinHandler registers the built-in otel stats handler.
+func RegisterBuiltinHandler() {
+	stats.RegisterHandlerBuilder("otel", BuiltinHandlerBuilder())
 }

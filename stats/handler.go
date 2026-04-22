@@ -39,6 +39,21 @@ func RegisterHandlerBuilder(name string, builder HandlerBuilder) {
 	handlerBuilder[name] = builder
 }
 
+// ConfigureHandlerBuilders replaces all handler builders and resets cached chains.
+func ConfigureHandlerBuilders(builders map[string]HandlerBuilder) {
+	mu.Lock()
+	defer mu.Unlock()
+	next := make(map[string]HandlerBuilder, len(builders))
+	for name, builder := range builders {
+		next[name] = builder
+	}
+	handlerBuilder = next
+	svrOnce = sync.Once{}
+	cliOnce = sync.Once{}
+	svrHandler = nil
+	cliHandler = nil
+}
+
 // GetHandlerBuilder gets a HandlerBuilder by name.
 func GetHandlerBuilder(name string) HandlerBuilder {
 	mu.Lock()
@@ -112,16 +127,7 @@ func (h *handlerChain) HandleChannel(ctx context.Context, cs ChanStats) {
 // GetServerHandler gets the server side stats handler.
 func GetServerHandler() Handler {
 	svrOnce.Do(func() {
-		h := &handlerChain{handlers: make([]Handler, 0)}
-		for _, name := range ParseHandlerNames(CurrentSettings().Server) {
-			builder := GetHandlerBuilder(name)
-			if builder == nil {
-				slog.Warn("fault to get stats handler builder", slog.String("name", name))
-				continue
-			}
-			h.handlers = append(h.handlers, builder(true))
-		}
-		svrHandler = h
+		svrHandler = BuildHandlerChainWithBuilders(CurrentSettings(), currentHandlerBuilders(), true)
 	})
 	return svrHandler
 }
@@ -129,16 +135,35 @@ func GetServerHandler() Handler {
 // GetClientHandler gets the client side stats handler.
 func GetClientHandler() Handler {
 	cliOnce.Do(func() {
-		h := &handlerChain{handlers: make([]Handler, 0)}
-		for _, name := range ParseHandlerNames(CurrentSettings().Client) {
-			builder := GetHandlerBuilder(name)
-			if builder == nil {
-				slog.Warn("fault to get stats handler builder", slog.String("name", name))
-				continue
-			}
-			h.handlers = append(h.handlers, builder(false))
-		}
-		cliHandler = h
+		cliHandler = BuildHandlerChainWithBuilders(CurrentSettings(), currentHandlerBuilders(), false)
 	})
 	return cliHandler
+}
+
+func currentHandlerBuilders() map[string]HandlerBuilder {
+	mu.RLock()
+	defer mu.RUnlock()
+	out := make(map[string]HandlerBuilder, len(handlerBuilder))
+	for name, builder := range handlerBuilder {
+		out[name] = builder
+	}
+	return out
+}
+
+// BuildHandlerChainWithBuilders builds one stats handler chain from explicit settings and builders.
+func BuildHandlerChainWithBuilders(settings Settings, builders map[string]HandlerBuilder, isServer bool) Handler {
+	h := &handlerChain{handlers: make([]Handler, 0)}
+	raw := settings.Client
+	if isServer {
+		raw = settings.Server
+	}
+	for _, name := range ParseHandlerNames(raw) {
+		builder := builders[name]
+		if builder == nil {
+			slog.Warn("fault to get stats handler builder", slog.String("name", name))
+			continue
+		}
+		h.handlers = append(h.handlers, builder(isServer))
+	}
+	return h
 }

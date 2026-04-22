@@ -36,6 +36,12 @@ type OnStateChange func(state ClientState)
 // ClientBuilder is the interface that wraps the Build method.
 type ClientBuilder func(context.Context, string, resolver.Endpoint, stats.Handler, OnStateChange) (Client, error)
 
+// TransportClientProvider provides client transport construction for one protocol.
+type TransportClientProvider interface {
+	Protocol() string
+	NewClient(context.Context, string, resolver.Endpoint, stats.Handler, OnStateChange) (Client, error)
+}
+
 // ServerInfo is the information of the server.
 type ServerInfo struct {
 	Protocol   string
@@ -86,4 +92,54 @@ func GetServerBuilder(protocol string) ServerBuilder {
 		return nil
 	}
 	return builder
+}
+
+// TransportServerProvider provides server transport construction for one protocol.
+type TransportServerProvider interface {
+	Protocol() string
+	NewServer(handle MethodHandle) (Server, error)
+}
+
+type transportClientProvider struct {
+	protocol string
+	builder  ClientBuilder
+}
+
+func (p transportClientProvider) Protocol() string { return p.protocol }
+
+func (p transportClientProvider) NewClient(
+	ctx context.Context,
+	serviceName string,
+	endpoint resolver.Endpoint,
+	statsHandler stats.Handler,
+	onStateChange OnStateChange,
+) (Client, error) {
+	return p.builder(ctx, serviceName, endpoint, statsHandler, onStateChange)
+}
+
+type transportServerProvider struct {
+	protocol string
+	builder  ServerBuilder
+}
+
+func (p transportServerProvider) Protocol() string { return p.protocol }
+
+func (p transportServerProvider) NewServer(handle MethodHandle) (Server, error) {
+	return p.builder(handle)
+}
+
+// NewTransportClientProvider builds a client transport provider from a builder.
+func NewTransportClientProvider(protocol string, builder ClientBuilder) TransportClientProvider {
+	return transportClientProvider{
+		protocol: protocol,
+		builder:  builder,
+	}
+}
+
+// NewTransportServerProvider builds a server transport provider from a builder.
+func NewTransportServerProvider(protocol string, builder ServerBuilder) TransportServerProvider {
+	return transportServerProvider{
+		protocol: protocol,
+		builder:  builder,
+	}
 }

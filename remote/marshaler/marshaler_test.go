@@ -114,6 +114,9 @@ func TestProtoMarshaller(t *testing.T) {
 }
 
 func TestRegistry(t *testing.T) {
+	RegisterJSONPbBuilder()
+	RegisterProtoBuilder()
+
 	reg := BuildMarshalerRegistry("jsonpb", "proto")
 
 	t.Run("Default", func(t *testing.T) {

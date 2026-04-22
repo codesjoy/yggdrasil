@@ -25,11 +25,17 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/codesjoy/yggdrasil/v3/remote/rest/convert"
+	"github.com/codesjoy/yggdrasil/v3/server/rest/convert"
 )
 
-func init() {
-	RegisterMarshallerBuilder("jsonpb", NewJSONPbMarshaler)
+// RegisterJSONPbBuilder registers the jsonpb marshaler builder.
+func RegisterJSONPbBuilder() {
+	RegisterMarshallerBuilder("jsonpb", JSONPbBuilder())
+}
+
+// JSONPbBuilder returns the framework built-in jsonpb marshaler builder.
+func JSONPbBuilder() MarshallerBuilder {
+	return NewJSONPbMarshaler
 }
 
 // NewJSONPbMarshaler returns a new JSONPb marshaler.

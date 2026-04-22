@@ -21,10 +21,16 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func init() {
-	RegisterMarshallerBuilder("proto", func() (Marshaler, error) {
+// RegisterProtoBuilder registers the proto marshaler builder.
+func RegisterProtoBuilder() {
+	RegisterMarshallerBuilder("proto", ProtoBuilder())
+}
+
+// ProtoBuilder returns the framework built-in proto marshaler builder.
+func ProtoBuilder() MarshallerBuilder {
+	return func() (Marshaler, error) {
 		return &ProtoMarshaller{}, nil
-	})
+	}
 }
 
 // ProtoMarshaller is a Marshaller which marshals/unmarshals into/from serialize proto bytes

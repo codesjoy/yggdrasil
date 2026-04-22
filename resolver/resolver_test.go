@@ -42,3 +42,10 @@ func TestGetResolverFromDiscoveryTree(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "demo", r.Type())
 }
+
+func RegisterBuilder(typeName string, f func(string) (Resolver, error)) {
+	mu.Lock()
+	defer mu.Unlock()
+	providers[typeName] = NewProvider(typeName, f)
+	resolver = map[string]Resolver{}
+}

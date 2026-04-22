@@ -23,8 +23,16 @@ import (
 
 const multiRegistryType = "multi_registry"
 
-func init() {
-	RegisterBuilder(multiRegistryType, newMultiRegistry)
+// BuiltinProvider returns the built-in multi_registry provider.
+func BuiltinProvider() Provider {
+	return NewProvider(multiRegistryType, newMultiRegistry)
+}
+
+// BuiltinProviderWithFactory returns the built-in multi_registry provider bound to an explicit child registry factory.
+func BuiltinProviderWithFactory(factory func(string, map[string]any) (Registry, error)) Provider {
+	return NewProvider(multiRegistryType, func(cfgVal map[string]any) (Registry, error) {
+		return newMultiRegistryWithFactory(cfgVal, factory)
+	})
 }
 
 type multiRegistryConfig struct {
@@ -71,6 +79,13 @@ func (m *multiRegistry) Deregister(ctx context.Context, inst Instance) error {
 }
 
 func newMultiRegistry(cfgVal map[string]any) (Registry, error) {
+	return newMultiRegistryWithFactory(cfgVal, New)
+}
+
+func newMultiRegistryWithFactory(
+	cfgVal map[string]any,
+	factory func(string, map[string]any) (Registry, error),
+) (Registry, error) {
 	var cfg multiRegistryConfig
 	if err := config.NewSnapshot(cfgVal).Decode(&cfg); err != nil {
 		return nil, err
@@ -81,7 +96,7 @@ func newMultiRegistry(cfgVal map[string]any) (Registry, error) {
 		if item.Type == "" {
 			return nil, errors.New("multi_registry: empty child type")
 		}
-		r, err := New(item.Type, item.Config)
+		r, err := factory(item.Type, item.Config)
 		if err != nil {
 			return nil, err
 		}

@@ -28,6 +28,14 @@ func RegisterMeterProviderBuilder(name string, constructor MeterProviderBuilder)
 	meterBuilders[name] = constructor
 }
 
+// ConfigureMeterProviderBuilders replaces all meter provider builders in one shot.
+func ConfigureMeterProviderBuilders(builders map[string]MeterProviderBuilder) {
+	meterBuilders = make(map[string]MeterProviderBuilder, len(builders))
+	for name, constructor := range builders {
+		meterBuilders[name] = constructor
+	}
+}
+
 // GetMeterProviderBuilder returns a MeterProviderBuilder.
 func GetMeterProviderBuilder(name string) (MeterProviderBuilder, bool) {
 	constructor, ok := meterBuilders[name]

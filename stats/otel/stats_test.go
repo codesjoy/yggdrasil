@@ -24,6 +24,8 @@ import (
 
 // TestInit tests package initialization
 func TestInit(t *testing.T) {
+	RegisterBuiltinHandler()
+
 	t.Run("otel handler builder is registered", func(t *testing.T) {
 		builder := stats.GetHandlerBuilder("otel")
 		assert.NotNil(t, builder, "otel handler builder should be registered")

@@ -35,8 +35,14 @@ import (
 
 var name = "local"
 
-func init() {
-	credentials.RegisterBuilder(name, newCredentials)
+// RegisterBuilder registers the local credentials builder.
+func RegisterBuilder() {
+	credentials.RegisterBuilder(name, BuiltinBuilder())
+}
+
+// BuiltinBuilder returns the framework built-in local credentials builder.
+func BuiltinBuilder() credentials.Builder {
+	return newCredentials
 }
 
 // info contains the auth information for a local connection.

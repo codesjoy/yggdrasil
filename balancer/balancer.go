@@ -17,6 +17,7 @@ package balancer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -91,25 +92,62 @@ type Client interface {
 // Builder is the function that creates a balancer.
 type Builder func(serviceName, balancerName string, cli Client) (Balancer, error)
 
-var (
-	builder = map[string]Builder{}
-	mu      sync.RWMutex
-)
-
-// GetBuilder returns the balancer builder.
-func GetBuilder(typeName string) (Builder, error) {
-	mu.RLock()
-	defer mu.RUnlock()
-	f, ok := builder[typeName]
-	if !ok {
-		return nil, fmt.Errorf("not found balancer builder, type: %s", typeName)
-	}
-	return f, nil
+// Provider is the capability-oriented balancer provider.
+type Provider interface {
+	Type() string
+	New(serviceName, balancerName string, cli Client) (Balancer, error)
 }
 
-// RegisterBuilder registers a balancer builder.
-func RegisterBuilder(typeName string, f Builder) {
+type provider struct {
+	typeName string
+	builder  Builder
+}
+
+func (p provider) Type() string { return p.typeName }
+
+func (p provider) New(serviceName, balancerName string, cli Client) (Balancer, error) {
+	return p.builder(serviceName, balancerName, cli)
+}
+
+// NewProvider wraps a builder as a capability provider.
+func NewProvider(typeName string, builder Builder) Provider {
+	return provider{
+		typeName: typeName,
+		builder:  builder,
+	}
+}
+
+var (
+	providers = defaultProviders()
+	mu        sync.RWMutex
+)
+
+// ConfigureProviders replaces all balancer providers.
+func ConfigureProviders(next []Provider) error {
+	target := map[string]Provider{}
+	for _, item := range next {
+		if item == nil {
+			continue
+		}
+		typeName := item.Type()
+		if typeName == "" {
+			return errors.New("balancer provider type is empty")
+		}
+		if _, exists := target[typeName]; exists {
+			return fmt.Errorf("duplicate balancer provider for type %q", typeName)
+		}
+		target[typeName] = item
+	}
 	mu.Lock()
-	defer mu.Unlock()
-	builder[typeName] = f
+	providers = target
+	mu.Unlock()
+	return nil
+}
+
+// GetProvider returns a balancer provider by type.
+func GetProvider(typeName string) (Provider, bool) {
+	mu.RLock()
+	defer mu.RUnlock()
+	p, ok := providers[typeName]
+	return p, ok
 }

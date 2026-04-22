@@ -52,3 +52,10 @@ func TestNewMultiRegistry(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, multiRegistryType, reg.Type())
 }
+
+func RegisterBuilder(typeName string, constructor Builder) {
+	mu.Lock()
+	defer mu.Unlock()
+	providers[typeName] = NewProvider(typeName, constructor)
+	defaultReg = nil
+}

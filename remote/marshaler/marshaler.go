@@ -28,6 +28,14 @@ func RegisterMarshallerBuilder(scheme string, builder MarshallerBuilder) {
 	marshalerBuilder[normalizeScheme(scheme)] = builder
 }
 
+// ConfigureBuilders replaces all marshaler builders in one shot.
+func ConfigureBuilders(builders map[string]MarshallerBuilder) {
+	marshalerBuilder = map[string]MarshallerBuilder{}
+	for name, builder := range builders {
+		marshalerBuilder[normalizeScheme(name)] = builder
+	}
+}
+
 // HasMarshallerBuilder returns true if the marshaler builder exists
 func HasMarshallerBuilder(scheme string) bool {
 	_, ok := marshalerBuilder[normalizeScheme(scheme)]
@@ -50,6 +58,24 @@ func BuildMarshallerWithConfig(scheme string, jsonpbCfg *JSONPbConfig) (Marshale
 		return NewJSONPbMarshalerWithConfig(jsonpbCfg), nil
 	default:
 		return BuildMarshaller(scheme)
+	}
+}
+
+// BuildMarshallerWithBuilders builds a marshaler for the given scheme using an explicit builder map.
+func BuildMarshallerWithBuilders(
+	builders map[string]MarshallerBuilder,
+	scheme string,
+	jsonpbCfg *JSONPbConfig,
+) (Marshaler, error) {
+	switch normalizeScheme(scheme) {
+	case SchemeJSONPb:
+		return NewJSONPbMarshalerWithConfig(jsonpbCfg), nil
+	default:
+		builder, ok := builders[normalizeScheme(scheme)]
+		if !ok {
+			return nil, errors.New("rest marshaler builder not found")
+		}
+		return builder()
 	}
 }
 

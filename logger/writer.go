@@ -25,9 +25,19 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/config"
 )
 
-func init() {
-	RegisterWriterBuilder("file", newFileWriter)
-	RegisterWriterBuilder("console", newConsoleWriter)
+// RegisterBuiltinWriters registers built-in writer builders.
+func RegisterBuiltinWriters() {
+	for name, builder := range BuiltinWriterBuilders() {
+		RegisterWriterBuilder(name, builder)
+	}
+}
+
+// BuiltinWriterBuilders returns framework built-in writer providers.
+func BuiltinWriterBuilders() map[string]WriterBuilder {
+	return map[string]WriterBuilder{
+		"file":    newFileWriter,
+		"console": newConsoleWriter,
+	}
 }
 
 // WriterBuilder is the interface that wraps the Write method.
@@ -41,6 +51,17 @@ func RegisterWriterBuilder(typeName string, f WriterBuilder) {
 	writerBuilderMu.Lock()
 	defer writerBuilderMu.Unlock()
 	writerBuilder[typeName] = f
+}
+
+// ConfigureWriterBuilders replaces all writer builders in one shot.
+func ConfigureWriterBuilders(builders map[string]WriterBuilder) {
+	writerBuilderMu.Lock()
+	defer writerBuilderMu.Unlock()
+	next := make(map[string]WriterBuilder, len(builders))
+	for name, builder := range builders {
+		next[name] = builder
+	}
+	writerBuilder = next
 }
 
 // GetWriterBuilder returns the WriterBuilder for the given type.

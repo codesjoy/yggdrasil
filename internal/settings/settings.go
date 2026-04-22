@@ -26,11 +26,11 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/internal/instance"
 	"github.com/codesjoy/yggdrasil/v3/logger"
 	"github.com/codesjoy/yggdrasil/v3/registry"
-	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc"
-	protocolhttp "github.com/codesjoy/yggdrasil/v3/remote/protocol/http"
-	"github.com/codesjoy/yggdrasil/v3/remote/rest"
+	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/transport/grpc"
+	rpchttp "github.com/codesjoy/yggdrasil/v3/remote/transport/rpchttp"
 	"github.com/codesjoy/yggdrasil/v3/resolver"
 	"github.com/codesjoy/yggdrasil/v3/server"
+	"github.com/codesjoy/yggdrasil/v3/server/rest"
 	"github.com/codesjoy/yggdrasil/v3/stats"
 
 	gkeepalive "google.golang.org/grpc/keepalive"
@@ -52,6 +52,7 @@ type Framework struct {
 	Logging    logger.Settings          `mapstructure:"logging"`
 	Telemetry  Telemetry                `mapstructure:"telemetry"`
 	Admin      Admin                    `mapstructure:"admin"`
+	Extensions Extensions               `mapstructure:"extensions"`
 }
 
 // Transports contains global transport settings.
@@ -75,9 +76,9 @@ type GRPCClientTransport struct {
 
 // HTTPTransport contains global HTTP transport settings.
 type HTTPTransport struct {
-	Client protocolhttp.ClientConfig `mapstructure:"client"`
-	Server protocolhttp.ServerConfig `mapstructure:"server"`
-	Rest   *rest.Config              `mapstructure:"rest"`
+	Client rpchttp.ClientConfig `mapstructure:"client"`
+	Server rpchttp.ServerConfig `mapstructure:"server"`
+	Rest   *rest.Config         `mapstructure:"rest"`
 }
 
 // ClientTransports contains service-level transport overrides.
@@ -88,8 +89,8 @@ type ClientTransports struct {
 
 // ClientDefaults contains default client values applied to services.
 type ClientDefaults struct {
-	client.ServiceConfig `mapstructure:",squash"`
-	Transports           ClientTransports `mapstructure:"transports"`
+	client.ServiceSettings `mapstructure:",squash"`
+	Transports             ClientTransports `mapstructure:"transports"`
 }
 
 // clientServiceConfigOverlay keeps service-level override presence information.
@@ -104,14 +105,14 @@ type clientServiceConfigOverlay struct {
 
 // ClientServiceSpec contains one configured client service subtree.
 type ClientServiceSpec struct {
-	ServiceConfig clientServiceConfigOverlay `mapstructure:",squash"`
-	Transports    ClientTransports           `mapstructure:"transports"`
+	ServiceSettings clientServiceConfigOverlay `mapstructure:",squash"`
+	Transports      ClientTransports           `mapstructure:"transports"`
 }
 
 // HTTPClientTransport contains service-level HTTP client overrides.
 type HTTPClientTransport struct {
-	Timeout   *time.Duration                   `mapstructure:"timeout"`
-	Marshaler *protocolhttp.MarshalerConfigSet `mapstructure:"marshaler"`
+	Timeout   *time.Duration              `mapstructure:"timeout"`
+	Marshaler *rpchttp.MarshalerConfigSet `mapstructure:"marshaler"`
 }
 
 type backoffConfigOverlay struct {
@@ -180,6 +181,38 @@ type Telemetry struct {
 	Stats  stats.Settings `mapstructure:"stats"`
 }
 
+// Extensions contains chain-oriented extension references.
+type Extensions struct {
+	Interceptors ExtensionInterceptors `mapstructure:"interceptors"`
+	Middleware   ExtensionMiddleware   `mapstructure:"middleware"`
+}
+
+// ExtensionInterceptors contains ordered interceptor names.
+type ExtensionInterceptors struct {
+	UnaryServer  []string `mapstructure:"unary_server"`
+	StreamServer []string `mapstructure:"stream_server"`
+	UnaryClient  []string `mapstructure:"unary_client"`
+	StreamClient []string `mapstructure:"stream_client"`
+}
+
+// ExtensionMiddleware contains ordered middleware names.
+type ExtensionMiddleware struct {
+	RestAll []string `mapstructure:"rest_all"`
+	RestRPC []string `mapstructure:"rest_rpc"`
+	RestWeb []string `mapstructure:"rest_web"`
+}
+
+// OrderedExtensions is the compiled ordered extension name lists.
+type OrderedExtensions struct {
+	UnaryServer  []string
+	StreamServer []string
+	UnaryClient  []string
+	StreamClient []string
+	RestAll      []string
+	RestRPC      []string
+	RestWeb      []string
+}
+
 // Validation contains startup validation flags.
 type Validation struct {
 	Strict bool `mapstructure:"strict"`
@@ -204,12 +237,17 @@ type Resolved struct {
 	Transports ResolvedTransports
 	Telemetry  Telemetry
 	Admin      Admin
+	Extensions Extensions
+
+	OrderedExtensions  OrderedExtensions
+	ModuleViews        map[string]string
+	CapabilityBindings map[string][]string
 }
 
 // ResolvedTransports contains normalized transport settings.
 type ResolvedTransports struct {
 	GRPC                   grpcprotocol.Settings
-	HTTP                   protocolhttp.Settings
+	HTTP                   rpchttp.Settings
 	Rest                   *rest.Config
 	GRPCCredentials        map[string]map[string]any
 	GRPCServiceCredentials map[string]map[string]map[string]any

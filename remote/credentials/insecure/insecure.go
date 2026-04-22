@@ -25,8 +25,14 @@ import (
 
 var name = "insecure"
 
-func init() {
-	credentials.RegisterBuilder(name, newCredentials)
+// RegisterBuilder registers the insecure credentials builder.
+func RegisterBuilder() {
+	credentials.RegisterBuilder(name, BuiltinBuilder())
+}
+
+// BuiltinBuilder returns the framework built-in insecure credentials builder.
+func BuiltinBuilder() credentials.Builder {
+	return newCredentials
 }
 
 // newCredentials returns a credentials which disables transport security.
