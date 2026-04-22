@@ -27,6 +27,78 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/stream"
 )
 
+func RegisterUnaryClientIntBuilder(name string, f UnaryClientIntBuilder) {
+	mu.Lock()
+	defer mu.Unlock()
+	unaryClientProviders[name] = NewUnaryClientInterceptorProvider(name, f)
+}
+
+func RegisterUnaryServerIntBuilder(name string, f UnaryServerIntBuilder) {
+	mu.Lock()
+	defer mu.Unlock()
+	unaryServerProviders[name] = NewUnaryServerInterceptorProvider(name, f)
+}
+
+func RegisterStreamClientIntBuilder(name string, f StreamClientIntBuilder) {
+	mu.Lock()
+	defer mu.Unlock()
+	streamClientProviders[name] = NewStreamClientInterceptorProvider(name, f)
+}
+
+func RegisterStreamServerIntBuilder(name string, f StreamServerIntBuilder) {
+	mu.Lock()
+	defer mu.Unlock()
+	streamServerProviders[name] = NewStreamServerInterceptorProvider(name, f)
+}
+
+func getUnaryClientIntBuilder(name string) UnaryClientIntBuilder {
+	p := GetUnaryClientProvider(name)
+	if p == nil {
+		return nil
+	}
+	return p.New
+}
+
+func getUnaryServerIntBuilder(name string) UnaryServerIntBuilder {
+	p := GetUnaryServerProvider(name)
+	if p == nil {
+		return nil
+	}
+	return p.New
+}
+
+func getStreamClientIntBuilder(name string) StreamClientIntBuilder {
+	p := GetStreamClientProvider(name)
+	if p == nil {
+		return nil
+	}
+	return p.New
+}
+
+func getStreamServerIntBuilder(name string) StreamServerIntBuilder {
+	p := GetStreamServerProvider(name)
+	if p == nil {
+		return nil
+	}
+	return p.New
+}
+
+func HasUnaryClientIntBuilder(name string) bool {
+	return GetUnaryClientProvider(name) != nil
+}
+
+func HasUnaryServerIntBuilder(name string) bool {
+	return GetUnaryServerProvider(name) != nil
+}
+
+func HasStreamClientIntBuilder(name string) bool {
+	return GetStreamClientProvider(name) != nil
+}
+
+func HasStreamServerIntBuilder(name string) bool {
+	return GetStreamServerProvider(name) != nil
+}
+
 // TestRegisterUnaryClientIntBuilder tests RegisterUnaryClientIntBuilder function
 func TestRegisterUnaryClientIntBuilder(t *testing.T) {
 	t.Run("register builder successfully", func(t *testing.T) {

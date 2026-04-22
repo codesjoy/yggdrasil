@@ -17,7 +17,6 @@ package remote
 
 import (
 	"context"
-	"sync"
 
 	"github.com/codesjoy/yggdrasil/v3/resolver"
 	"github.com/codesjoy/yggdrasil/v3/stats"
@@ -51,48 +50,6 @@ type ServerInfo struct {
 
 // ServerBuilder is the interface that wraps the Build method.
 type ServerBuilder func(handle MethodHandle) (Server, error)
-
-var (
-	mu            sync.RWMutex
-	clientBuilder = map[string]ClientBuilder{}
-	serverBuilder = map[string]ServerBuilder{}
-)
-
-// RegisterClientBuilder registers a client builder for the given protocol.
-func RegisterClientBuilder(protocol string, builder ClientBuilder) {
-	mu.Lock()
-	defer mu.Unlock()
-	clientBuilder[protocol] = builder
-}
-
-// GetClientBuilder returns the client builder for the given protocol.
-func GetClientBuilder(protocol string) ClientBuilder {
-	mu.RLock()
-	defer mu.RUnlock()
-	builder, ok := clientBuilder[protocol]
-	if !ok {
-		return nil
-	}
-	return builder
-}
-
-// RegisterServerBuilder registers a server builder for the given protocol.
-func RegisterServerBuilder(protocol string, builder ServerBuilder) {
-	mu.Lock()
-	defer mu.Unlock()
-	serverBuilder[protocol] = builder
-}
-
-// GetServerBuilder returns the server builder for the given protocol.
-func GetServerBuilder(protocol string) ServerBuilder {
-	mu.RLock()
-	defer mu.RUnlock()
-	builder, ok := serverBuilder[protocol]
-	if !ok {
-		return nil
-	}
-	return builder
-}
 
 // TransportServerProvider provides server transport construction for one protocol.
 type TransportServerProvider interface {

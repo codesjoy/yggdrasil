@@ -14,10 +14,34 @@
 
 package client
 
-// Transitional aliases keep the old config types available while the runtime
-// split moves onto the new settings names in later commits.
-type RemoteSettings = RemoteConfig
+import (
+	"github.com/codesjoy/yggdrasil/v3/internal/backoff"
+	"github.com/codesjoy/yggdrasil/v3/resolver"
+)
 
-type InterceptorSettings = InterceptorConfig
+// RemoteSettings contains static endpoints and attributes for a client service.
+type RemoteSettings struct {
+	Endpoints  []resolver.BaseEndpoint `mapstructure:"endpoints"`
+	Attributes map[string]any          `mapstructure:"attributes"`
+}
 
-type ServiceSettings = ServiceConfig
+// InterceptorSettings contains interceptor names for a client service.
+type InterceptorSettings struct {
+	Unary  []string `mapstructure:"unary"`
+	Stream []string `mapstructure:"stream"`
+}
+
+// ServiceSettings contains the resolved client settings for one service.
+type ServiceSettings struct {
+	FastFail     bool                `mapstructure:"fast_fail"`
+	Resolver     string              `mapstructure:"resolver"`
+	Balancer     string              `mapstructure:"balancer"`
+	Backoff      backoff.Config      `mapstructure:"backoff"`
+	Remote       RemoteSettings      `mapstructure:"remote"`
+	Interceptors InterceptorSettings `mapstructure:"interceptors"`
+}
+
+// Settings contains resolved client settings for all services.
+type Settings struct {
+	Services map[string]ServiceSettings `mapstructure:"services"`
+}
