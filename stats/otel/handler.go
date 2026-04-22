@@ -28,9 +28,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
-	"github.com/codesjoy/yggdrasil/v2/internal/constant"
-	"github.com/codesjoy/yggdrasil/v2/stats"
-	"github.com/codesjoy/yggdrasil/v2/status"
+	"github.com/codesjoy/yggdrasil/v3/internal/constant"
+	"github.com/codesjoy/yggdrasil/v3/stats"
+	"github.com/codesjoy/yggdrasil/v3/status"
 )
 
 type rpcContextKey struct{}
@@ -66,14 +66,14 @@ type handler struct {
 func newHandler(isSvr bool) handler {
 	cfg := getCfg()
 	tracer := otel.Tracer(
-		"github.com/codesjoy/yggdrasil/v2",
+		"github.com/codesjoy/yggdrasil/v3",
 		trace.WithInstrumentationVersion("semver:"+constant.Version),
 	)
 	h := handler{
 		cfg:    cfg,
 		tracer: tracer,
 	}
-	meter := otel.Meter("github.com/codesjoy/yggdrasil/v2",
+	meter := otel.Meter("github.com/codesjoy/yggdrasil/v3",
 		metric.WithInstrumentationVersion("semver:"+constant.Version),
 		metric.WithSchemaURL(semconv.SchemaURL),
 	)

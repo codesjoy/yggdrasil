@@ -21,7 +21,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/codesjoy/yggdrasil/v2/internal/constant"
+	"github.com/codesjoy/yggdrasil/v3/internal/constant"
 )
 
 // Test implementations for interfaces

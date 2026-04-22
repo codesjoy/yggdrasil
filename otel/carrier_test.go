@@ -19,7 +19,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/codesjoy/yggdrasil/v2/metadata"
+	"github.com/codesjoy/yggdrasil/v3/metadata"
 )
 
 // TestNewMetadataReaderWriter tests creating a new MetadataReaderWriter

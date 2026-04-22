@@ -19,14 +19,14 @@ import (
 	"context"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/config/source"
-	"github.com/codesjoy/yggdrasil/v2/governor"
-	"github.com/codesjoy/yggdrasil/v2/internal/settings"
-	"github.com/codesjoy/yggdrasil/v2/registry"
-	"github.com/codesjoy/yggdrasil/v2/server"
+	"github.com/codesjoy/yggdrasil/v3/config"
+	"github.com/codesjoy/yggdrasil/v3/config/source"
+	"github.com/codesjoy/yggdrasil/v3/governor"
+	"github.com/codesjoy/yggdrasil/v3/internal/settings"
+	"github.com/codesjoy/yggdrasil/v3/registry"
+	"github.com/codesjoy/yggdrasil/v3/server"
 
-	"github.com/codesjoy/yggdrasil/v2/application"
+	"github.com/codesjoy/yggdrasil/v3/application"
 )
 
 type restServiceDesc struct {

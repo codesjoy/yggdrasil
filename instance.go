@@ -14,7 +14,7 @@
 
 package yggdrasil
 
-import "github.com/codesjoy/yggdrasil/v2/internal/instance"
+import "github.com/codesjoy/yggdrasil/v3/internal/instance"
 
 // InstanceNamespace returns the namespace of the instance.
 func InstanceNamespace() string {

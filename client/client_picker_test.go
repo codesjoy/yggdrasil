@@ -19,8 +19,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v2/balancer"
-	"github.com/codesjoy/yggdrasil/v2/remote"
+	"github.com/codesjoy/yggdrasil/v3/balancer"
+	"github.com/codesjoy/yggdrasil/v3/remote"
 )
 
 func TestPickerSnap_UpdatePicker(t *testing.T) {

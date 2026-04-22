@@ -21,7 +21,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
+	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
 )
 
 func TestRegistry(t *testing.T) {

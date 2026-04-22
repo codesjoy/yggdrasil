@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 	stpb "google.golang.org/genproto/googleapis/rpc/status"
 
-	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
+	"github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc/encoding"
 )
 
 func TestBuiltinCodecsAndCompressorAvailableWithoutExtraImports(t *testing.T) {

@@ -21,12 +21,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v2/balancer"
-	"github.com/codesjoy/yggdrasil/v2/metadata"
-	"github.com/codesjoy/yggdrasil/v2/remote"
-	"github.com/codesjoy/yggdrasil/v2/resolver"
-	"github.com/codesjoy/yggdrasil/v2/stats"
-	"github.com/codesjoy/yggdrasil/v2/stream"
+	"github.com/codesjoy/yggdrasil/v3/balancer"
+	"github.com/codesjoy/yggdrasil/v3/metadata"
+	"github.com/codesjoy/yggdrasil/v3/remote"
+	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/stats"
+	"github.com/codesjoy/yggdrasil/v3/stream"
 )
 
 func preserveClientSettings(t *testing.T) {

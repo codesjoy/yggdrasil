@@ -14,7 +14,7 @@
 
 package otel
 
-import "github.com/codesjoy/yggdrasil/v2/stats"
+import "github.com/codesjoy/yggdrasil/v3/stats"
 
 func init() {
 	stats.RegisterHandlerBuilder("otel", func(isServer bool) stats.Handler {

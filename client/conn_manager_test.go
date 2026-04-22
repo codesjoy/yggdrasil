@@ -19,10 +19,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/codesjoy/yggdrasil/v2/remote"
-	"github.com/codesjoy/yggdrasil/v2/resolver"
-	"github.com/codesjoy/yggdrasil/v2/stats"
-	"github.com/codesjoy/yggdrasil/v2/stream"
+	"github.com/codesjoy/yggdrasil/v3/remote"
+	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/stats"
+	"github.com/codesjoy/yggdrasil/v3/stream"
 )
 
 // testClientBuilder is a mock client builder for testing

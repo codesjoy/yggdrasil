@@ -20,7 +20,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/codesjoy/yggdrasil/v2/stream"
+	"github.com/codesjoy/yggdrasil/v3/stream"
 )
 
 // UnaryInvoker is called by UnaryClientInterceptor to complete RPCs.

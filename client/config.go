@@ -17,8 +17,8 @@ package client
 import (
 	"sync"
 
-	"github.com/codesjoy/yggdrasil/v2/internal/backoff"
-	"github.com/codesjoy/yggdrasil/v2/resolver"
+	"github.com/codesjoy/yggdrasil/v3/internal/backoff"
+	"github.com/codesjoy/yggdrasil/v3/resolver"
 )
 
 // RemoteConfig contains static endpoints and attributes for a client service.

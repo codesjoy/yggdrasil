@@ -112,7 +112,7 @@ func TestGenerateFiles(t *testing.T) {
 				Package: proto.String("test"),
 				Options: &descriptorpb.FileOptions{
 					GoPackage: proto.String(
-						"github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rest;main",
+						"github.com/codesjoy/yggdrasil/v3/cmd/protoc-gen-yggdrasil-rest;main",
 					),
 				},
 				Service: []*descriptorpb.ServiceDescriptorProto{
@@ -403,7 +403,7 @@ func TestGenerateFiles_NoServices(t *testing.T) {
 				Package: proto.String("test"),
 				Options: &descriptorpb.FileOptions{
 					GoPackage: proto.String(
-						"github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rest;main",
+						"github.com/codesjoy/yggdrasil/v3/cmd/protoc-gen-yggdrasil-rest;main",
 					),
 				},
 			},
@@ -427,7 +427,7 @@ func TestBuildHTTPRule_Errors(t *testing.T) {
 				Package: proto.String("test"),
 				Options: &descriptorpb.FileOptions{
 					GoPackage: proto.String(
-						"github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rest;main",
+						"github.com/codesjoy/yggdrasil/v3/cmd/protoc-gen-yggdrasil-rest;main",
 					),
 				},
 				MessageType: []*descriptorpb.DescriptorProto{
@@ -493,7 +493,7 @@ func TestGenerateFiles_ExpandsSingletonRoute(t *testing.T) {
 		Package: proto.String("test"),
 		Options: &descriptorpb.FileOptions{
 			GoPackage: proto.String(
-				"github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rest;main",
+				"github.com/codesjoy/yggdrasil/v3/cmd/protoc-gen-yggdrasil-rest;main",
 			),
 		},
 		Service: []*descriptorpb.ServiceDescriptorProto{
@@ -550,7 +550,7 @@ func TestGenerateFiles_NamedBodyPatchIncludesQueryBeforePathPopulation(t *testin
 		Package: proto.String("test"),
 		Options: &descriptorpb.FileOptions{
 			GoPackage: proto.String(
-				"github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rest;main",
+				"github.com/codesjoy/yggdrasil/v3/cmd/protoc-gen-yggdrasil-rest;main",
 			),
 		},
 		Service: []*descriptorpb.ServiceDescriptorProto{
@@ -631,7 +631,7 @@ func TestGenerateFiles_BodyStarSkipsQueryParsing(t *testing.T) {
 		Package: proto.String("test"),
 		Options: &descriptorpb.FileOptions{
 			GoPackage: proto.String(
-				"github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rest;main",
+				"github.com/codesjoy/yggdrasil/v3/cmd/protoc-gen-yggdrasil-rest;main",
 			),
 		},
 		Service: []*descriptorpb.ServiceDescriptorProto{
@@ -694,7 +694,7 @@ func TestGenerateFiles_OmitsRestImportWhenHelpersAreUnused(t *testing.T) {
 		Package: proto.String("test"),
 		Options: &descriptorpb.FileOptions{
 			GoPackage: proto.String(
-				"github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rest;main",
+				"github.com/codesjoy/yggdrasil/v3/cmd/protoc-gen-yggdrasil-rest;main",
 			),
 		},
 		Service: []*descriptorpb.ServiceDescriptorProto{
@@ -730,7 +730,7 @@ func TestGenerateFiles_OmitsRestImportWhenHelpersAreUnused(t *testing.T) {
 	assert.NoError(t, err)
 
 	output := generatedFileContent(t, gen, "test_rest.pb.go")
-	assert.NotContains(t, output, `"github.com/codesjoy/yggdrasil/v2/remote/rest"`)
+	assert.NotContains(t, output, `"github.com/codesjoy/yggdrasil/v3/remote/rest"`)
 	assert.NotContains(t, output, `PopulateQueryParameters(`)
 	assert.NotContains(t, output, `PopulateFieldFromPath(`)
 }

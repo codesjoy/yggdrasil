@@ -18,7 +18,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
+	"github.com/codesjoy/yggdrasil/v3/config"
 )
 
 const multiRegistryType = "multi_registry"

@@ -15,12 +15,12 @@
 package settings
 
 import (
-	"github.com/codesjoy/yggdrasil/v2/balancer"
-	"github.com/codesjoy/yggdrasil/v2/client"
-	"github.com/codesjoy/yggdrasil/v2/logger"
-	grpcprotocol "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
-	protocolhttp "github.com/codesjoy/yggdrasil/v2/remote/protocol/http"
-	"github.com/codesjoy/yggdrasil/v2/resolver"
+	"github.com/codesjoy/yggdrasil/v3/balancer"
+	"github.com/codesjoy/yggdrasil/v3/client"
+	"github.com/codesjoy/yggdrasil/v3/logger"
+	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc"
+	protocolhttp "github.com/codesjoy/yggdrasil/v3/remote/protocol/http"
+	"github.com/codesjoy/yggdrasil/v3/resolver"
 )
 
 // Compile normalizes the raw framework root into per-module resolved settings.

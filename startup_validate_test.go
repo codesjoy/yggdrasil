@@ -17,9 +17,9 @@ package yggdrasil
 import (
 	"testing"
 
-	"github.com/codesjoy/yggdrasil/v2/internal/configtest"
-	_ "github.com/codesjoy/yggdrasil/v2/remote/credentials/tls"
-	"github.com/codesjoy/yggdrasil/v2/server"
+	"github.com/codesjoy/yggdrasil/v3/internal/configtest"
+	_ "github.com/codesjoy/yggdrasil/v3/remote/credentials/tls"
+	"github.com/codesjoy/yggdrasil/v3/server"
 )
 
 func TestValidateStartup_Strict_FailsOnMissingTracerBuilder(t *testing.T) {

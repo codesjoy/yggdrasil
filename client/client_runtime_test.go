@@ -26,11 +26,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codesjoy/pkg/utils/xsync"
-	"github.com/codesjoy/yggdrasil/v2/balancer"
-	"github.com/codesjoy/yggdrasil/v2/interceptor"
-	"github.com/codesjoy/yggdrasil/v2/remote"
-	"github.com/codesjoy/yggdrasil/v2/resolver"
-	"github.com/codesjoy/yggdrasil/v2/stream"
+	"github.com/codesjoy/yggdrasil/v3/balancer"
+	"github.com/codesjoy/yggdrasil/v3/interceptor"
+	"github.com/codesjoy/yggdrasil/v3/remote"
+	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/stream"
 )
 
 type testResolveNowResolver struct {

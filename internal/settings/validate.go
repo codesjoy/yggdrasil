@@ -19,15 +19,15 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/codesjoy/yggdrasil/v2/interceptor"
-	xotel "github.com/codesjoy/yggdrasil/v2/otel"
-	"github.com/codesjoy/yggdrasil/v2/registry"
-	"github.com/codesjoy/yggdrasil/v2/remote"
-	"github.com/codesjoy/yggdrasil/v2/remote/credentials"
-	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
-	"github.com/codesjoy/yggdrasil/v2/remote/rest/middleware"
-	"github.com/codesjoy/yggdrasil/v2/resolver"
-	"github.com/codesjoy/yggdrasil/v2/stats"
+	"github.com/codesjoy/yggdrasil/v3/interceptor"
+	xotel "github.com/codesjoy/yggdrasil/v3/otel"
+	"github.com/codesjoy/yggdrasil/v3/registry"
+	"github.com/codesjoy/yggdrasil/v3/remote"
+	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
+	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
+	"github.com/codesjoy/yggdrasil/v3/remote/rest/middleware"
+	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/stats"
 )
 
 // Validate validates the resolved framework configuration.

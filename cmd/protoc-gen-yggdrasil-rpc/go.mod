@@ -1,4 +1,4 @@
-module github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-rpc/v2
+module github.com/codesjoy/yggdrasil/cmd/protoc-gen-yggdrasil-rpc/v3
 
 go 1.24.6
 

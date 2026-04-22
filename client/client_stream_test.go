@@ -23,8 +23,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/codesjoy/yggdrasil/v2/metadata"
-	"github.com/codesjoy/yggdrasil/v2/stream"
+	"github.com/codesjoy/yggdrasil/v3/metadata"
+	"github.com/codesjoy/yggdrasil/v3/stream"
 )
 
 func TestClientStreamReportAndRecvPaths(t *testing.T) {

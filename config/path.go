@@ -14,7 +14,7 @@
 
 package config
 
-import configinternal "github.com/codesjoy/yggdrasil/v2/config/internal"
+import configinternal "github.com/codesjoy/yggdrasil/v3/config/internal"
 
 // Lookup returns a deep-cloned value from the given path.
 func Lookup(value any, path ...string) any {

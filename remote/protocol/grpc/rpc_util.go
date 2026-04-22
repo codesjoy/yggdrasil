@@ -19,8 +19,8 @@ import (
 	"strings"
 
 	"github.com/codesjoy/pkg/basic/xerror"
-	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
-	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/proto"
+	"github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc/encoding"
+	"github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc/encoding/proto"
 
 	"google.golang.org/genproto/googleapis/rpc/code"
 )

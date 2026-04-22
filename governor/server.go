@@ -26,7 +26,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
+	"github.com/codesjoy/yggdrasil/v3/config"
 )
 
 // ServerInfo contains server info.

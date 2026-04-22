@@ -16,7 +16,7 @@
 // which encapsulate all the state needed by a client to authenticate with a
 // server and make various assertions, e.g., about the client's identity, role,
 // or whether it is authorized to make a particular call.
-package credentials // import "github.com/codesjoy/yggdrasil/v2/remote/credentials"
+package credentials // import "github.com/codesjoy/yggdrasil/v3/remote/credentials"
 
 import (
 	"context"

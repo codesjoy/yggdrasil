@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
-	"github.com/codesjoy/yggdrasil/v2/config/source"
+	"github.com/codesjoy/yggdrasil/v3/config/source"
 )
 
 func TestWatchGuardBranches(t *testing.T) {

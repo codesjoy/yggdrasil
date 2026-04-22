@@ -26,8 +26,8 @@ import (
 	"go.opentelemetry.io/otel/metric/noop"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
-	"github.com/codesjoy/yggdrasil/v2/stats"
-	"github.com/codesjoy/yggdrasil/v2/status"
+	"github.com/codesjoy/yggdrasil/v3/stats"
+	"github.com/codesjoy/yggdrasil/v3/status"
 )
 
 type recordedInt64Histogram struct {

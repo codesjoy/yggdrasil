@@ -16,8 +16,8 @@
 package otel
 
 import (
-	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/stats"
+	"github.com/codesjoy/yggdrasil/v3/config"
+	"github.com/codesjoy/yggdrasil/v3/stats"
 )
 
 // Config is the configuration for the OpenTelemetry provider.

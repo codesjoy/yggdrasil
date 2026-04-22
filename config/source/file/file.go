@@ -34,8 +34,8 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
 
-	"github.com/codesjoy/yggdrasil/v2/config/source"
-	"github.com/codesjoy/yggdrasil/v2/internal/backoff"
+	"github.com/codesjoy/yggdrasil/v3/config/source"
+	"github.com/codesjoy/yggdrasil/v3/internal/backoff"
 )
 
 var errSourceClosed = errors.New("the file source is closed")

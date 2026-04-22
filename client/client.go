@@ -29,15 +29,15 @@ import (
 	"github.com/codesjoy/pkg/utils/xsync"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
-	"github.com/codesjoy/yggdrasil/v2/balancer"
-	"github.com/codesjoy/yggdrasil/v2/interceptor"
-	"github.com/codesjoy/yggdrasil/v2/internal/backoff"
-	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
-	"github.com/codesjoy/yggdrasil/v2/metadata"
-	"github.com/codesjoy/yggdrasil/v2/remote"
-	"github.com/codesjoy/yggdrasil/v2/resolver"
-	"github.com/codesjoy/yggdrasil/v2/stats"
-	"github.com/codesjoy/yggdrasil/v2/stream"
+	"github.com/codesjoy/yggdrasil/v3/balancer"
+	"github.com/codesjoy/yggdrasil/v3/interceptor"
+	"github.com/codesjoy/yggdrasil/v3/internal/backoff"
+	internalutils "github.com/codesjoy/yggdrasil/v3/internal/utils"
+	"github.com/codesjoy/yggdrasil/v3/metadata"
+	"github.com/codesjoy/yggdrasil/v3/remote"
+	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/stats"
+	"github.com/codesjoy/yggdrasil/v3/stream"
 )
 
 // ErrClientClosing is returned when the client is closing.

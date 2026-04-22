@@ -83,7 +83,7 @@ func TestGenerateFiles_NoServices(t *testing.T) {
 				Name:    proto.String("test.proto"),
 				Package: proto.String("test"),
 				Options: &descriptorpb.FileOptions{
-					GoPackage: proto.String("github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rpc;main"),
+					GoPackage: proto.String("github.com/codesjoy/yggdrasil/v3/cmd/protoc-gen-yggdrasil-rpc;main"),
 				},
 			},
 		},
@@ -99,7 +99,7 @@ func TestGenerateFiles_UnaryOnly_HasInterceptorImport(t *testing.T) {
 		newMethod("SayHello", "HelloRequest", "HelloResponse", false, false),
 	))
 
-	assert.Contains(t, content, "interceptor \"github.com/codesjoy/yggdrasil/v2/interceptor\"")
+	assert.Contains(t, content, "interceptor \"github.com/codesjoy/yggdrasil/v3/interceptor\"")
 	assert.Contains(t, content, "UnaryServerInterceptor")
 	assert.Contains(t, content, "SayHello(context.Context, *HelloRequest) (*HelloResponse, error)")
 }
@@ -111,7 +111,7 @@ func TestGenerateFiles_StreamingOnly_NoInterceptorImport(t *testing.T) {
 		newMethod("Watch", "WatchRequest", "WatchResponse", false, true),
 	))
 
-	assert.NotContains(t, content, "interceptor \"github.com/codesjoy/yggdrasil/v2/interceptor\"")
+	assert.NotContains(t, content, "interceptor \"github.com/codesjoy/yggdrasil/v3/interceptor\"")
 	assert.NotContains(t, content, "UnaryServerInterceptor")
 }
 
@@ -197,7 +197,7 @@ func newTestPlugin(t *testing.T, services ...*descriptorpb.ServiceDescriptorProt
 				Package:     proto.String("test"),
 				MessageType: collectMessageTypes(services...),
 				Options: &descriptorpb.FileOptions{
-					GoPackage: proto.String("github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rpc;main"),
+					GoPackage: proto.String("github.com/codesjoy/yggdrasil/v3/cmd/protoc-gen-yggdrasil-rpc;main"),
 				},
 				Service: services,
 			},

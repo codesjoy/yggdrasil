@@ -18,7 +18,7 @@ package stream
 import (
 	"context"
 
-	"github.com/codesjoy/yggdrasil/v2/metadata"
+	"github.com/codesjoy/yggdrasil/v3/metadata"
 )
 
 // Handler defines the handler called by RPC server to complete the

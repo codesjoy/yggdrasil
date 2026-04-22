@@ -21,9 +21,9 @@ import (
 
 	"github.com/codesjoy/pkg/utils/xsync"
 
-	"github.com/codesjoy/yggdrasil/v2/balancer"
-	"github.com/codesjoy/yggdrasil/v2/remote"
-	"github.com/codesjoy/yggdrasil/v2/resolver"
+	"github.com/codesjoy/yggdrasil/v3/balancer"
+	"github.com/codesjoy/yggdrasil/v3/remote"
+	"github.com/codesjoy/yggdrasil/v3/resolver"
 )
 
 type balancerClient struct {

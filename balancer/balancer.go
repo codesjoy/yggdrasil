@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/codesjoy/yggdrasil/v2/remote"
-	"github.com/codesjoy/yggdrasil/v2/resolver"
+	"github.com/codesjoy/yggdrasil/v3/remote"
+	"github.com/codesjoy/yggdrasil/v3/resolver"
 )
 
 // ErrNoAvailableInstance is returned when no available instance is found

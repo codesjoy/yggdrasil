@@ -19,10 +19,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/internal/configtest"
-	"github.com/codesjoy/yggdrasil/v2/internal/settings"
-	"github.com/codesjoy/yggdrasil/v2/logger"
+	"github.com/codesjoy/yggdrasil/v3/config"
+	"github.com/codesjoy/yggdrasil/v3/internal/configtest"
+	"github.com/codesjoy/yggdrasil/v3/internal/settings"
+	"github.com/codesjoy/yggdrasil/v3/logger"
 )
 
 func TestInitLoggerUsesNewLoggingTree(t *testing.T) {

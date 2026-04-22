@@ -19,14 +19,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/codesjoy/yggdrasil/v2/client"
-	"github.com/codesjoy/yggdrasil/v2/internal/configtest"
-	"github.com/codesjoy/yggdrasil/v2/logger"
-	"github.com/codesjoy/yggdrasil/v2/registry"
-	"github.com/codesjoy/yggdrasil/v2/remote/rest"
-	"github.com/codesjoy/yggdrasil/v2/resolver"
-	"github.com/codesjoy/yggdrasil/v2/server"
-	"github.com/codesjoy/yggdrasil/v2/stats"
+	"github.com/codesjoy/yggdrasil/v3/client"
+	"github.com/codesjoy/yggdrasil/v3/internal/configtest"
+	"github.com/codesjoy/yggdrasil/v3/logger"
+	"github.com/codesjoy/yggdrasil/v3/registry"
+	"github.com/codesjoy/yggdrasil/v3/remote/rest"
+	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/server"
+	"github.com/codesjoy/yggdrasil/v3/stats"
 )
 
 func TestRefreshResolvedSettings_DoesNotApplyGlobalStores(t *testing.T) {

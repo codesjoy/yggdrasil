@@ -17,7 +17,7 @@ package remote
 import (
 	"context"
 
-	"github.com/codesjoy/yggdrasil/v2/stream"
+	"github.com/codesjoy/yggdrasil/v3/stream"
 )
 
 // MethodHandle defines the method handle function.

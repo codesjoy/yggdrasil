@@ -26,11 +26,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/codesjoy/yggdrasil/v2/interceptor"
-	"github.com/codesjoy/yggdrasil/v2/internal/constant"
-	"github.com/codesjoy/yggdrasil/v2/remote"
-	restserver "github.com/codesjoy/yggdrasil/v2/remote/rest"
-	"github.com/codesjoy/yggdrasil/v2/stream"
+	"github.com/codesjoy/yggdrasil/v3/interceptor"
+	"github.com/codesjoy/yggdrasil/v3/internal/constant"
+	"github.com/codesjoy/yggdrasil/v3/remote"
+	restserver "github.com/codesjoy/yggdrasil/v3/remote/rest"
+	"github.com/codesjoy/yggdrasil/v3/stream"
 )
 
 func TestServerConfigureAndCurrentSettings(t *testing.T) {

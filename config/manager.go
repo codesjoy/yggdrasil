@@ -21,8 +21,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	configinternal "github.com/codesjoy/yggdrasil/v2/config/internal"
-	"github.com/codesjoy/yggdrasil/v2/config/source"
+	configinternal "github.com/codesjoy/yggdrasil/v3/config/internal"
+	"github.com/codesjoy/yggdrasil/v3/config/source"
 )
 
 // Priority defines layer precedence.

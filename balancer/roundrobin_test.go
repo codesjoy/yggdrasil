@@ -23,10 +23,10 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/codesjoy/yggdrasil/v2/remote"
-	"github.com/codesjoy/yggdrasil/v2/resolver"
-	ygstatus "github.com/codesjoy/yggdrasil/v2/status"
-	"github.com/codesjoy/yggdrasil/v2/stream"
+	"github.com/codesjoy/yggdrasil/v3/remote"
+	"github.com/codesjoy/yggdrasil/v3/resolver"
+	ygstatus "github.com/codesjoy/yggdrasil/v3/status"
+	"github.com/codesjoy/yggdrasil/v3/stream"
 	"google.golang.org/genproto/googleapis/rpc/code"
 )
 

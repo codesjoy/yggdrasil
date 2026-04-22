@@ -22,10 +22,10 @@ import (
 	"github.com/codesjoy/pkg/basic/xerror"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
-	"github.com/codesjoy/yggdrasil/v2/balancer"
-	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
-	"github.com/codesjoy/yggdrasil/v2/remote"
-	"github.com/codesjoy/yggdrasil/v2/status"
+	"github.com/codesjoy/yggdrasil/v3/balancer"
+	istatus "github.com/codesjoy/yggdrasil/v3/internal/status"
+	"github.com/codesjoy/yggdrasil/v3/remote"
+	"github.com/codesjoy/yggdrasil/v3/status"
 )
 
 // pickerSnap store  a picker and a channel used to signal that a picker

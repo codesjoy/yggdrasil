@@ -23,10 +23,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/codesjoy/yggdrasil/v2/application"
-	"github.com/codesjoy/yggdrasil/v2/config"
-	configbootstrap "github.com/codesjoy/yggdrasil/v2/config/bootstrap"
-	"github.com/codesjoy/yggdrasil/v2/config/source"
+	"github.com/codesjoy/yggdrasil/v3/application"
+	"github.com/codesjoy/yggdrasil/v3/config"
+	configbootstrap "github.com/codesjoy/yggdrasil/v3/config/bootstrap"
+	"github.com/codesjoy/yggdrasil/v3/config/source"
 )
 
 const (

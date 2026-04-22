@@ -29,13 +29,13 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/codesjoy/yggdrasil/v2/governor"
-	"github.com/codesjoy/yggdrasil/v2/internal/constant"
-	"github.com/codesjoy/yggdrasil/v2/internal/instance"
-	"github.com/codesjoy/yggdrasil/v2/registry"
-	"github.com/codesjoy/yggdrasil/v2/server"
+	"github.com/codesjoy/yggdrasil/v3/governor"
+	"github.com/codesjoy/yggdrasil/v3/internal/constant"
+	"github.com/codesjoy/yggdrasil/v3/internal/instance"
+	"github.com/codesjoy/yggdrasil/v3/registry"
+	"github.com/codesjoy/yggdrasil/v3/server"
 
-	"github.com/codesjoy/yggdrasil/v2/internal/defers"
+	"github.com/codesjoy/yggdrasil/v3/internal/defers"
 )
 
 // Application application

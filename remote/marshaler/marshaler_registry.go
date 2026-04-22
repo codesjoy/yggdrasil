@@ -20,7 +20,7 @@ import (
 	"net/http"
 	"strings"
 
-	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
+	internalutils "github.com/codesjoy/yggdrasil/v3/internal/utils"
 )
 
 // BuildMarshalerRegistry builds a marshaler registry from a list of scheme names.

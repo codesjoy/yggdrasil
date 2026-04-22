@@ -25,7 +25,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/codesjoy/yggdrasil/v2/remote/rest/convert"
+	"github.com/codesjoy/yggdrasil/v3/remote/rest/convert"
 )
 
 func init() {

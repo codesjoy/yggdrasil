@@ -19,9 +19,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v2/governor"
-	"github.com/codesjoy/yggdrasil/v2/registry"
-	"github.com/codesjoy/yggdrasil/v2/server"
+	"github.com/codesjoy/yggdrasil/v3/governor"
+	"github.com/codesjoy/yggdrasil/v3/registry"
+	"github.com/codesjoy/yggdrasil/v3/server"
 )
 
 // Option application option

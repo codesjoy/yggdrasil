@@ -18,7 +18,7 @@ package otel
 import (
 	"strings"
 
-	"github.com/codesjoy/yggdrasil/v2/metadata"
+	"github.com/codesjoy/yggdrasil/v3/metadata"
 
 	"go.opentelemetry.io/otel/propagation"
 )

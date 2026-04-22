@@ -14,7 +14,7 @@
 
 package yggdrasil
 
-import "github.com/codesjoy/yggdrasil/v2/internal/constant"
+import "github.com/codesjoy/yggdrasil/v3/internal/constant"
 
 const (
 	// Version is the version of the framework.

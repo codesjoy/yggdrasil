@@ -22,7 +22,7 @@ import (
 	"crypto/x509"
 	"net/url"
 
-	"github.com/codesjoy/yggdrasil/v2/internal/remotelog"
+	"github.com/codesjoy/yggdrasil/v3/internal/remotelog"
 )
 
 // SPIFFEIDFromState parses the SPIFFE ID from State. If the SPIFFE ID format

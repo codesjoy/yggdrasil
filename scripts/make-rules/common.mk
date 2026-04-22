@@ -6,7 +6,7 @@
 SHELL := bash
 
 # Project metadata
-PROJECT_NAME ?= github.com/codesjoy/yggdrasil/v2
+PROJECT_NAME ?= github.com/codesjoy/yggdrasil/v3
 ROOT_DIR     := $(shell pwd)
 
 # Module configuration

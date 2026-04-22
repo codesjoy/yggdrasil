@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
-	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
+	istatus "github.com/codesjoy/yggdrasil/v3/internal/status"
 )
 
 type testReason struct {

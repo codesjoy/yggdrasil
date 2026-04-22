@@ -23,7 +23,7 @@ import (
 	"github.com/creasty/defaults"
 	"github.com/mitchellh/mapstructure"
 
-	configinternal "github.com/codesjoy/yggdrasil/v2/config/internal"
+	configinternal "github.com/codesjoy/yggdrasil/v3/config/internal"
 )
 
 // Snapshot is an immutable configuration snapshot or subsection.

@@ -26,11 +26,11 @@ import (
 const (
 	contextPackage     = protogen.GoImportPath("context")
 	xerrorPackage      = protogen.GoImportPath("github.com/codesjoy/pkg/basic/xerror")
-	streamPackage      = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v2/stream")
-	clientPackage      = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v2/client")
-	interceptorPackage = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v2/interceptor")
-	serverPackage      = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v2/server")
-	metadataPackage    = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v2/metadata")
+	streamPackage      = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v3/stream")
+	clientPackage      = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v3/client")
+	interceptorPackage = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v3/interceptor")
+	serverPackage      = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v3/server")
+	metadataPackage    = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v3/metadata")
 	codePackage        = protogen.GoImportPath("google.golang.org/genproto/googleapis/rpc/code")
 )
 

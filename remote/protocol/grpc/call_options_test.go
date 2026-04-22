@@ -21,9 +21,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
-	jsonrawenc "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/jsonraw"
-	rawenc "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/raw"
+	"github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc/encoding"
+	jsonrawenc "github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc/encoding/jsonraw"
+	rawenc "github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc/encoding/raw"
 )
 
 type testCodec struct {

@@ -1,4 +1,4 @@
-module github.com/codesjoy/yggdrasil/v2
+module github.com/codesjoy/yggdrasil/v3
 
 go 1.25.7
 

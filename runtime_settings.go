@@ -15,19 +15,19 @@
 package yggdrasil
 
 import (
-	"github.com/codesjoy/yggdrasil/v2/balancer"
-	"github.com/codesjoy/yggdrasil/v2/client"
-	"github.com/codesjoy/yggdrasil/v2/internal/settings"
-	"github.com/codesjoy/yggdrasil/v2/logger"
-	"github.com/codesjoy/yggdrasil/v2/registry"
-	ytls "github.com/codesjoy/yggdrasil/v2/remote/credentials/tls"
-	grpcprotocol "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
-	protocolhttp "github.com/codesjoy/yggdrasil/v2/remote/protocol/http"
-	"github.com/codesjoy/yggdrasil/v2/remote/rest"
-	"github.com/codesjoy/yggdrasil/v2/remote/rest/middleware"
-	"github.com/codesjoy/yggdrasil/v2/resolver"
-	"github.com/codesjoy/yggdrasil/v2/server"
-	"github.com/codesjoy/yggdrasil/v2/stats"
+	"github.com/codesjoy/yggdrasil/v3/balancer"
+	"github.com/codesjoy/yggdrasil/v3/client"
+	"github.com/codesjoy/yggdrasil/v3/internal/settings"
+	"github.com/codesjoy/yggdrasil/v3/logger"
+	"github.com/codesjoy/yggdrasil/v3/registry"
+	ytls "github.com/codesjoy/yggdrasil/v3/remote/credentials/tls"
+	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc"
+	protocolhttp "github.com/codesjoy/yggdrasil/v3/remote/protocol/http"
+	"github.com/codesjoy/yggdrasil/v3/remote/rest"
+	"github.com/codesjoy/yggdrasil/v3/remote/rest/middleware"
+	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/server"
+	"github.com/codesjoy/yggdrasil/v3/stats"
 )
 
 func refreshResolvedSettings(opts *options) error {

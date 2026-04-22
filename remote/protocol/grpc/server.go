@@ -27,10 +27,10 @@ import (
 	gcredentials "google.golang.org/grpc/credentials"
 	gkeepalive "google.golang.org/grpc/keepalive"
 
-	"github.com/codesjoy/yggdrasil/v2/metadata"
-	"github.com/codesjoy/yggdrasil/v2/remote"
-	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
-	"github.com/codesjoy/yggdrasil/v2/stats"
+	"github.com/codesjoy/yggdrasil/v3/metadata"
+	"github.com/codesjoy/yggdrasil/v3/remote"
+	"github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc/encoding"
+	"github.com/codesjoy/yggdrasil/v3/stats"
 )
 
 func init() {

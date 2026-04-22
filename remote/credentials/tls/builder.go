@@ -24,7 +24,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/codesjoy/yggdrasil/v2/remote/credentials"
+	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
 )
 
 func init() {

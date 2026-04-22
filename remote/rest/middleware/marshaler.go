@@ -18,7 +18,7 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
+	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
 )
 
 func init() {

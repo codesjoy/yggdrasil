@@ -27,10 +27,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/codesjoy/yggdrasil/v2/governor"
-	"github.com/codesjoy/yggdrasil/v2/internal/constant"
-	"github.com/codesjoy/yggdrasil/v2/registry"
-	yserver "github.com/codesjoy/yggdrasil/v2/server"
+	"github.com/codesjoy/yggdrasil/v3/governor"
+	"github.com/codesjoy/yggdrasil/v3/internal/constant"
+	"github.com/codesjoy/yggdrasil/v3/registry"
+	yserver "github.com/codesjoy/yggdrasil/v3/server"
 )
 
 // Mock implementations for testing

@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
-	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding/proto/codec_perf"
+	"github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc/encoding"
+	"github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc/encoding/proto/codec_perf"
 
 	"google.golang.org/protobuf/proto"
 )

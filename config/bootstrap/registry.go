@@ -22,11 +22,11 @@ import (
 
 	"github.com/mitchellh/mapstructure"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/config/source"
-	envsource "github.com/codesjoy/yggdrasil/v2/config/source/env"
-	filesource "github.com/codesjoy/yggdrasil/v2/config/source/file"
-	flagsource "github.com/codesjoy/yggdrasil/v2/config/source/flag"
+	"github.com/codesjoy/yggdrasil/v3/config"
+	"github.com/codesjoy/yggdrasil/v3/config/source"
+	envsource "github.com/codesjoy/yggdrasil/v3/config/source/env"
+	filesource "github.com/codesjoy/yggdrasil/v3/config/source/file"
+	flagsource "github.com/codesjoy/yggdrasil/v3/config/source/flag"
 )
 
 // SourceSpec describes a declarative bootstrap source.

@@ -19,9 +19,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/codesjoy/yggdrasil/v2/metadata"
-	"github.com/codesjoy/yggdrasil/v2/remote"
-	restserver "github.com/codesjoy/yggdrasil/v2/remote/rest"
+	"github.com/codesjoy/yggdrasil/v3/metadata"
+	"github.com/codesjoy/yggdrasil/v3/remote"
+	restserver "github.com/codesjoy/yggdrasil/v3/remote/rest"
 )
 
 type TestService interface {

@@ -19,8 +19,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/codesjoy/yggdrasil/v2/resolver"
-	"github.com/codesjoy/yggdrasil/v2/stats"
+	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/stats"
 )
 
 // ClientState is the state of the client.

@@ -20,7 +20,7 @@ import (
 	grpcencoding "google.golang.org/grpc/encoding"
 	gmem "google.golang.org/grpc/mem"
 
-	yencoding "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
+	yencoding "github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc/encoding"
 )
 
 type localCodecV2 interface {

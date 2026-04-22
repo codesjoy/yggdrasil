@@ -18,11 +18,11 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/codesjoy/yggdrasil/v2/client"
-	"github.com/codesjoy/yggdrasil/v2/internal/backoff"
-	grpcprotocol "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc"
-	protocolhttp "github.com/codesjoy/yggdrasil/v2/remote/protocol/http"
-	"github.com/codesjoy/yggdrasil/v2/resolver"
+	"github.com/codesjoy/yggdrasil/v3/client"
+	"github.com/codesjoy/yggdrasil/v3/internal/backoff"
+	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc"
+	protocolhttp "github.com/codesjoy/yggdrasil/v3/remote/protocol/http"
+	"github.com/codesjoy/yggdrasil/v3/resolver"
 )
 
 func mergeClientServiceConfig(base client.ServiceConfig, overlay clientServiceConfigOverlay) client.ServiceConfig {

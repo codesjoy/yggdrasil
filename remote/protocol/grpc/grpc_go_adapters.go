@@ -37,15 +37,15 @@ import (
 	gstatus "google.golang.org/grpc/status"
 
 	"github.com/codesjoy/pkg/basic/xerror"
-	istatus "github.com/codesjoy/yggdrasil/v2/internal/status"
-	internalutils "github.com/codesjoy/yggdrasil/v2/internal/utils"
-	ymetadata "github.com/codesjoy/yggdrasil/v2/metadata"
-	"github.com/codesjoy/yggdrasil/v2/remote"
-	ycredentials "github.com/codesjoy/yggdrasil/v2/remote/credentials"
-	"github.com/codesjoy/yggdrasil/v2/remote/peer"
-	stats2 "github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/stats"
-	ystats "github.com/codesjoy/yggdrasil/v2/stats"
-	ystatus "github.com/codesjoy/yggdrasil/v2/status"
+	istatus "github.com/codesjoy/yggdrasil/v3/internal/status"
+	internalutils "github.com/codesjoy/yggdrasil/v3/internal/utils"
+	ymetadata "github.com/codesjoy/yggdrasil/v3/metadata"
+	"github.com/codesjoy/yggdrasil/v3/remote"
+	ycredentials "github.com/codesjoy/yggdrasil/v3/remote/credentials"
+	"github.com/codesjoy/yggdrasil/v3/remote/peer"
+	stats2 "github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc/stats"
+	ystats "github.com/codesjoy/yggdrasil/v3/stats"
+	ystatus "github.com/codesjoy/yggdrasil/v3/status"
 )
 
 func toGRPCMetadata(md ymetadata.MD) gmetadata.MD {

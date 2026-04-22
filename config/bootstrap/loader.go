@@ -21,9 +21,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/codesjoy/yggdrasil/v2/config"
-	"github.com/codesjoy/yggdrasil/v2/config/source"
-	filesource "github.com/codesjoy/yggdrasil/v2/config/source/file"
+	"github.com/codesjoy/yggdrasil/v3/config"
+	"github.com/codesjoy/yggdrasil/v3/config/source"
+	filesource "github.com/codesjoy/yggdrasil/v3/config/source/file"
 )
 
 // Loader loads bootstrap config files and their declared sources.

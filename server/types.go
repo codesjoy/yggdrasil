@@ -17,7 +17,7 @@ package server
 import (
 	"context"
 
-	"github.com/codesjoy/yggdrasil/v2/internal/constant"
+	"github.com/codesjoy/yggdrasil/v3/internal/constant"
 )
 
 // Endpoint is the interface that wraps the Endpoint method.

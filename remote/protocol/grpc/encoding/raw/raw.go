@@ -18,7 +18,7 @@ package raw
 import (
 	"fmt"
 
-	"github.com/codesjoy/yggdrasil/v2/remote/protocol/grpc/encoding"
+	"github.com/codesjoy/yggdrasil/v3/remote/protocol/grpc/encoding"
 
 	gmem "google.golang.org/grpc/mem"
 )

@@ -17,7 +17,7 @@ package stats
 import (
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v2/metadata"
+	"github.com/codesjoy/yggdrasil/v3/metadata"
 )
 
 // RPCTagInfo contains the information that can be attached to the context.

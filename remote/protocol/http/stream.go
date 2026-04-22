@@ -30,12 +30,12 @@ import (
 	stpb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/codesjoy/yggdrasil/v2/metadata"
-	"github.com/codesjoy/yggdrasil/v2/remote/marshaler"
-	"github.com/codesjoy/yggdrasil/v2/remote/peer"
-	"github.com/codesjoy/yggdrasil/v2/stats"
-	"github.com/codesjoy/yggdrasil/v2/status"
-	"github.com/codesjoy/yggdrasil/v2/stream"
+	"github.com/codesjoy/yggdrasil/v3/metadata"
+	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
+	"github.com/codesjoy/yggdrasil/v3/remote/peer"
+	"github.com/codesjoy/yggdrasil/v3/stats"
+	"github.com/codesjoy/yggdrasil/v3/status"
+	"github.com/codesjoy/yggdrasil/v3/stream"
 )
 
 const (

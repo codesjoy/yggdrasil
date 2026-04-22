@@ -23,8 +23,8 @@ import (
 
 	"github.com/codesjoy/pkg/utils/xmap"
 
-	"github.com/codesjoy/yggdrasil/v2/config/internal"
-	"github.com/codesjoy/yggdrasil/v2/config/source"
+	"github.com/codesjoy/yggdrasil/v3/config/internal"
+	"github.com/codesjoy/yggdrasil/v3/config/source"
 )
 
 type env struct {
