@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package bootstrap
+package chain
 
 import (
 	"errors"
@@ -26,12 +26,12 @@ import (
 	filesource "github.com/codesjoy/yggdrasil/v3/config/source/file"
 )
 
-// Loader loads bootstrap config files and their declared sources.
+// Loader loads the main config file and any declared config sources.
 type Loader struct {
 	registry *Registry
 }
 
-// NewLoader creates a bootstrap loader.
+// NewLoader creates a config-chain loader.
 func NewLoader(registry *Registry) *Loader {
 	if registry == nil {
 		registry = NewRegistry()
@@ -39,32 +39,32 @@ func NewLoader(registry *Registry) *Loader {
 	return &Loader{registry: registry}
 }
 
-// LoadFile loads a bootstrap file and all declarative sources it defines.
+// LoadFile loads a config file and all declarative sources it defines.
 func (l *Loader) LoadFile(manager *config.Manager, path string, explicit bool) ([]source.Source, bool, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return nil, false, errors.New("bootstrap config path is empty")
+		return nil, false, errors.New("config path is empty")
 	}
 	if _, err := os.Stat(path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			if explicit {
-				return nil, false, fmt.Errorf("bootstrap config file %q not found", path)
+				return nil, false, fmt.Errorf("config file %q not found", path)
 			}
-			slog.Warn("bootstrap config file not found, fallback to default startup", slog.String("path", path))
+			slog.Warn("config file not found, fallback to default startup", slog.String("path", path))
 			return nil, false, nil
 		}
-		return nil, false, fmt.Errorf("stat bootstrap config file %q: %w", path, err)
+		return nil, false, fmt.Errorf("stat config file %q: %w", path, err)
 	}
 
 	loaded := make([]source.Source, 0, 4)
-	bootstrapSource := filesource.NewSource(path, false)
-	if err := manager.LoadLayer("bootstrap:file:"+path, config.PriorityFile, bootstrapSource); err != nil {
+	configFileSource := filesource.NewSource(path, false)
+	if err := manager.LoadLayer("config:file:"+path, config.PriorityFile, configFileSource); err != nil {
 		return nil, false, err
 	}
-	loaded = append(loaded, bootstrapSource)
+	loaded = append(loaded, configFileSource)
 
 	specs := make([]SourceSpec, 0)
-	if err := manager.Section("yggdrasil", "bootstrap", "sources").Decode(&specs); err != nil {
+	if err := manager.Section("yggdrasil", "config", "sources").Decode(&specs); err != nil {
 		return nil, false, err
 	}
 	for i, spec := range specs {
@@ -73,14 +73,14 @@ func (l *Loader) LoadFile(manager *config.Manager, path string, explicit bool) (
 		}
 		src, priority, err := l.registry.Build(spec)
 		if err != nil {
-			return nil, false, fmt.Errorf("bootstrap source[%d]: %w", i, err)
+			return nil, false, fmt.Errorf("config source[%d]: %w", i, err)
 		}
 		name := spec.Name
 		if name == "" {
-			name = fmt.Sprintf("bootstrap:%s:%d", strings.ToLower(spec.Kind), i)
+			name = fmt.Sprintf("config:%s:%d", strings.ToLower(spec.Kind), i)
 		}
 		if err := manager.LoadLayer(name, priority, src); err != nil {
-			return nil, false, fmt.Errorf("bootstrap source[%d]: %w", i, err)
+			return nil, false, fmt.Errorf("config source[%d]: %w", i, err)
 		}
 		loaded = append(loaded, src)
 	}

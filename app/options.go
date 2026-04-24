@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package app implements the internal runtime composition root used by the
-// public yggdrasil package.
+// Package app provides the stable advanced application control API for
+// Yggdrasil.
 package app
 
 import (
 	"context"
 	"time"
 
+	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
 	"github.com/codesjoy/yggdrasil/v3/governor"
@@ -29,11 +30,6 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/server"
 )
 
-type restServiceRegistration struct {
-	impl     interface{}
-	prefixes []string
-}
-
 type configLayerSource struct {
 	Name     string
 	Priority config.Priority
@@ -41,27 +37,25 @@ type configLayerSource struct {
 }
 
 type options struct {
-	rpcServices       map[*server.ServiceDesc]interface{}
-	restServices      map[*server.RestServiceDesc]restServiceRegistration
-	restHandlers      []*server.RestRawHandlerDesc
-	server            server.Server
-	governor          *governor.Server
-	internalServers   []InternalServer
-	registry          registry.Registry
-	shutdownTimeout   time.Duration
-	beforeStartHooks  []func(context.Context) error
-	beforeStopHooks   []func(context.Context) error
-	afterStopHooks    []func(context.Context) error
-	lifecycleOptions  []lifecycleOption
-	configManager     *config.Manager
-	bootstrapPath     string
-	bootstrapSources  []configLayerSource
-	initBootstrapPath string
-	initConfigManager *config.Manager
+	appName          string
+	mode             string
+	planOverrides    []yassembly.Override
+	server           server.Server
+	governor         *governor.Server
+	internalServers  []InternalServer
+	registry         registry.Registry
+	shutdownTimeout  time.Duration
+	beforeStartHooks []func(context.Context) error
+	beforeStopHooks  []func(context.Context) error
+	afterStopHooks   []func(context.Context) error
+	lifecycleOptions []lifecycleOption
+	configManager    *config.Manager
+	configPath       string
+	configSources    []configLayerSource
 
 	managedConfigSources          []source.Source
 	configSourceCleanupRegistered bool
-	bootstrapConfigLoaded         bool
+	configFileLoaded              bool
 	managedConfigSourcesClosed    bool
 	resolvedSettings              settings.Resolved
 	modules                       []module.Module
@@ -85,41 +79,9 @@ func (opts *options) buildLifecycleOptions() []lifecycleOption {
 // Option define the framework options
 type Option func(*options) error
 
-// WithRPCServices registers a batch of RPC services.
-func WithRPCServices(desc map[*server.ServiceDesc]interface{}) Option {
-	return func(opts *options) error {
-		for k, v := range desc {
-			opts.rpcServices[k] = v
-		}
-		return nil
-	}
-}
-
-// WithRPCService registers one RPC service.
-func WithRPCService(desc *server.ServiceDesc, impl interface{}) Option {
-	return func(opts *options) error {
-		opts.rpcServices[desc] = impl
-		return nil
-	}
-}
-
-// WithRESTService registers one REST service.
-func WithRESTService(desc *server.RestServiceDesc, impl interface{}, prefix ...string) Option {
-	return func(opts *options) error {
-		opts.restServices[desc] = restServiceRegistration{
-			impl:     impl,
-			prefixes: prefix,
-		}
-		return nil
-	}
-}
-
-// WithRESTHandlers registers raw REST handlers.
-func WithRESTHandlers(desc ...*server.RestRawHandlerDesc) Option {
-	return func(opts *options) error {
-		opts.restHandlers = append(opts.restHandlers, desc...)
-		return nil
-	}
+// Open creates one App prepared for the high-level startup flow.
+func Open(opts ...Option) (*App, error) {
+	return New("", opts...)
 }
 
 // WithInternalServer registers internal servers managed by the App lifecycle.
@@ -170,26 +132,55 @@ func WithConfigManager(manager *config.Manager) Option {
 	}
 }
 
-// WithBootstrapPath overrides the bootstrap config file path.
-func WithBootstrapPath(path string) Option {
+// WithAppName overrides the app name resolved by Open.
+func WithAppName(name string) Option {
 	return func(opts *options) error {
-		opts.bootstrapPath = path
+		opts.appName = name
 		return nil
 	}
 }
 
-// WithBootstrapSource registers an explicit configuration source loaded after the bootstrap file.
-func WithBootstrapSource(name string, priority config.Priority, src source.Source) Option {
+// WithMode overrides the mode resolved by Open.
+func WithMode(mode string) Option {
+	return func(opts *options) error {
+		opts.mode = mode
+		return nil
+	}
+}
+
+// WithPlanOverrides registers assembly overrides for Open/Prepare.
+func WithPlanOverrides(overrides ...yassembly.Override) Option {
+	return func(opts *options) error {
+		for _, item := range overrides {
+			if item == nil {
+				continue
+			}
+			opts.planOverrides = append(opts.planOverrides, item)
+		}
+		return nil
+	}
+}
+
+// WithConfigPath overrides the config file path.
+func WithConfigPath(path string) Option {
+	return func(opts *options) error {
+		opts.configPath = path
+		return nil
+	}
+}
+
+// WithConfigSource registers an explicit configuration source loaded after the config file.
+func WithConfigSource(name string, priority config.Priority, src source.Source) Option {
 	return func(opts *options) error {
 		if src == nil {
 			return nil
 		}
-		for _, item := range opts.bootstrapSources {
+		for _, item := range opts.configSources {
 			if item.Source == src {
 				return nil
 			}
 		}
-		opts.bootstrapSources = append(opts.bootstrapSources, configLayerSource{
+		opts.configSources = append(opts.configSources, configLayerSource{
 			Name:     name,
 			Priority: priority,
 			Source:   src,
@@ -209,13 +200,4 @@ func WithModules(mods ...module.Module) Option {
 		}
 		return nil
 	}
-}
-
-func hasSource(sources []source.Source, target source.Source) bool {
-	for _, item := range sources {
-		if item == target {
-			return true
-		}
-	}
-	return false
 }

@@ -17,7 +17,7 @@ package settings
 import "fmt"
 
 var legacyTopLevelKeys = map[string]struct{}{
-	"bootstrap":  {},
+	"config":     {},
 	"server":     {},
 	"transports": {},
 	"clients":    {},

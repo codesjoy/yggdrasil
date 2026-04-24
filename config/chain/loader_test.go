@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package bootstrap
+package chain
 
 import (
 	"errors"
@@ -58,14 +58,14 @@ func TestLoaderLoadFileValidationAndMissingFile(t *testing.T) {
 
 func TestLoaderLoadFileSuccessAndDisabledSourceSkipped(t *testing.T) {
 	dir := t.TempDir()
-	bootstrapPath := filepath.Join(dir, "bootstrap.yaml")
+	configPath := filepath.Join(dir, "config.yaml")
 	overridePath := filepath.Join(dir, "override.yaml")
 
 	require.NoError(t, os.WriteFile(overridePath, []byte("app:\n  name: override\n"), 0o600))
-	require.NoError(t, os.WriteFile(bootstrapPath, []byte(
+	require.NoError(t, os.WriteFile(configPath, []byte(
 		"app:\n  name: base\n"+
 			"yggdrasil:\n"+
-			"  bootstrap:\n"+
+			"  config:\n"+
 			"    sources:\n"+
 			"      - kind: file\n"+
 			"        config:\n"+
@@ -78,10 +78,10 @@ func TestLoaderLoadFileSuccessAndDisabledSourceSkipped(t *testing.T) {
 
 	loader := NewLoader(nil)
 	manager := config.NewManager()
-	loaded, ok, err := loader.LoadFile(manager, bootstrapPath, true)
+	loaded, ok, err := loader.LoadFile(manager, configPath, true)
 	require.NoError(t, err)
 	require.True(t, ok)
-	require.Len(t, loaded, 2) // bootstrap file + one enabled source
+	require.Len(t, loaded, 2) // config file + one enabled source
 
 	var out struct {
 		Name string `mapstructure:"name"`
@@ -102,14 +102,14 @@ func TestLoaderLoadFileBuildAndLoadErrors(t *testing.T) {
 	buildErrPath := filepath.Join(dir, "build.yaml")
 	require.NoError(t, os.WriteFile(buildErrPath, []byte(
 		"yggdrasil:\n"+
-			"  bootstrap:\n"+
+			"  config:\n"+
 			"    sources:\n"+
 			"      - kind: custom\n",
 	), 0o600))
 
 	_, _, err := loader.LoadFile(manager, buildErrPath, true)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "bootstrap source[0]")
+	require.Contains(t, err.Error(), "config source[0]")
 	require.Contains(t, err.Error(), "build failed")
 
 	loadErrRegistry := NewRegistry()
@@ -121,13 +121,13 @@ func TestLoaderLoadFileBuildAndLoadErrors(t *testing.T) {
 	loadErrPath := filepath.Join(dir, "load.yaml")
 	require.NoError(t, os.WriteFile(loadErrPath, []byte(
 		"yggdrasil:\n"+
-			"  bootstrap:\n"+
+			"  config:\n"+
 			"    sources:\n"+
 			"      - kind: custom\n",
 	), 0o600))
 
 	_, _, err = loader.LoadFile(config.NewManager(), loadErrPath, true)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "bootstrap source[0]")
+	require.Contains(t, err.Error(), "config source[0]")
 	require.Contains(t, err.Error(), "read failed")
 }

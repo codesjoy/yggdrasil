@@ -17,6 +17,7 @@ package settings
 import (
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/codesjoy/yggdrasil/v3/balancer"
 	"github.com/codesjoy/yggdrasil/v3/client"
@@ -32,6 +33,9 @@ func Compile(root Root) (Resolved, error) {
 	fw := root.Yggdrasil
 	resolved := Resolved{
 		Root:      root,
+		App:       fw.App,
+		Mode:      fw.Mode,
+		Overrides: fw.Overrides,
 		Server:    fw.Server,
 		Logging:   fw.Logging,
 		Discovery: fw.Discovery,
@@ -79,21 +83,21 @@ func Compile(root Root) (Resolved, error) {
 	normalizeLogging(&resolved.Logging)
 	ensureCollections(&resolved)
 
-	if items := normalizeOrderList(fw.Extensions.Interceptors.UnaryServer); len(items) != 0 {
+	if items, ok := normalizeExtensionOrderList(fw.Extensions.Interceptors.UnaryServer); ok {
 		resolved.Server.Interceptors.Unary = items
 		resolved.OrderedExtensions.UnaryServer = append([]string(nil), items...)
 	}
-	if items := normalizeOrderList(fw.Extensions.Interceptors.StreamServer); len(items) != 0 {
+	if items, ok := normalizeExtensionOrderList(fw.Extensions.Interceptors.StreamServer); ok {
 		resolved.Server.Interceptors.Stream = items
 		resolved.OrderedExtensions.StreamServer = append([]string(nil), items...)
 	}
 
 	defaultClientSettings := fw.Clients.Defaults.ServiceSettings
-	if items := normalizeOrderList(fw.Extensions.Interceptors.UnaryClient); len(items) != 0 {
+	if items, ok := normalizeExtensionOrderList(fw.Extensions.Interceptors.UnaryClient); ok {
 		defaultClientSettings.Interceptors.Unary = items
 		resolved.OrderedExtensions.UnaryClient = append([]string(nil), items...)
 	}
-	if items := normalizeOrderList(fw.Extensions.Interceptors.StreamClient); len(items) != 0 {
+	if items, ok := normalizeExtensionOrderList(fw.Extensions.Interceptors.StreamClient); ok {
 		defaultClientSettings.Interceptors.Stream = items
 		resolved.OrderedExtensions.StreamClient = append([]string(nil), items...)
 	}
@@ -119,15 +123,15 @@ func Compile(root Root) (Resolved, error) {
 		}
 	}
 	if resolved.Transports.Rest != nil {
-		if items := normalizeOrderList(fw.Extensions.Middleware.RestAll); len(items) != 0 {
+		if items, ok := normalizeExtensionOrderList(fw.Extensions.Middleware.RestAll); ok {
 			resolved.Transports.Rest.Middleware.All = items
 			resolved.OrderedExtensions.RestAll = append([]string(nil), items...)
 		}
-		if items := normalizeOrderList(fw.Extensions.Middleware.RestRPC); len(items) != 0 {
+		if items, ok := normalizeExtensionOrderList(fw.Extensions.Middleware.RestRPC); ok {
 			resolved.Transports.Rest.Middleware.RPC = items
 			resolved.OrderedExtensions.RestRPC = append([]string(nil), items...)
 		}
-		if items := normalizeOrderList(fw.Extensions.Middleware.RestWeb); len(items) != 0 {
+		if items, ok := normalizeExtensionOrderList(fw.Extensions.Middleware.RestWeb); ok {
 			resolved.Transports.Rest.Middleware.Web = items
 			resolved.OrderedExtensions.RestWeb = append([]string(nil), items...)
 		}
@@ -199,6 +203,34 @@ func normalizeOrderList(items []string) []string {
 		return nil
 	}
 	return slices.Clip(out)
+}
+
+func normalizeExtensionOrderList(raw any) ([]string, bool) {
+	switch value := raw.(type) {
+	case nil:
+		return nil, false
+	case []string:
+		return normalizeOrderList(value), true
+	case []any:
+		items := make([]string, 0, len(value))
+		for _, item := range value {
+			str, ok := item.(string)
+			if !ok {
+				return nil, false
+			}
+			items = append(items, str)
+		}
+		return normalizeOrderList(items), true
+	case string:
+		if strings.TrimSpace(value) == "" {
+			return nil, false
+		}
+		return nil, false
+	case map[string]any:
+		return nil, false
+	default:
+		return nil, false
+	}
 }
 
 func compileCapabilityBindings(resolved Resolved) map[string][]string {

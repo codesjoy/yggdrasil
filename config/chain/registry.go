@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package bootstrap
+package chain
 
 import (
 	"errors"
@@ -29,7 +29,7 @@ import (
 	flagsource "github.com/codesjoy/yggdrasil/v3/config/source/flag"
 )
 
-// SourceSpec describes a declarative bootstrap source.
+// SourceSpec describes a declarative config source.
 type SourceSpec struct {
 	Kind     string         `mapstructure:"kind"`
 	Name     string         `mapstructure:"name"`
@@ -38,7 +38,7 @@ type SourceSpec struct {
 	Config   map[string]any `mapstructure:"config"`
 }
 
-// Settings is the bootstrap section shape under yggdrasil.bootstrap.
+// Settings is the config section shape under yggdrasil.config.
 type Settings struct {
 	Sources []SourceSpec `mapstructure:"sources"`
 }
@@ -46,7 +46,7 @@ type Settings struct {
 // Builder creates a source and resolves its load priority.
 type Builder func(spec SourceSpec) (source.Source, config.Priority, error)
 
-// Registry contains declarative bootstrap source builders.
+// Registry contains declarative config source builders.
 type Registry struct {
 	mu       sync.RWMutex
 	builders map[string]Builder
@@ -61,7 +61,7 @@ func NewRegistry() *Registry {
 	return r
 }
 
-// Register registers a source builder for a bootstrap kind.
+// Register registers a source builder for a config source kind.
 func (r *Registry) Register(kind string, builder Builder) {
 	if strings.TrimSpace(kind) == "" || builder == nil {
 		return
@@ -75,13 +75,13 @@ func (r *Registry) Register(kind string, builder Builder) {
 func (r *Registry) Build(spec SourceSpec) (source.Source, config.Priority, error) {
 	kind := strings.ToLower(strings.TrimSpace(spec.Kind))
 	if kind == "" {
-		return nil, 0, errors.New("bootstrap source kind is required")
+		return nil, 0, errors.New("config source kind is required")
 	}
 	r.mu.RLock()
 	builder := r.builders[kind]
 	r.mu.RUnlock()
 	if builder == nil {
-		return nil, 0, fmt.Errorf("bootstrap source kind %q not supported", kind)
+		return nil, 0, fmt.Errorf("config source kind %q not supported", kind)
 	}
 	return builder(spec)
 }
@@ -103,7 +103,7 @@ func parsePriority(text string, fallback config.Priority) (config.Priority, erro
 	case "override":
 		return config.PriorityOverride, nil
 	default:
-		return 0, fmt.Errorf("unknown bootstrap priority %q", text)
+		return 0, fmt.Errorf("unknown config priority %q", text)
 	}
 }
 
@@ -119,7 +119,7 @@ func buildFileSource(spec SourceSpec) (source.Source, config.Priority, error) {
 		return nil, 0, err
 	}
 	if strings.TrimSpace(cfg.Path) == "" {
-		return nil, 0, errors.New("bootstrap file source path is required")
+		return nil, 0, errors.New("config file source path is required")
 	}
 	priority, err := parsePriority(spec.Priority, config.PriorityFile)
 	if err != nil {

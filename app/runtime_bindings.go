@@ -55,6 +55,30 @@ func resolveNamedCapabilityMap[T any](
 	return out, nil
 }
 
+func resolveNamedRuntimeCapabilities[T any](
+	hub *module.Hub,
+	bindings map[string][]string,
+	key string,
+	spec module.CapabilitySpec,
+) (map[string]T, error) {
+	return resolveNamedCapabilityMap(
+		bindings[key],
+		spec,
+		func(name string) (T, error) {
+			return module.ResolveNamed[T](hub, spec, name)
+		},
+	)
+}
+
+func resolveOrderedRuntimeCapabilities[T any](
+	hub *module.Hub,
+	bindings map[string][]string,
+	key string,
+	spec module.CapabilitySpec,
+) (map[string]T, error) {
+	return resolveOrderedCapabilityMap[T](hub, bindings[key], spec)
+}
+
 func copyIntoMap[K comparable, V any](dst map[K]V, src map[K]V) {
 	for key, value := range src {
 		dst[key] = value

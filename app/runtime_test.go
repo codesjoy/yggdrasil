@@ -68,7 +68,7 @@ func TestAppNewClientUsesAppScopedRuntimeInsteadOfGlobalStores(t *testing.T) {
 	})
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })
 
-	cli, err := app.NewClient("svc")
+	cli, err := app.NewClient(context.Background(), "svc")
 	require.NoError(t, err)
 	require.NotNil(t, cli)
 
@@ -144,7 +144,7 @@ func TestModuleSuppliedResolverProviderIsUsedByRuntimeSnapshotAndClient(t *testi
 	require.NotNil(t, resolvedResolver)
 	require.Equal(t, "svc", resolvedResolver.Type())
 
-	cli, err := app.NewClient("svc")
+	cli, err := app.NewClient(context.Background(), "svc")
 	require.NoError(t, err)
 	require.NotNil(t, cli)
 
@@ -261,4 +261,18 @@ func TestApplyRuntimeAdapters_ShutsDownPreviousTracerAndMeterProviders(t *testin
 	require.NoError(t, app.shutdownRuntimeAdapters(context.Background()))
 	require.Equal(t, int32(2), atomic.LoadInt32(&tracerShutdowns))
 	require.Equal(t, int32(2), atomic.LoadInt32(&meterShutdowns))
+}
+
+func TestSnapshotReturnsDetachedCopy(t *testing.T) {
+	app, _ := newInitializedAppWithConfig(t, "snapshot-copy", minimalV3Config("grpc"))
+	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+
+	first := app.Snapshot()
+	require.NotNil(t, first)
+	first.TransportClientProviders["detached"] = nil
+
+	second := app.Snapshot()
+	require.NotNil(t, second)
+	require.NotSame(t, first, second)
+	require.NotContains(t, second.TransportClientProviders, "detached")
 }

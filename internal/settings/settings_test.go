@@ -420,6 +420,35 @@ func TestCompile_ProducesOrderedExtensionsAndCapabilityBindings(t *testing.T) {
 	require.Equal(t, []string{"jsonpb", "proto"}, resolved.CapabilityBindings["marshaler.scheme"])
 }
 
+func TestCompile_PreservesTemplateStyleExtensionsWithoutNormalizingThem(t *testing.T) {
+	var root Root
+	require.NoError(t, config.NewSnapshot(map[string]any{
+		"yggdrasil": map[string]any{
+			"extensions": map[string]any{
+				"interceptors": map[string]any{
+					"unary_server": "default-observable@v1",
+				},
+				"middleware": map[string]any{
+					"rest_all": map[string]any{
+						"template": "default-rest-observable",
+						"version":  "v1",
+					},
+				},
+			},
+		},
+	}).Decode(&root))
+
+	resolved, err := Compile(root)
+	require.NoError(t, err)
+	require.Empty(t, resolved.OrderedExtensions.UnaryServer)
+	require.Empty(t, resolved.OrderedExtensions.RestAll)
+	require.Equal(t, "default-observable@v1", resolved.Root.Yggdrasil.Extensions.Interceptors.UnaryServer)
+	value, ok := resolved.Root.Yggdrasil.Extensions.Middleware.RestAll.(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "default-rest-observable", value["template"])
+	require.Equal(t, "v1", value["version"])
+}
+
 func TestValidateV3RootShape(t *testing.T) {
 	require.NoError(t, ValidateV3RootShape(map[string]any{
 		"yggdrasil": map[string]any{},

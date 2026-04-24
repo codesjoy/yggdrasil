@@ -174,12 +174,12 @@ func (a *App) initRegistry() {
 	if a == nil || a.opts == nil {
 		return
 	}
-	typeName := a.opts.resolvedSettings.Discovery.Registry.Type
-	if typeName == "" {
-		return
-	}
 	snapshot := a.currentRuntimeSnapshot()
 	if snapshot == nil {
+		return
+	}
+	typeName := snapshot.Resolved.Discovery.Registry.Type
+	if typeName == "" {
 		return
 	}
 	r, err := snapshot.NewRegistry()
@@ -206,8 +206,11 @@ func (a *App) initServer() error {
 	if a == nil || a.opts == nil {
 		return nil
 	}
-	if len(a.opts.rpcServices) == 0 && len(a.opts.restServices) == 0 &&
-		len(a.opts.restHandlers) == 0 {
+	if a.opts.server != nil {
+		return nil
+	}
+	resolved := a.opts.resolvedSettings
+	if len(resolved.Server.Transports) == 0 && !resolved.Server.RestEnabled {
 		return nil
 	}
 	svr, err := server.New(a.currentRuntimeSnapshot())
@@ -215,15 +218,6 @@ func (a *App) initServer() error {
 		return err
 	}
 	server.RegisterGovernorRoutes(a.opts.governor, svr)
-	for k, v := range a.opts.rpcServices {
-		svr.RegisterService(k, v)
-	}
-	for k, v := range a.opts.restServices {
-		svr.RegisterRestService(k, v.impl, v.prefixes...)
-	}
-	if len(a.opts.restHandlers) > 0 {
-		svr.RegisterRestRawHandlers(a.opts.restHandlers...)
-	}
 	a.opts.server = svr
 	return nil
 }

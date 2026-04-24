@@ -18,12 +18,12 @@ import (
 	"context"
 	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/codesjoy/yggdrasil/v3/balancer"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/interceptor"
 	intlogging "github.com/codesjoy/yggdrasil/v3/interceptor/logging"
-	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 	"github.com/codesjoy/yggdrasil/v3/logger"
 	"github.com/codesjoy/yggdrasil/v3/module"
 	xotel "github.com/codesjoy/yggdrasil/v3/otel"
@@ -173,9 +173,6 @@ func (foundationBuiltinCapabilityModule) Capabilities() []module.Capability {
 	}
 	out = appendSortedCapabilities(out, loggerWriterCapabilitySpec, loggerWriters)
 
-	out = appendSortedCapabilities(out, statsHandlerCapabilitySpec, map[string]any{
-		"otel": statsotel.BuiltinHandlerBuilder(),
-	})
 	out = appendSortedCapabilities(out, credentialsCapabilitySpec, map[string]any{
 		"insecure": insecure.BuiltinBuilder(),
 		"local":    local.BuiltinBuilder(),
@@ -186,6 +183,75 @@ func (foundationBuiltinCapabilityModule) Capabilities() []module.Capability {
 		"proto":  marshaler.ProtoBuilder(),
 	})
 
+	return out
+}
+
+type statsOtelCapabilityModule struct{}
+
+func (statsOtelCapabilityModule) Name() string { return "telemetry.stats.otel" }
+
+func (statsOtelCapabilityModule) ConfigPath() string { return "yggdrasil.telemetry.stats" }
+
+func (statsOtelCapabilityModule) Init(context.Context, config.View) error { return nil }
+
+func (statsOtelCapabilityModule) Capabilities() []module.Capability {
+	return appendSortedCapabilities(nil, statsHandlerCapabilitySpec, map[string]any{
+		"otel": statsotel.BuiltinHandlerBuilder(),
+	})
+}
+
+func (statsOtelCapabilityModule) AutoSpec() module.AutoSpec {
+	return module.AutoSpec{
+		Provides: []module.CapabilitySpec{statsHandlerCapabilitySpec},
+		AutoRules: []module.AutoRule{
+			configPathAutoRule{
+				path:        "yggdrasil.telemetry.stats.server",
+				description: "server stats handler configured",
+			},
+			configPathAutoRule{
+				path:        "yggdrasil.telemetry.stats.client",
+				description: "client stats handler configured",
+			},
+			configPathAutoRule{
+				path:        "yggdrasil.telemetry.stats.providers.otel",
+				description: "otel stats provider configured",
+			},
+		},
+	}
+}
+
+type configPathAutoRule struct {
+	path        string
+	description string
+}
+
+func (r configPathAutoRule) Match(ctx module.AutoRuleContext) bool {
+	return !ctx.Snapshot.Section(splitConfigPath(r.path)...).Empty()
+}
+
+func (r configPathAutoRule) Describe() string {
+	if strings.TrimSpace(r.description) == "" {
+		return "configured path matched"
+	}
+	return r.description
+}
+
+func (r configPathAutoRule) AffectedPaths() []string {
+	if strings.TrimSpace(r.path) == "" {
+		return nil
+	}
+	return []string{r.path}
+}
+
+func splitConfigPath(path string) []string {
+	parts := strings.Split(path, ".")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
 	return out
 }
 
@@ -245,109 +311,4 @@ func (connectivityBuiltinCapabilityModule) Capabilities() []module.Capability {
 	})
 
 	return out
-}
-
-func (a *App) applyConnectivityCapabilities() error {
-	return nil
-}
-
-func (a *App) applyFoundationCapabilities() error {
-	if a == nil || a.hub == nil || a.opts == nil {
-		return nil
-	}
-	resolved := a.opts.resolvedSettings
-	if err := configureNamedCapabilityMap(
-		resolved,
-		"logger.handler",
-		loggerHandlerCapabilitySpec,
-		func(name string) (logger.HandlerBuilder, error) {
-			return module.ResolveNamed[logger.HandlerBuilder](a.hub, loggerHandlerCapabilitySpec, name)
-		},
-		func(in map[string]logger.HandlerBuilder) { logger.ConfigureHandlerBuilders(in) },
-	); err != nil {
-		return err
-	}
-	if err := configureNamedCapabilityMap(
-		resolved,
-		"logger.writer",
-		loggerWriterCapabilitySpec,
-		func(name string) (logger.WriterBuilder, error) {
-			return module.ResolveNamed[logger.WriterBuilder](a.hub, loggerWriterCapabilitySpec, name)
-		},
-		func(in map[string]logger.WriterBuilder) { logger.ConfigureWriterBuilders(in) },
-	); err != nil {
-		return err
-	}
-	if err := configureNamedCapabilityMap(
-		resolved,
-		"otel.tracer_provider",
-		tracerProviderCapabilitySpec,
-		func(name string) (xotel.TracerProviderBuilder, error) {
-			return module.ResolveNamed[xotel.TracerProviderBuilder](a.hub, tracerProviderCapabilitySpec, name)
-		},
-		func(in map[string]xotel.TracerProviderBuilder) { xotel.ConfigureTracerProviderBuilders(in) },
-	); err != nil {
-		return err
-	}
-	if err := configureNamedCapabilityMap(
-		resolved,
-		"otel.meter_provider",
-		meterProviderCapabilitySpec,
-		func(name string) (xotel.MeterProviderBuilder, error) {
-			return module.ResolveNamed[xotel.MeterProviderBuilder](a.hub, meterProviderCapabilitySpec, name)
-		},
-		func(in map[string]xotel.MeterProviderBuilder) { xotel.ConfigureMeterProviderBuilders(in) },
-	); err != nil {
-		return err
-	}
-	if err := configureNamedCapabilityMap(
-		resolved,
-		"stats.handler",
-		statsHandlerCapabilitySpec,
-		func(name string) (stats.HandlerBuilder, error) {
-			return module.ResolveNamed[stats.HandlerBuilder](a.hub, statsHandlerCapabilitySpec, name)
-		},
-		func(in map[string]stats.HandlerBuilder) { stats.ConfigureHandlerBuilders(in) },
-	); err != nil {
-		return err
-	}
-	if err := configureNamedCapabilityMap(
-		resolved,
-		"credentials.transport",
-		credentialsCapabilitySpec,
-		func(name string) (credentials.Builder, error) {
-			return module.ResolveNamed[credentials.Builder](a.hub, credentialsCapabilitySpec, name)
-		},
-		func(in map[string]credentials.Builder) { credentials.ConfigureBuilders(in) },
-	); err != nil {
-		return err
-	}
-	if err := configureNamedCapabilityMap(
-		resolved,
-		"marshaler.scheme",
-		marshalerCapabilitySpec,
-		func(name string) (marshaler.MarshallerBuilder, error) {
-			return module.ResolveNamed[marshaler.MarshallerBuilder](a.hub, marshalerCapabilitySpec, name)
-		},
-		func(in map[string]marshaler.MarshallerBuilder) { marshaler.ConfigureBuilders(in) },
-	); err != nil {
-		return err
-	}
-	xotel.ConfigureDefaultPropagator()
-	return nil
-}
-
-func configureNamedCapabilityMap[T any](
-	resolved settings.Resolved,
-	bindingKey string,
-	spec module.CapabilitySpec,
-	resolve func(name string) (T, error),
-	apply func(map[string]T),
-) error {
-	next, err := resolveNamedCapabilityMap(resolved.CapabilityBindings[bindingKey], spec, resolve)
-	if err != nil {
-		return err
-	}
-	apply(next)
-	return nil
 }

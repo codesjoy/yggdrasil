@@ -16,89 +16,211 @@ package yggdrasil
 
 import (
 	"context"
+	"errors"
 
 	yapp "github.com/codesjoy/yggdrasil/v3/app"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
-	"github.com/codesjoy/yggdrasil/v3/module"
-	"github.com/codesjoy/yggdrasil/v3/server"
 )
 
-// App is the framework application composition root.
-type App = yapp.App
+// ComposeFunc builds one business bundle from the prepared runtime.
+type ComposeFunc = yapp.ComposeFunc
 
-// Option configures one App instance.
-type Option = yapp.Option
+// Runtime is the business-safe runtime surface exposed during composition.
+type Runtime = yapp.Runtime
 
-// InternalServer is managed by the App lifecycle alongside the main server.
-type InternalServer = yapp.InternalServer
+// RPCBinding declares one RPC service binding.
+type RPCBinding = yapp.RPCBinding
 
-// New creates one App instance.
-func New(appName string, opts ...Option) (*App, error) {
-	return yapp.New(appName, opts...)
+// RESTBinding declares one REST service binding.
+type RESTBinding = yapp.RESTBinding
+
+// RawHTTPBinding declares one raw HTTP binding.
+type RawHTTPBinding = yapp.RawHTTPBinding
+
+// BackgroundTask is one managed background task.
+type BackgroundTask = yapp.BackgroundTask
+
+// BusinessHookStage identifies one business hook stage.
+type BusinessHookStage = yapp.BusinessHookStage
+
+const (
+	BusinessHookBeforeStart = yapp.BusinessHookBeforeStart
+	BusinessHookBeforeStop  = yapp.BusinessHookBeforeStop
+	BusinessHookAfterStop   = yapp.BusinessHookAfterStop
+)
+
+// BusinessHook is one managed business hook.
+type BusinessHook = yapp.BusinessHook
+
+// BundleDiag is one bundle diagnostic item.
+type BundleDiag = yapp.BundleDiag
+
+// BusinessInstallable is one extension install item.
+type BusinessInstallable = yapp.BusinessInstallable
+
+// InstallContext is passed to BusinessInstallable implementations.
+type InstallContext = yapp.InstallContext
+
+// BusinessBundle is one prepared business installation bundle.
+type BusinessBundle = yapp.BusinessBundle
+
+type configLayerSource struct {
+	name     string
+	priority config.Priority
+	source   source.Source
 }
 
-// WithRPCServices registers a batch of RPC services.
-func WithRPCServices(desc map[*server.ServiceDesc]interface{}) Option {
-	return yapp.WithRPCServices(desc)
+type options struct {
+	appName       string
+	configPath    string
+	mode          string
+	configSources []configLayerSource
 }
 
-// WithRPCService registers one RPC service.
-func WithRPCService(desc *server.ServiceDesc, impl interface{}) Option {
-	return yapp.WithRPCService(desc, impl)
+// Option configures one root bootstrap app instance.
+type Option func(*options) error
+
+// WithAppName overrides the app name resolved by Open.
+func WithAppName(name string) Option {
+	return func(opts *options) error {
+		opts.appName = name
+		return nil
+	}
 }
 
-// WithRESTService registers one REST service.
-func WithRESTService(desc *server.RestServiceDesc, impl interface{}, prefix ...string) Option {
-	return yapp.WithRESTService(desc, impl, prefix...)
+// WithConfigPath overrides the config file path.
+func WithConfigPath(path string) Option {
+	return func(opts *options) error {
+		opts.configPath = path
+		return nil
+	}
 }
 
-// WithRESTHandlers registers raw REST handlers.
-func WithRESTHandlers(desc ...*server.RestRawHandlerDesc) Option {
-	return yapp.WithRESTHandlers(desc...)
+// WithConfigSource registers one config source layer.
+func WithConfigSource(name string, priority config.Priority, src source.Source) Option {
+	return func(opts *options) error {
+		if src == nil {
+			return nil
+		}
+		opts.configSources = append(opts.configSources, configLayerSource{
+			name:     name,
+			priority: priority,
+			source:   src,
+		})
+		return nil
+	}
 }
 
-// WithBeforeStartHook registers before-start hooks.
-func WithBeforeStartHook(fns ...func(context.Context) error) Option {
-	return yapp.WithBeforeStartHook(fns...)
+// WithMode overrides the mode resolved by Open.
+func WithMode(mode string) Option {
+	return func(opts *options) error {
+		opts.mode = mode
+		return nil
+	}
 }
 
-// WithBeforeStopHook registers before-stop hooks.
-func WithBeforeStopHook(fns ...func(context.Context) error) Option {
-	return yapp.WithBeforeStopHook(fns...)
+// App is the thin root bootstrap facade over app.App.
+type App struct {
+	inner *yapp.App
 }
 
-// WithAfterStopHook registers after-stop hooks.
-func WithAfterStopHook(fns ...func(context.Context) error) Option {
-	return yapp.WithAfterStopHook(fns...)
+// Open creates one App ready for the bootstrap flow.
+func Open(opts ...Option) (*App, error) {
+	appOpts, err := convertOptions(opts...)
+	if err != nil {
+		return nil, err
+	}
+	inner, err := yapp.Open(appOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return &App{inner: inner}, nil
 }
 
-// WithInternalServer registers internal servers managed by the app lifecycle.
-func WithInternalServer(svr ...InternalServer) Option {
-	return yapp.WithInternalServer(svr...)
+// Run executes the default business bootstrap flow.
+func Run(ctx context.Context, fn ComposeFunc, opts ...Option) error {
+	if ctx == nil {
+		return errors.New("run context is nil")
+	}
+	app, err := Open(opts...)
+	if err != nil {
+		return err
+	}
+	if err := app.ComposeAndInstall(ctx, fn); err != nil {
+		_ = app.Stop(ctx)
+		return err
+	}
+	if err := app.Start(ctx); err != nil {
+		_ = app.Stop(ctx)
+		return err
+	}
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = app.Stop(context.Background())
+		case <-done:
+		}
+	}()
+	return app.Wait()
 }
 
-// WithCleanup registers additional cleanup hooks.
-func WithCleanup(name string, fn func(context.Context) error) Option {
-	return yapp.WithCleanup(name, fn)
+// ComposeAndInstall composes a business bundle and installs it in one step.
+func (a *App) ComposeAndInstall(ctx context.Context, fn ComposeFunc) error {
+	if a == nil || a.inner == nil {
+		return errors.New("app is not initialized")
+	}
+	return a.inner.ComposeAndInstall(ctx, fn)
 }
 
-// WithConfigManager injects one config manager instance.
-func WithConfigManager(manager *config.Manager) Option {
-	return yapp.WithConfigManager(manager)
+// Start starts the underlying app lifecycle.
+func (a *App) Start(ctx context.Context) error {
+	if a == nil || a.inner == nil {
+		return errors.New("app is not initialized")
+	}
+	return a.inner.Start(ctx)
 }
 
-// WithBootstrapPath overrides the bootstrap config path.
-func WithBootstrapPath(path string) Option {
-	return yapp.WithBootstrapPath(path)
+// Wait blocks until the app exits.
+func (a *App) Wait() error {
+	if a == nil || a.inner == nil {
+		return errors.New("app is not initialized")
+	}
+	return a.inner.Wait()
 }
 
-// WithBootstrapSource registers one bootstrap source layer.
-func WithBootstrapSource(name string, priority config.Priority, src source.Source) Option {
-	return yapp.WithBootstrapSource(name, priority, src)
+// Stop stops the app lifecycle.
+func (a *App) Stop(ctx context.Context) error {
+	if a == nil || a.inner == nil {
+		return errors.New("app is not initialized")
+	}
+	return a.inner.Stop(ctx)
 }
 
-// WithModules registers extra modules into the app hub.
-func WithModules(mods ...module.Module) Option {
-	return yapp.WithModules(mods...)
+func convertOptions(opts ...Option) ([]yapp.Option, error) {
+	rootOpts := options{}
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		if err := opt(&rootOpts); err != nil {
+			return nil, err
+		}
+	}
+	appOpts := make([]yapp.Option, 0, 4+len(rootOpts.configSources))
+	if rootOpts.appName != "" {
+		appOpts = append(appOpts, yapp.WithAppName(rootOpts.appName))
+	}
+	if rootOpts.configPath != "" {
+		appOpts = append(appOpts, yapp.WithConfigPath(rootOpts.configPath))
+	}
+	if rootOpts.mode != "" {
+		appOpts = append(appOpts, yapp.WithMode(rootOpts.mode))
+	}
+	for _, item := range rootOpts.configSources {
+		appOpts = append(appOpts, yapp.WithConfigSource(item.name, item.priority, item.source))
+	}
+	return appOpts, nil
 }

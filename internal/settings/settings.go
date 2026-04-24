@@ -21,7 +21,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/balancer"
 	"github.com/codesjoy/yggdrasil/v3/client"
 	"github.com/codesjoy/yggdrasil/v3/config"
-	configbootstrap "github.com/codesjoy/yggdrasil/v3/config/bootstrap"
+	configchain "github.com/codesjoy/yggdrasil/v3/config/chain"
 	"github.com/codesjoy/yggdrasil/v3/governor"
 	"github.com/codesjoy/yggdrasil/v3/internal/instance"
 	"github.com/codesjoy/yggdrasil/v3/logger"
@@ -41,18 +41,34 @@ type Root struct {
 	Yggdrasil Framework `mapstructure:"yggdrasil"`
 }
 
+// Application contains high-level app identity settings.
+type Application struct {
+	Name string `mapstructure:"name"`
+}
+
+// Overrides contains planner-facing assembly override settings.
+type Overrides struct {
+	DisableModules []string          `mapstructure:"disable_modules"`
+	ForceDefaults  map[string]string `mapstructure:"force_defaults"`
+	ForceTemplates map[string]string `mapstructure:"force_templates"`
+	DisableAuto    []string          `mapstructure:"disable_auto"`
+}
+
 // Framework contains the framework-owned configuration tree.
 type Framework struct {
-	Bootstrap  configbootstrap.Settings `mapstructure:"bootstrap"`
-	Server     server.Settings          `mapstructure:"server"`
-	Transports Transports               `mapstructure:"transports"`
-	Clients    Clients                  `mapstructure:"clients"`
-	Discovery  Discovery                `mapstructure:"discovery"`
-	Balancers  Balancers                `mapstructure:"balancers"`
-	Logging    logger.Settings          `mapstructure:"logging"`
-	Telemetry  Telemetry                `mapstructure:"telemetry"`
-	Admin      Admin                    `mapstructure:"admin"`
-	Extensions Extensions               `mapstructure:"extensions"`
+	App        Application          `mapstructure:"app"`
+	Mode       string               `mapstructure:"mode"`
+	Overrides  Overrides            `mapstructure:"overrides"`
+	Config     configchain.Settings `mapstructure:"config"`
+	Server     server.Settings      `mapstructure:"server"`
+	Transports Transports           `mapstructure:"transports"`
+	Clients    Clients              `mapstructure:"clients"`
+	Discovery  Discovery            `mapstructure:"discovery"`
+	Balancers  Balancers            `mapstructure:"balancers"`
+	Logging    logger.Settings      `mapstructure:"logging"`
+	Telemetry  Telemetry            `mapstructure:"telemetry"`
+	Admin      Admin                `mapstructure:"admin"`
+	Extensions Extensions           `mapstructure:"extensions"`
 }
 
 // Transports contains global transport settings.
@@ -187,19 +203,19 @@ type Extensions struct {
 	Middleware   ExtensionMiddleware   `mapstructure:"middleware"`
 }
 
-// ExtensionInterceptors contains ordered interceptor names.
+// ExtensionInterceptors contains explicit ordered lists or template references.
 type ExtensionInterceptors struct {
-	UnaryServer  []string `mapstructure:"unary_server"`
-	StreamServer []string `mapstructure:"stream_server"`
-	UnaryClient  []string `mapstructure:"unary_client"`
-	StreamClient []string `mapstructure:"stream_client"`
+	UnaryServer  any `mapstructure:"unary_server"`
+	StreamServer any `mapstructure:"stream_server"`
+	UnaryClient  any `mapstructure:"unary_client"`
+	StreamClient any `mapstructure:"stream_client"`
 }
 
-// ExtensionMiddleware contains ordered middleware names.
+// ExtensionMiddleware contains explicit ordered lists or template references.
 type ExtensionMiddleware struct {
-	RestAll []string `mapstructure:"rest_all"`
-	RestRPC []string `mapstructure:"rest_rpc"`
-	RestWeb []string `mapstructure:"rest_web"`
+	RestAll any `mapstructure:"rest_all"`
+	RestRPC any `mapstructure:"rest_rpc"`
+	RestWeb any `mapstructure:"rest_web"`
 }
 
 // OrderedExtensions is the compiled ordered extension name lists.
@@ -229,6 +245,9 @@ type Admin struct {
 // Resolved contains normalized settings ready for module configuration.
 type Resolved struct {
 	Root       Root
+	App        Application
+	Mode       string
+	Overrides  Overrides
 	Server     server.Settings
 	Logging    logger.Settings
 	Discovery  Discovery

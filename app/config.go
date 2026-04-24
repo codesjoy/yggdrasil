@@ -24,14 +24,14 @@ import (
 	"strings"
 
 	"github.com/codesjoy/yggdrasil/v3/config"
-	configbootstrap "github.com/codesjoy/yggdrasil/v3/config/bootstrap"
+	configchain "github.com/codesjoy/yggdrasil/v3/config/chain"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 )
 
 const (
-	bootstrapConfigFlagName    = "yggdrasil-config"
-	defaultBootstrapConfigPath = "./config.yaml"
+	configFlagName    = "yggdrasil-config"
+	defaultConfigPath = "./config.yaml"
 )
 
 func initConfigChain(opts *options) error {
@@ -40,47 +40,45 @@ func initConfigChain(opts *options) error {
 	} else {
 		config.SetDefault(opts.configManager)
 	}
-	if err := loadBootstrapConfigChain(opts); err != nil {
+	if err := loadConfigFileChain(opts); err != nil {
 		return err
 	}
-	if err := loadProgrammaticConfigSources(opts); err != nil {
+	if err := loadConfigSources(opts); err != nil {
 		return err
 	}
 	if err := refreshResolvedSettings(opts); err != nil {
 		return err
 	}
-	opts.initBootstrapPath = opts.bootstrapPath
-	opts.initConfigManager = opts.configManager
 	registerConfigSourceCleanup(opts)
 	return nil
 }
 
-func loadBootstrapConfigChain(opts *options) error {
-	if opts.bootstrapConfigLoaded {
+func loadConfigFileChain(opts *options) error {
+	if opts.configFileLoaded {
 		return nil
 	}
-	path, explicit := resolveBootstrapConfigPath(opts.bootstrapPath)
-	loaded, err := loadBootstrapConfigFile(opts, path, explicit)
+	path, explicit := resolveConfigPath(opts.configPath)
+	loaded, err := loadConfigFile(opts, path, explicit)
 	if err != nil {
 		return err
 	}
 	if loaded {
-		opts.bootstrapConfigLoaded = true
+		opts.configFileLoaded = true
 	}
 	return nil
 }
 
-func resolveBootstrapConfigPath(configuredPath string) (string, bool) {
-	if path, ok := parseNamedFlagArg(os.Args[1:], bootstrapConfigFlagName); ok {
+func resolveConfigPath(configuredPath string) (string, bool) {
+	if path, ok := parseNamedFlagArg(os.Args[1:], configFlagName); ok {
 		return path, true
 	}
 	if path := strings.TrimSpace(configuredPath); path != "" {
 		return path, true
 	}
-	if path, ok := lookupRegisteredFlagValue(bootstrapConfigFlagName); ok {
+	if path, ok := lookupRegisteredFlagValue(configFlagName); ok {
 		return path, false
 	}
-	return defaultBootstrapConfigPath, false
+	return defaultConfigPath, false
 }
 
 func lookupRegisteredFlagValue(name string) (string, bool) {
@@ -114,37 +112,37 @@ func parseNamedFlagArg(args []string, name string) (string, bool) {
 	return "", false
 }
 
-func loadBootstrapConfigFile(opts *options, path string, explicit bool) (bool, error) {
+func loadConfigFile(opts *options, path string, explicit bool) (bool, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		if explicit {
 			return false, fmt.Errorf(
-				"bootstrap config path is empty; use --%s=/path/to/config.yaml",
-				bootstrapConfigFlagName,
+				"config path is empty; use --%s=/path/to/config.yaml",
+				configFlagName,
 			)
 		}
-		path = defaultBootstrapConfigPath
+		path = defaultConfigPath
 	}
 
 	if _, err := os.Stat(path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			if explicit {
 				return false, fmt.Errorf(
-					"bootstrap config file %q not found; use --%s=/path/to/config.yaml",
+					"config file %q not found; use --%s=/path/to/config.yaml",
 					path,
-					bootstrapConfigFlagName,
+					configFlagName,
 				)
 			}
 			slog.Warn(
-				"bootstrap config file not found, fallback to default startup; use --yggdrasil-config to set config path",
+				"config file not found, fallback to default startup; use --yggdrasil-config to set config path",
 				slog.String("path", path),
 			)
 			return false, nil
 		}
-		return false, fmt.Errorf("stat bootstrap config file %q: %w", path, err)
+		return false, fmt.Errorf("stat config file %q: %w", path, err)
 	}
 
-	loader := configbootstrap.NewLoader(nil)
+	loader := configchain.NewLoader(nil)
 	sources, loaded, err := loader.LoadFile(opts.configManager, path, explicit)
 	if err != nil {
 		return false, err
@@ -155,8 +153,8 @@ func loadBootstrapConfigFile(opts *options, path string, explicit bool) (bool, e
 	return loaded, nil
 }
 
-func loadProgrammaticConfigSources(opts *options) error {
-	return loadLayersAndTrack(opts, opts.bootstrapSources, "option")
+func loadConfigSources(opts *options) error {
+	return loadLayersAndTrack(opts, opts.configSources, "option")
 }
 
 func loadSourcesAndTrack(opts *options, sources []source.Source, priority config.Priority, scope string) error {
@@ -199,8 +197,13 @@ func loadConfigLayer(
 }
 
 func addManagedConfigSource(opts *options, item source.Source) {
-	if item == nil || hasSource(opts.managedConfigSources, item) {
+	if item == nil {
 		return
+	}
+	for _, existing := range opts.managedConfigSources {
+		if existing == item {
+			return
+		}
 	}
 	opts.managedConfigSources = append(opts.managedConfigSources, item)
 }
@@ -311,19 +314,6 @@ func validateStartup(opts *options) error {
 
 	validator := startupValidator{strict: strict}
 
-	if len(opts.rpcServices) > 0 && len(resolved.Server.Transports) == 0 {
-		validator.add(
-			"rpc services registered without any server protocol",
-			errors.New("set yggdrasil.server.transports to at least one protocol"),
-		)
-	}
-	if (len(opts.restServices) > 0 || len(opts.restHandlers) > 0) && !resolved.Server.RestEnabled {
-		validator.add(
-			"rest handlers registered while rest server is disabled",
-			errors.New("configure yggdrasil.transports.http.rest"),
-		)
-	}
-
 	return validator.err
 }
 
@@ -353,4 +343,22 @@ func needsDefaultStartupSettings(resolved settings.Resolved) bool {
 		resolved.Discovery.Registry.Type == "" &&
 		len(resolved.Server.Transports) == 0 &&
 		resolved.Transports.Rest == nil
+}
+
+func (a *App) resolveIdentityLocked() error {
+	if a == nil || a.opts == nil {
+		return errors.New("app options are not initialized")
+	}
+	if name := a.opts.appName; name != "" {
+		a.name = name
+		return nil
+	}
+	if resolvedName := strings.TrimSpace(a.opts.resolvedSettings.App.Name); resolvedName != "" {
+		a.name = resolvedName
+		return nil
+	}
+	if strings.TrimSpace(a.name) != "" {
+		return nil
+	}
+	return errors.New("app name is required; use WithAppName or yggdrasil.app.name")
 }

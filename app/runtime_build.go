@@ -40,82 +40,76 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 	if a == nil || a.hub == nil || a.opts == nil {
 		return nil, fmt.Errorf("runtime app is not initialized")
 	}
-	resolved := a.opts.resolvedSettings
+	resolved := effectiveResolved(a.lastPlanResult, a.opts.resolvedSettings)
+	bindings := selectedCapabilityBindings(a.lastPlanResult, a.opts.resolvedSettings)
 
-	writerBuilders, err := resolveNamedCapabilityMap(
-		resolved.CapabilityBindings["logger.writer"],
+	writerBuilders, err := resolveNamedRuntimeCapabilities[logger.WriterBuilder](
+		a.hub,
+		bindings,
+		"logger.writer",
 		loggerWriterCapabilitySpec,
-		func(name string) (logger.WriterBuilder, error) {
-			return module.ResolveNamed[logger.WriterBuilder](a.hub, loggerWriterCapabilitySpec, name)
-		},
 	)
 	if err != nil {
 		return nil, err
 	}
 	writerBuilders = bindLoggerWriterBuilders(resolved, writerBuilders)
 
-	handlerBuilders, err := resolveNamedCapabilityMap(
-		resolved.CapabilityBindings["logger.handler"],
+	handlerBuilders, err := resolveNamedRuntimeCapabilities[logger.HandlerBuilder](
+		a.hub,
+		bindings,
+		"logger.handler",
 		loggerHandlerCapabilitySpec,
-		func(name string) (logger.HandlerBuilder, error) {
-			return module.ResolveNamed[logger.HandlerBuilder](a.hub, loggerHandlerCapabilitySpec, name)
-		},
 	)
 	if err != nil {
 		return nil, err
 	}
 	handlerBuilders = bindLoggerHandlerBuilders(resolved, handlerBuilders, writerBuilders)
 
-	tracerBuilders, err := resolveNamedCapabilityMap(
-		resolved.CapabilityBindings["otel.tracer_provider"],
+	tracerBuilders, err := resolveNamedRuntimeCapabilities[xotel.TracerProviderBuilder](
+		a.hub,
+		bindings,
+		"otel.tracer_provider",
 		tracerProviderCapabilitySpec,
-		func(name string) (xotel.TracerProviderBuilder, error) {
-			return module.ResolveNamed[xotel.TracerProviderBuilder](a.hub, tracerProviderCapabilitySpec, name)
-		},
 	)
 	if err != nil {
 		return nil, err
 	}
-	meterBuilders, err := resolveNamedCapabilityMap(
-		resolved.CapabilityBindings["otel.meter_provider"],
+	meterBuilders, err := resolveNamedRuntimeCapabilities[xotel.MeterProviderBuilder](
+		a.hub,
+		bindings,
+		"otel.meter_provider",
 		meterProviderCapabilitySpec,
-		func(name string) (xotel.MeterProviderBuilder, error) {
-			return module.ResolveNamed[xotel.MeterProviderBuilder](a.hub, meterProviderCapabilitySpec, name)
-		},
 	)
 	if err != nil {
 		return nil, err
 	}
-	statsBuilders, err := resolveNamedCapabilityMap(
-		resolved.CapabilityBindings["stats.handler"],
+	statsBuilders, err := resolveNamedRuntimeCapabilities[stats.HandlerBuilder](
+		a.hub,
+		bindings,
+		"stats.handler",
 		statsHandlerCapabilitySpec,
-		func(name string) (stats.HandlerBuilder, error) {
-			return module.ResolveNamed[stats.HandlerBuilder](a.hub, statsHandlerCapabilitySpec, name)
-		},
 	)
 	if err != nil {
 		return nil, err
 	}
 	statsBuilders = bindStatsHandlerBuilders(resolved, statsBuilders)
 
-	credentialsBuilders, err := resolveNamedCapabilityMap(
-		resolved.CapabilityBindings["credentials.transport"],
+	credentialsBuilders, err := resolveNamedRuntimeCapabilities[credentials.Builder](
+		a.hub,
+		bindings,
+		"credentials.transport",
 		credentialsCapabilitySpec,
-		func(name string) (credentials.Builder, error) {
-			return module.ResolveNamed[credentials.Builder](a.hub, credentialsCapabilitySpec, name)
-		},
 	)
 	if err != nil {
 		return nil, err
 	}
 	credentialsBuilders = bindCredentialsBuilders(resolved, credentialsBuilders)
 
-	marshalerBuilders, err := resolveNamedCapabilityMap(
-		resolved.CapabilityBindings["marshaler.scheme"],
+	marshalerBuilders, err := resolveNamedRuntimeCapabilities[marshaler.MarshallerBuilder](
+		a.hub,
+		bindings,
+		"marshaler.scheme",
 		marshalerCapabilitySpec,
-		func(name string) (marshaler.MarshallerBuilder, error) {
-			return module.ResolveNamed[marshaler.MarshallerBuilder](a.hub, marshalerCapabilitySpec, name)
-		},
 	)
 	if err != nil {
 		return nil, err
@@ -153,16 +147,16 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	if base == nil {
 		return nil, false, fmt.Errorf("foundation runtime snapshot is not available")
 	}
-	resolved := a.opts.resolvedSettings
+	resolved := effectiveResolved(a.lastPlanResult, a.opts.resolvedSettings)
+	bindings := selectedCapabilityBindings(a.lastPlanResult, a.opts.resolvedSettings)
 	next := base.Copy()
 	next.Resolved = resolved
 
-	serverProviders, err := resolveNamedCapabilityMap(
-		resolved.CapabilityBindings["transport.server.provider"],
+	serverProviders, err := resolveNamedRuntimeCapabilities[remote.TransportServerProvider](
+		a.hub,
+		bindings,
+		"transport.server.provider",
 		transportServerProviderCapabilitySpec,
-		func(name string) (remote.TransportServerProvider, error) {
-			return module.ResolveNamed[remote.TransportServerProvider](a.hub, transportServerProviderCapabilitySpec, name)
-		},
 	)
 	if err != nil {
 		return nil, false, err
@@ -186,12 +180,11 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 		}
 	}
 
-	clientProviders, err := resolveNamedCapabilityMap(
-		resolved.CapabilityBindings["transport.client.provider"],
+	clientProviders, err := resolveNamedRuntimeCapabilities[remote.TransportClientProvider](
+		a.hub,
+		bindings,
+		"transport.client.provider",
 		transportClientProviderCapabilitySpec,
-		func(name string) (remote.TransportClientProvider, error) {
-			return module.ResolveNamed[remote.TransportClientProvider](a.hub, transportClientProviderCapabilitySpec, name)
-		},
 	)
 	if err != nil {
 		return nil, false, err
@@ -219,9 +212,10 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	unaryClientBuiltins := mapUnaryClientProviders(intlogging.BuiltinUnaryClientProvidersWithConfig(loggingCfg))
 	streamClientBuiltins := mapStreamClientProviders(intlogging.BuiltinStreamClientProvidersWithConfig(loggingCfg))
 
-	unaryServerProviders, err := resolveOrderedCapabilityMap[interceptor.UnaryServerInterceptorProvider](
+	unaryServerProviders, err := resolveOrderedRuntimeCapabilities[interceptor.UnaryServerInterceptorProvider](
 		a.hub,
-		resolved.CapabilityBindings["interceptor.unary_server"],
+		bindings,
+		"interceptor.unary_server",
 		unaryServerInterceptorCapabilitySpec,
 	)
 	if err != nil {
@@ -229,9 +223,10 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	}
 	copyPreferredIntoMap(next.UnaryServerInterceptorProviders, unaryServerProviders, unaryServerBuiltins)
 
-	streamServerProviders, err := resolveOrderedCapabilityMap[interceptor.StreamServerInterceptorProvider](
+	streamServerProviders, err := resolveOrderedRuntimeCapabilities[interceptor.StreamServerInterceptorProvider](
 		a.hub,
-		resolved.CapabilityBindings["interceptor.stream_server"],
+		bindings,
+		"interceptor.stream_server",
 		streamServerInterceptorCapabilitySpec,
 	)
 	if err != nil {
@@ -239,9 +234,10 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	}
 	copyPreferredIntoMap(next.StreamServerInterceptorProviders, streamServerProviders, streamServerBuiltins)
 
-	unaryClientProviders, err := resolveOrderedCapabilityMap[interceptor.UnaryClientInterceptorProvider](
+	unaryClientProviders, err := resolveOrderedRuntimeCapabilities[interceptor.UnaryClientInterceptorProvider](
 		a.hub,
-		resolved.CapabilityBindings["interceptor.unary_client"],
+		bindings,
+		"interceptor.unary_client",
 		unaryClientInterceptorCapabilitySpec,
 	)
 	if err != nil {
@@ -249,9 +245,10 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	}
 	copyPreferredIntoMap(next.UnaryClientInterceptorProviders, unaryClientProviders, unaryClientBuiltins)
 
-	streamClientProviders, err := resolveOrderedCapabilityMap[interceptor.StreamClientInterceptorProvider](
+	streamClientProviders, err := resolveOrderedRuntimeCapabilities[interceptor.StreamClientInterceptorProvider](
 		a.hub,
-		resolved.CapabilityBindings["interceptor.stream_client"],
+		bindings,
+		"interceptor.stream_client",
 		streamClientInterceptorCapabilitySpec,
 	)
 	if err != nil {
@@ -259,9 +256,10 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	}
 	copyPreferredIntoMap(next.StreamClientInterceptorProviders, streamClientProviders, streamClientBuiltins)
 
-	restProviders, err := resolveOrderedCapabilityMap[restmiddleware.Provider](
+	restProviders, err := resolveOrderedRuntimeCapabilities[restmiddleware.Provider](
 		a.hub,
-		resolved.CapabilityBindings["rest.middleware"],
+		bindings,
+		"rest.middleware",
 		restMiddlewareCapabilitySpec,
 	)
 	if err != nil {
@@ -278,12 +276,11 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 		}
 	}
 
-	registryProviders, err := resolveNamedCapabilityMap(
-		resolved.CapabilityBindings["registry.provider"],
+	registryProviders, err := resolveNamedRuntimeCapabilities[registry.Provider](
+		a.hub,
+		bindings,
+		"registry.provider",
 		registryProviderCapabilitySpec,
-		func(name string) (registry.Provider, error) {
-			return module.ResolveNamed[registry.Provider](a.hub, registryProviderCapabilitySpec, name)
-		},
 	)
 	if err != nil {
 		return nil, false, err
@@ -297,24 +294,22 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 		)
 	}
 
-	resolverProviders, err := resolveNamedCapabilityMap(
-		resolved.CapabilityBindings["resolver.provider"],
+	resolverProviders, err := resolveNamedRuntimeCapabilities[resolver.Provider](
+		a.hub,
+		bindings,
+		"resolver.provider",
 		resolverProviderCapabilitySpec,
-		func(name string) (resolver.Provider, error) {
-			return module.ResolveNamed[resolver.Provider](a.hub, resolverProviderCapabilitySpec, name)
-		},
 	)
 	if err != nil {
 		return nil, false, err
 	}
 	copyIntoMap(next.ResolverProviders, resolverProviders)
 
-	balancerProviders, err := resolveNamedCapabilityMap(
-		resolved.CapabilityBindings["balancer.provider"],
+	balancerProviders, err := resolveNamedRuntimeCapabilities[balancer.Provider](
+		a.hub,
+		bindings,
+		"balancer.provider",
 		balancerProviderCapabilitySpec,
-		func(name string) (balancer.Provider, error) {
-			return module.ResolveNamed[balancer.Provider](a.hub, balancerProviderCapabilitySpec, name)
-		},
 	)
 	if err != nil {
 		return nil, false, err

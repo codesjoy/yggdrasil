@@ -12,32 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package app implements the internal runtime composition root used by the
-// public yggdrasil package.
+// Package app provides the stable advanced application control API for
+// Yggdrasil.
 package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
-	"net/http"
 	"sync"
 
+	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/client"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/governor"
 	"github.com/codesjoy/yggdrasil/v3/internal/instance"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 	"github.com/codesjoy/yggdrasil/v3/module"
-	"github.com/codesjoy/yggdrasil/v3/server"
 )
 
 type lifecycleState uint32
 
 const (
 	lifecycleStateNew lifecycleState = iota
+	lifecycleStatePlanned
+	lifecycleStateInfraInitialized
 	lifecycleStateInitialized
+	lifecycleStateBusinessInstalled
+	lifecycleStateServing
 	lifecycleStateRunning
 	lifecycleStateStopped
 )
@@ -63,20 +65,34 @@ type App struct {
 	stopWatch    func()
 	watchStarted bool
 
+	waitDone chan struct{}
+	waitErr  error
+
 	runtimeMu                  sync.RWMutex
 	runtimeSnapshot            *Snapshot
 	foundationSnapshot         *Snapshot
 	preparedFoundationSnapshot *Snapshot
 	tracerShutdown             func(context.Context) error
 	meterShutdown              func(context.Context) error
+
+	runtime            Runtime
+	lastPlanResult     *yassembly.Result
+	lastSpecDiff       *yassembly.SpecDiff
+	lastPlanHash       string
+	lastStablePlanHash string
+	assemblyErrors     assemblyErrorState
+	assemblySpec       *yassembly.Spec
+	runtimeAssembly    *preparedAssembly
+
+	explicitBundleInstalled bool
+	installedRPCServices    map[string]struct{}
+	installedHTTPRoutes     map[string]struct{}
+	bundleDiagnostics       []BundleDiag
 }
 
 // New creates a new App.
 func New(appName string, ops ...Option) (*App, error) {
-	opts := &options{
-		rpcServices:  map[*server.ServiceDesc]interface{}{},
-		restServices: map[*server.RestServiceDesc]restServiceRegistration{},
-	}
+	opts := &options{}
 	if err := applyOptions(opts, ops...); err != nil {
 		return nil, err
 	}
@@ -85,17 +101,19 @@ func New(appName string, ops ...Option) (*App, error) {
 		return nil, err
 	}
 	return &App{
-		name:      appName,
-		state:     lifecycleStateNew,
-		opts:      opts,
-		lifecycle: lifecycle,
-		hub:       module.NewHub(),
+		name:                 appName,
+		state:                lifecycleStateNew,
+		opts:                 opts,
+		lifecycle:            lifecycle,
+		hub:                  module.NewHub(),
+		installedRPCServices: map[string]struct{}{},
+		installedHTTPRoutes:  map[string]struct{}{},
 	}, nil
 }
 
 func (a *App) prepareStartLocked(ctx context.Context) error {
 	switch a.state {
-	case lifecycleStateRunning:
+	case lifecycleStateServing, lifecycleStateRunning:
 		return errApplicationAlreadyRunning
 	case lifecycleStateStopped:
 		return errRestartUnsupported
@@ -106,21 +124,18 @@ func (a *App) prepareStartLocked(ctx context.Context) error {
 	if err := a.lifecycle.Init(a.opts.buildLifecycleOptions()...); err != nil {
 		return err
 	}
-	a.state = lifecycleStateRunning
+	a.state = lifecycleStateServing
 	a.installConfigWatchLocked()
+	a.waitDone = make(chan struct{})
+	a.waitErr = nil
 	return nil
 }
 
 func (a *App) ensureClientReadyLocked(ctx context.Context) error {
-	if a.state == lifecycleStateNew {
-		if err := a.initializeLocked(ctx); err != nil {
-			return err
-		}
-	}
 	if a.state == lifecycleStateStopped {
 		return errRestartUnsupported
 	}
-	return nil
+	return a.initializeLocked(ctx)
 }
 
 func (a *App) stopConfigWatchLocked() {
@@ -137,8 +152,13 @@ func (a *App) setStoppedLocked() {
 	}
 }
 
-func (a *App) finishRun() {
+func (a *App) finishRun(err error) {
 	a.mu.Lock()
+	a.waitErr = err
+	if a.waitDone != nil {
+		close(a.waitDone)
+		a.waitDone = nil
+	}
 	a.setStoppedLocked()
 	a.mu.Unlock()
 }
@@ -168,11 +188,33 @@ func (a *App) Start(ctx context.Context) (err error) {
 		a.mu.Unlock()
 		return err
 	}
+	done := a.waitDone
+	a.state = lifecycleStateRunning
 	a.mu.Unlock()
 
-	err = a.lifecycle.Run()
-	a.finishRun()
-	return err
+	go func(waitDone chan struct{}) {
+		_ = waitDone
+		runErr := a.lifecycle.Run()
+		a.finishRun(runErr)
+	}(done)
+	return nil
+}
+
+// Wait blocks until the running application exits.
+func (a *App) Wait() error {
+	a.mu.Lock()
+	done := a.waitDone
+	err := a.waitErr
+	a.mu.Unlock()
+
+	if done == nil {
+		return err
+	}
+	<-done
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.waitErr
 }
 
 // Stop stops the application.
@@ -187,44 +229,19 @@ func (a *App) Stop(ctx context.Context) error {
 	return a.stopResources()
 }
 
-// Reload triggers one staged reload cycle.
-func (a *App) Reload(ctx context.Context) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	a.reloadMu.Lock()
-	defer a.reloadMu.Unlock()
-
-	a.mu.Lock()
-	if a.state != lifecycleStateRunning {
-		a.mu.Unlock()
-		return nil
-	}
-	opts := a.opts
-	hub := a.hub
-	prevBindings := cloneCapabilityBindings(opts.resolvedSettings.CapabilityBindings)
-	a.mu.Unlock()
-
-	if err := refreshResolvedSettings(opts); err != nil {
-		return err
-	}
-	if !capabilityBindingsEqual(prevBindings, opts.resolvedSettings.CapabilityBindings) {
-		hub.MarkCapabilityBindingsChanged()
-	}
-	hub.SetCapabilityBindings(opts.resolvedSettings.CapabilityBindings)
-	return hub.Reload(ctx, opts.configManager.Snapshot())
-}
-
 // NewClient creates a client for target service.
-func (a *App) NewClient(name string) (client.Client, error) {
+func (a *App) NewClient(ctx context.Context, name string) (client.Client, error) {
+	if ctx == nil {
+		return nil, errors.New("client context is nil")
+	}
 	a.mu.Lock()
-	if err := a.ensureClientReadyLocked(context.Background()); err != nil {
+	if err := a.ensureClientReadyLocked(ctx); err != nil {
 		a.mu.Unlock()
 		return nil, err
 	}
 	a.mu.Unlock()
 
-	cli, err := client.New(context.Background(), name, a.currentRuntimeSnapshot())
+	cli, err := client.New(ctx, name, a.currentRuntimeSnapshot())
 	if err != nil {
 		return nil, err
 	}
@@ -232,34 +249,94 @@ func (a *App) NewClient(name string) (client.Client, error) {
 }
 
 func (a *App) initializeLocked(ctx context.Context) (err error) {
+	defer func() {
+		if err != nil {
+			a.recordAssemblyErrorLocked(assemblyStagePrepare, err)
+			return
+		}
+		a.clearAssemblyErrorLocked(assemblyStagePrepare)
+	}()
 	switch a.state {
-	case lifecycleStateInitialized, lifecycleStateRunning:
+	case lifecycleStateInitialized, lifecycleStateBusinessInstalled, lifecycleStateServing, lifecycleStateRunning:
 		return nil
 	case lifecycleStateStopped:
 		return errRestartUnsupported
 	}
+	cleanupNeeded := true
+	defer func() {
+		if !cleanupNeeded || err == nil {
+			return
+		}
+		a.state = lifecycleStateStopped
+		if cleanupErr := a.stopResources(); cleanupErr != nil {
+			wrapped := yassembly.NewError(
+				yassembly.ErrPreparedRuntimeRollbackFailed,
+				"prepare",
+				"prepare cleanup failed",
+				cleanupErr,
+				nil,
+			)
+			a.recordAssemblyErrorLocked(assemblyStagePrepare, wrapped)
+			slog.Error("failed to cleanup prepare failure", slog.Any("error", wrapped))
+			err = errors.Join(err, wrapped)
+		}
+	}()
 	if err = initConfigChain(a.opts); err != nil {
+		err = wrapAssemblyStageError("prepare", err)
 		return err
 	}
+	if err = a.resolveIdentityLocked(); err != nil {
+		err = wrapAssemblyStageError("prepare", err)
+		return err
+	}
+	planResult, planErr := a.buildAssemblyResult(ctx)
+	if planErr != nil {
+		err = wrapAssemblyStageError("prepare", planErr)
+		return err
+	}
+	a.lastPlanResult = planResult
+	a.lastSpecDiff = nil
+	a.lastPlanHash = planResult.Hash
+	a.lastStablePlanHash = planResult.Hash
+	a.assemblySpec = planResult.Spec
+	a.state = lifecycleStatePlanned
 	if err = a.initHub(ctx); err != nil {
+		err = wrapAssemblyStageError("prepare", err)
 		return err
 	}
+	a.state = lifecycleStateInfraInitialized
 	if err = validateStartup(a.opts); err != nil {
+		err = wrapAssemblyStageError("prepare", err)
 		return err
 	}
-	initInstanceInfo(a.name, a.opts.resolvedSettings)
+	initInstanceInfo(a.name, effectiveResolved(planResult, a.opts.resolvedSettings))
 	if err = a.applyRuntimeAdapters(a.currentRuntimeSnapshot()); err != nil {
+		err = wrapAssemblyStageError("prepare", err)
 		return err
 	}
 	if err = initGovernor(a.opts); err != nil {
+		err = wrapAssemblyStageError("prepare", err)
 		return err
 	}
 	a.initRegistry()
 	if err = a.initServer(); err != nil {
+		err = wrapAssemblyStageError("prepare", err)
 		return err
+	}
+	a.runtime = newRuntimeSurface(a)
+	a.runtimeAssembly = &preparedAssembly{
+		Spec:    a.assemblySpec,
+		Modules: append([]module.Module(nil), planResult.Modules...),
+		Runtime: a.runtime,
+		Server:  a.opts.server,
+		CloseFunc: func(ctx context.Context) error {
+			_ = ctx
+			return a.stopResources()
+		},
 	}
 	a.installDiagnosticsRoutes()
 	a.state = lifecycleStateInitialized
+	cleanupNeeded = false
 	return nil
 }
 
@@ -279,21 +356,17 @@ func (a *App) installConfigWatchLocked() {
 }
 
 func (a *App) initHub(ctx context.Context) error {
-	modules := make([]module.Module, 0, 4+len(a.opts.modules))
-	modules = append(modules,
-		foundationBuiltinCapabilityModule{},
-		connectivityBuiltinCapabilityModule{},
-		foundationRuntimeModule{app: a},
-		connectivityRuntimeModule{app: a},
-	)
-	modules = append(modules, a.opts.modules...)
+	modules := a.plannedModules()
+	if a.lastPlanResult != nil {
+		modules = append([]module.Module(nil), a.lastPlanResult.Modules...)
+	}
 	if err := a.hub.Use(modules...); err != nil {
 		return err
 	}
 	if err := a.hub.Seal(); err != nil {
 		return err
 	}
-	a.hub.SetCapabilityBindings(a.opts.resolvedSettings.CapabilityBindings)
+	a.hub.SetCapabilityBindings(selectedCapabilityBindings(a.lastPlanResult, a.opts.resolvedSettings))
 	if err := a.hub.Init(ctx, a.opts.configManager.Snapshot()); err != nil {
 		return err
 	}
@@ -307,21 +380,6 @@ func (a *App) initHub(ctx context.Context) error {
 		}),
 	)
 	return nil
-}
-
-func (a *App) installDiagnosticsRoutes() {
-	if a.opts == nil || a.opts.governor == nil {
-		return
-	}
-	a.opts.governor.HandleFunc("/module-hub", func(w http.ResponseWriter, r *http.Request) {
-		resp := a.hub.Diagnostics()
-		w.WriteHeader(200)
-		encoder := json.NewEncoder(w)
-		if r.URL.Query().Get("pretty") == "true" {
-			encoder.SetIndent("", "    ")
-		}
-		_ = encoder.Encode(resp)
-	})
 }
 
 func initInstanceInfo(appName string, resolved settings.Resolved) {
@@ -344,36 +402,4 @@ func applyOptions(opts *options, ops ...Option) error {
 		}
 	}
 	return nil
-}
-
-func cloneCapabilityBindings(in map[string][]string) map[string][]string {
-	if len(in) == 0 {
-		return map[string][]string{}
-	}
-	out := make(map[string][]string, len(in))
-	for key, items := range in {
-		out[key] = append([]string(nil), items...)
-	}
-	return out
-}
-
-func capabilityBindingsEqual(left, right map[string][]string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for key, leftItems := range left {
-		rightItems, ok := right[key]
-		if !ok {
-			return false
-		}
-		if len(leftItems) != len(rightItems) {
-			return false
-		}
-		for i := range leftItems {
-			if leftItems[i] != rightItems[i] {
-				return false
-			}
-		}
-	}
-	return true
 }

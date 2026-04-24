@@ -17,6 +17,7 @@ package app
 import (
 	"context"
 	"flag"
+	"net/http"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -26,10 +27,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
 	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
 	"github.com/codesjoy/yggdrasil/v3/governor"
+	"github.com/codesjoy/yggdrasil/v3/interceptor"
 	"github.com/codesjoy/yggdrasil/v3/internal/constant"
 	"github.com/codesjoy/yggdrasil/v3/module"
 	"github.com/codesjoy/yggdrasil/v3/registry"
@@ -179,6 +182,62 @@ func findBindingDiag(t *testing.T, diag module.Diagnostics, spec string) module.
 	}
 	t.Fatalf("binding %q not found", spec)
 	return module.CapabilityBindingDiag{}
+}
+
+func requireAssemblyErrorCode(t *testing.T, err error, code yassembly.ErrorCode) *yassembly.Error {
+	t.Helper()
+	var assemblyErr *yassembly.Error
+	require.ErrorAs(t, err, &assemblyErr)
+	require.Equal(t, code, assemblyErr.Code)
+	return assemblyErr
+}
+
+const testAssemblyServiceName = "test.assembly.service"
+
+type testAssemblyService interface {
+	Ping(context.Context, any) (any, error)
+}
+
+type testAssemblyServiceImpl struct{}
+
+func (*testAssemblyServiceImpl) Ping(context.Context, any) (any, error) {
+	return nil, nil
+}
+
+var testAssemblyRPCServiceDesc = yserver.ServiceDesc{
+	ServiceName: testAssemblyServiceName,
+	HandlerType: (*testAssemblyService)(nil),
+	Methods: []yserver.MethodDesc{
+		{
+			MethodName: "Ping",
+			Handler: func(
+				srv interface{},
+				ctx context.Context,
+				_ func(interface{}) error,
+				_ interceptor.UnaryServerInterceptor,
+			) (interface{}, error) {
+				return srv.(testAssemblyService).Ping(ctx, nil)
+			},
+		},
+	},
+}
+
+var testAssemblyRESTServiceDesc = yserver.RestServiceDesc{
+	HandlerType: (*testAssemblyService)(nil),
+	Methods: []yserver.RestMethodDesc{
+		{
+			Method: http.MethodGet,
+			Path:   "/test/ping",
+			Handler: func(
+				_ http.ResponseWriter,
+				r *http.Request,
+				srv interface{},
+				_ interceptor.UnaryServerInterceptor,
+			) (interface{}, error) {
+				return srv.(testAssemblyService).Ping(r.Context(), nil)
+			},
+		},
+	},
 }
 
 type mockRegistry struct {

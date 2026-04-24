@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os"
 	"reflect"
 	"testing"
 
@@ -41,7 +40,7 @@ func TestNewOptionError(t *testing.T) {
 func TestNewClientTriggersInitialization(t *testing.T) {
 	app := newTestApp(t, "client-init")
 
-	_, err := app.NewClient("missing-service")
+	_, err := app.NewClient(context.Background(), "missing-service")
 	require.Error(t, err)
 
 	app.mu.Lock()
@@ -60,7 +59,7 @@ func TestRestartUnsupportedAfterStop(t *testing.T) {
 	app.mu.Unlock()
 	assert.Equal(t, lifecycleStateStopped, state)
 
-	_, err := app.NewClient("svc")
+	_, err := app.NewClient(context.Background(), "svc")
 	require.ErrorIs(t, err, errRestartUnsupported)
 }
 
@@ -139,14 +138,23 @@ func TestReloadUpdatesCapabilityBindingsAndMarksRestartRequired(t *testing.T) {
 	require.Equal(t, []string{"http"}, binding.Resolved)
 }
 
-func TestModuleHubDiagnosticsSchemaFileIsValid(t *testing.T) {
-	data, err := os.ReadFile("../docs/module-hub-diagnostics.schema.json")
+func TestDiagnosticsPayloadIncludesModuleHubState(t *testing.T) {
+	app, _ := newInitializedAppWithConfig(t, "diagnostics-payload", minimalV3Config("grpc"))
+	t.Cleanup(func() {
+		_ = app.Stop(context.Background())
+	})
+
+	data, err := json.Marshal(map[string]any{
+		"module_hub": app.hub.Diagnostics(),
+		"assembly":   app.assemblyDiagnostics(),
+	})
 	require.NoError(t, err)
 
 	var doc map[string]any
 	require.NoError(t, json.Unmarshal(data, &doc))
-	properties, ok := doc["properties"].(map[string]any)
+	moduleHub, ok := doc["module_hub"].(map[string]any)
 	require.True(t, ok)
-	require.Contains(t, properties, "bindings")
-	require.Contains(t, properties, "reload_state")
+	require.Contains(t, moduleHub, "bindings")
+	require.Contains(t, moduleHub, "reload_state")
+	require.Contains(t, doc, "assembly")
 }

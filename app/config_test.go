@@ -27,29 +27,28 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/internal/configtest"
 	_ "github.com/codesjoy/yggdrasil/v3/remote/credentials/tls"
-	"github.com/codesjoy/yggdrasil/v3/server"
 )
 
-func TestResolveBootstrapConfigPath(t *testing.T) {
+func TestResolveConfigPath(t *testing.T) {
 	withTestFlagSet(t)
 
-	path, explicit := resolveBootstrapConfigPath("")
-	assert.Equal(t, defaultBootstrapConfigPath, path)
+	path, explicit := resolveConfigPath("")
+	assert.Equal(t, defaultConfigPath, path)
 	assert.False(t, explicit)
 
 	configured := filepath.Join(t.TempDir(), "custom.yaml")
-	path, explicit = resolveBootstrapConfigPath(configured)
+	path, explicit = resolveConfigPath(configured)
 	assert.Equal(t, configured, path)
 	assert.True(t, explicit)
 
 	explicitPath := filepath.Join(t.TempDir(), "explicit.yaml")
 	os.Args = []string{"yggdrasil-test", "--yggdrasil-config=" + explicitPath}
-	path, explicit = resolveBootstrapConfigPath(configured)
+	path, explicit = resolveConfigPath(configured)
 	assert.Equal(t, explicitPath, path)
 	assert.True(t, explicit)
 }
 
-func TestInitLoadsBootstrapAndOptionSources(t *testing.T) {
+func TestInitLoadsConfigAndOptionSources(t *testing.T) {
 	withTestFlagSet(t)
 	manager := config.NewManager()
 	config.SetDefault(manager)
@@ -58,7 +57,7 @@ func TestInitLoadsBootstrapAndOptionSources(t *testing.T) {
 	chdir(t, dir)
 	require.NoError(t, os.WriteFile(
 		filepath.Join(dir, "config.yaml"),
-		[]byte("app:\n  startup_order: bootstrap\nyggdrasil:\n  bootstrap:\n    sources:\n      - kind: file\n        config:\n          path: ./config.override.yaml\n"),
+		[]byte("app:\n  startup_order: bootstrap\nyggdrasil:\n  config:\n    sources:\n      - kind: file\n        config:\n          path: ./config.override.yaml\n"),
 		0o600,
 	))
 	require.NoError(t, os.WriteFile(
@@ -74,9 +73,9 @@ func TestInitLoadsBootstrapAndOptionSources(t *testing.T) {
 
 	app := newTestApp(
 		t,
-		"bootstrap-order",
+		"config-order",
 		WithConfigManager(manager),
-		WithBootstrapSource("option", config.PriorityOverride, optionSource),
+		WithConfigSource("option", config.PriorityOverride, optionSource),
 	)
 	require.NoError(t, app.initializeLocked(context.Background()))
 
@@ -100,7 +99,7 @@ func TestStopClosesManagedConfigSourcesOnce(t *testing.T) {
 		closeCount: &closeCount,
 	}
 
-	app := newTestApp(t, "close-sources", WithBootstrapSource("programmatic", config.PriorityOverride, programmatic))
+	app := newTestApp(t, "close-sources", WithConfigSource("programmatic", config.PriorityOverride, programmatic))
 	require.NoError(t, app.initializeLocked(context.Background()))
 	require.NoError(t, app.Stop(context.Background()))
 	assert.Equal(t, int32(1), atomic.LoadInt32(&closeCount))
@@ -178,31 +177,6 @@ func TestValidateStartup_DoesNotFailForRuntimeResolvedBindings(t *testing.T) {
 			require.NoError(t, validateStartup(nil))
 		})
 	}
-}
-
-func TestValidateStartup_Strict_FailsWhenRPCServiceHasNoProtocol(t *testing.T) {
-	configtest.Set(t, "yggdrasil.admin.validation.strict", true)
-	configtest.Set(t, "yggdrasil.server.transports", []string{})
-
-	err := validateStartup(&options{
-		rpcServices: map[*server.ServiceDesc]interface{}{
-			&server.ServiceDesc{ServiceName: "test.service"}: struct{}{},
-		},
-		restServices: map[*server.RestServiceDesc]restServiceRegistration{},
-	})
-	require.Error(t, err)
-}
-
-func TestValidateStartup_Strict_FailsWhenRESTHandlersRegisteredButDisabled(t *testing.T) {
-	configtest.Set(t, "yggdrasil.admin.validation.strict", true)
-
-	err := validateStartup(&options{
-		rpcServices: map[*server.ServiceDesc]interface{}{},
-		restServices: map[*server.RestServiceDesc]restServiceRegistration{
-			&server.RestServiceDesc{}: {impl: struct{}{}},
-		},
-	})
-	require.Error(t, err)
 }
 
 func TestValidateStartup_Strict_FailsOnInvalidTLSCredentialsConfig(t *testing.T) {
