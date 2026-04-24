@@ -192,14 +192,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	app, err := yggdrasil.New(
-		"github.com.codesjoy.yggdrasil.example.advanced.metadata",
-		yggdrasil.WithRPCService(&helloworldpb.GreeterServiceServiceDesc, &GreeterServer{}),
+	err := yggdrasil.Run(
+		context.Background(),
+		func(yggdrasil.Runtime) (*yggdrasil.BusinessBundle, error) {
+			return &yggdrasil.BusinessBundle{
+				RPCBindings: []yggdrasil.RPCBinding{
+					{
+						ServiceName: helloworldpb.GreeterServiceServiceDesc.ServiceName,
+						Desc:        &helloworldpb.GreeterServiceServiceDesc,
+						Impl:        &GreeterServer{},
+					},
+				},
+			}, nil
+		},
+		yggdrasil.WithAppName("github.com.codesjoy.yggdrasil.example.advanced.metadata"),
 	)
 	if err != nil {
-		os.Exit(1)
-	}
-	if err := app.Start(context.Background()); err != nil {
 		os.Exit(1)
 	}
 }

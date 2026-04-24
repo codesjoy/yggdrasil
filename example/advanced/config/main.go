@@ -22,7 +22,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/codesjoy/yggdrasil/v3"
+	yapp "github.com/codesjoy/yggdrasil/v3/app"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source/env"
 	"github.com/codesjoy/yggdrasil/v3/config/source/file"
@@ -56,7 +56,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	app, err := yggdrasil.New("github.com.codesjoy.yggdrasil.example.advanced.config")
+	app, err := yapp.New("github.com.codesjoy.yggdrasil.example.advanced.config")
 	if err != nil {
 		os.Exit(1)
 	}

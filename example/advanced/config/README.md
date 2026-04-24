@@ -5,7 +5,7 @@
 - 使用一个 `config.Manager` 统一加载文件和环境变量 layer
 - 通过 `Snapshot` / `Section(path...)` 读取不可变配置快照
 - 通过 typed section 解码结构体
-- 启动时由 `app := yggdrasil.New(...); app.Start(...)` 装配框架自己的 `yggdrasil.*` 配置
+- 启动时由 `app := app.New(...); app.Start(...)` 或根包 `yggdrasil.Run(...)` 装配框架自己的 `yggdrasil.*` 配置
 
 ## 当前模型
 

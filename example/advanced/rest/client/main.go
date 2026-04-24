@@ -23,7 +23,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v3"
+	yapp "github.com/codesjoy/yggdrasil/v3/app"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source/file"
 )
@@ -49,7 +49,7 @@ func main() {
 		slog.Error("failed to load config file", slog.Any("error", err))
 		os.Exit(1)
 	}
-	if _, err := yggdrasil.New("github.com.codesjoy.yggdrasil.example.advanced.rest.client"); err != nil {
+	if _, err := yapp.New("github.com.codesjoy.yggdrasil.example.advanced.rest.client"); err != nil {
 		os.Exit(1)
 	}
 

@@ -24,8 +24,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/codesjoy/yggdrasil/v3"
-	"github.com/codesjoy/yggdrasil/v3/config"
-	"github.com/codesjoy/yggdrasil/v3/config/source/file"
 	libraryv1 "github.com/codesjoy/yggdrasil/v3/example/protogen/library/v1"
 	"github.com/codesjoy/yggdrasil/v3/metadata"
 )
@@ -225,25 +223,32 @@ func (s *LibraryImpl) MoveBook(
 }
 
 func main() {
-	if err := config.Default().LoadLayer("example:file", config.PriorityFile, file.NewSource("./config.yaml", false)); err != nil {
-		slog.Error("failed to load config file", slog.Any("error", err))
-		os.Exit(1)
-	}
-
 	lib := &LibraryImpl{}
-	app, err := yggdrasil.New(
-		"github.com.codesjoy.yggdrasil.example.advanced.rest",
-		yggdrasil.WithRPCService(&libraryv1.LibraryServiceServiceDesc, lib),
-		yggdrasil.WithRESTService(&libraryv1.LibraryServiceRestServiceDesc, lib),
+	err := yggdrasil.Run(
+		context.Background(),
+		func(yggdrasil.Runtime) (*yggdrasil.BusinessBundle, error) {
+			return &yggdrasil.BusinessBundle{
+				RPCBindings: []yggdrasil.RPCBinding{
+					{
+						ServiceName: libraryv1.LibraryServiceServiceDesc.ServiceName,
+						Desc:        &libraryv1.LibraryServiceServiceDesc,
+						Impl:        lib,
+					},
+				},
+				RESTBindings: []yggdrasil.RESTBinding{
+					{
+						Name: "library-rest",
+						Desc: &libraryv1.LibraryServiceRestServiceDesc,
+						Impl: lib,
+					},
+				},
+			}, nil
+		},
+		yggdrasil.WithConfigPath("./config.yaml"),
+		yggdrasil.WithAppName("github.com.codesjoy.yggdrasil.example.advanced.rest"),
 	)
 	if err != nil {
+		slog.Error("rest server exited with error", slog.Any("error", err))
 		os.Exit(1)
 	}
-
-	if err := app.Start(context.Background()); err != nil {
-		slog.Error("failed to start server", slog.Any("error", err))
-		os.Exit(1)
-	}
-
-	slog.Info("REST server started successfully")
 }

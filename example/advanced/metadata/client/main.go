@@ -21,7 +21,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v3"
+	yapp "github.com/codesjoy/yggdrasil/v3/app"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source/file"
 	helloworldpb "github.com/codesjoy/yggdrasil/v3/example/protogen/helloworld"
@@ -33,12 +33,12 @@ func main() {
 		slog.Error("failed to load config file", slog.Any("error", err))
 		os.Exit(1)
 	}
-	app, err := yggdrasil.New("github.com.codesjoy.yggdrasil.example.advanced.metadata.client")
+	app, err := yapp.New("github.com.codesjoy.yggdrasil.example.advanced.metadata.client")
 	if err != nil {
 		os.Exit(1)
 	}
 
-	cli, err := app.NewClient("github.com.codesjoy.yggdrasil.example.advanced.metadata")
+	cli, err := app.NewClient(context.Background(), "github.com.codesjoy.yggdrasil.example.advanced.metadata")
 	if err != nil {
 		slog.Error("failed to create client", slog.Any("error", err))
 		os.Exit(1)

@@ -445,14 +445,22 @@ func main() {
 	}
 
 	ss := NewLibraryServer()
-	app, err := yggdrasil.New(
-		"github.com.codesjoy.yggdrasil.example.protogen.error-handling",
-		yggdrasil.WithRPCService(&errorhandlingpb.LibraryServiceServiceDesc, ss),
+	err := yggdrasil.Run(
+		context.Background(),
+		func(yggdrasil.Runtime) (*yggdrasil.BusinessBundle, error) {
+			return &yggdrasil.BusinessBundle{
+				RPCBindings: []yggdrasil.RPCBinding{
+					{
+						ServiceName: errorhandlingpb.LibraryServiceServiceDesc.ServiceName,
+						Desc:        &errorhandlingpb.LibraryServiceServiceDesc,
+						Impl:        ss,
+					},
+				},
+			}, nil
+		},
+		yggdrasil.WithAppName("github.com.codesjoy.yggdrasil.example.protogen.error-handling"),
 	)
 	if err != nil {
-		os.Exit(1)
-	}
-	if err := app.Start(context.Background()); err != nil {
 		os.Exit(1)
 	}
 }

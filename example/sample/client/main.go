@@ -21,18 +21,18 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/codesjoy/yggdrasil/v3"
+	yapp "github.com/codesjoy/yggdrasil/v3/app"
 	librarypb "github.com/codesjoy/yggdrasil/v3/example/protogen/library/v1"
 	"github.com/codesjoy/yggdrasil/v3/metadata"
 	"github.com/codesjoy/yggdrasil/v3/status"
 )
 
 func main() {
-	app, err := yggdrasil.New("github.com.codesjoy.yggdrasil.example.sample.client")
+	app, err := yapp.New("github.com.codesjoy.yggdrasil.example.sample.client")
 	if err != nil {
 		os.Exit(1)
 	}
-	cli, err := app.NewClient("github.com.codesjoy.yggdrasil.example.sample")
+	cli, err := app.NewClient(context.Background(), "github.com.codesjoy.yggdrasil.example.sample")
 	if err != nil {
 		os.Exit(1)
 	}

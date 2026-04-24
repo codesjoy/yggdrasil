@@ -25,7 +25,7 @@ import (
 	"github.com/codesjoy/pkg/basic/xerror"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
-	"github.com/codesjoy/yggdrasil/v3"
+	yapp "github.com/codesjoy/yggdrasil/v3/app"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source/file"
 	errorhandlingpb "github.com/codesjoy/yggdrasil/v3/example/protogen/error-handling"
@@ -38,12 +38,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	app, err := yggdrasil.New("github.com.codesjoy.yggdrasil.example.protogen.error-handling.client")
+	app, err := yapp.New("github.com.codesjoy.yggdrasil.example.protogen.error-handling.client")
 	if err != nil {
 		os.Exit(1)
 	}
 
-	cli, err := app.NewClient("github.com.codesjoy.yggdrasil.example.protogen.error-handling")
+	cli, err := app.NewClient(context.Background(), "github.com.codesjoy.yggdrasil.example.protogen.error-handling")
 	if err != nil {
 		slog.Error("failed to create client", slog.Any("error", err))
 		os.Exit(1)

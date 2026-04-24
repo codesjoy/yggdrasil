@@ -27,7 +27,6 @@ import (
 	librarypb "github.com/codesjoy/yggdrasil/v3/example/protogen/library"
 	librarypb2 "github.com/codesjoy/yggdrasil/v3/example/protogen/library/v1"
 	"github.com/codesjoy/yggdrasil/v3/metadata"
-	"github.com/codesjoy/yggdrasil/v3/server"
 )
 
 type LibraryImpl struct {
@@ -77,21 +76,36 @@ func WebHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 func main() {
-	app, err := yggdrasil.New(
-		"github.com.codesjoy.yggdrasil.example.sample",
-		yggdrasil.WithRPCService(&librarypb2.LibraryServiceServiceDesc, &LibraryImpl{}),
-		yggdrasil.WithRESTService(&librarypb2.LibraryServiceRestServiceDesc, &LibraryImpl{}),
-		yggdrasil.WithRESTHandlers(&server.RestRawHandlerDesc{
-			Method:  http.MethodGet,
-			Path:    "/web",
-			Handler: WebHandler,
-		}),
+	err := yggdrasil.Run(
+		context.Background(),
+		func(yggdrasil.Runtime) (*yggdrasil.BusinessBundle, error) {
+			return &yggdrasil.BusinessBundle{
+				RPCBindings: []yggdrasil.RPCBinding{
+					{
+						ServiceName: librarypb2.LibraryServiceServiceDesc.ServiceName,
+						Desc:        &librarypb2.LibraryServiceServiceDesc,
+						Impl:        &LibraryImpl{},
+					},
+				},
+				RESTBindings: []yggdrasil.RESTBinding{
+					{
+						Name: "library-rest",
+						Desc: &librarypb2.LibraryServiceRestServiceDesc,
+						Impl: &LibraryImpl{},
+					},
+				},
+				RawHTTP: []yggdrasil.RawHTTPBinding{
+					{
+						Method:  http.MethodGet,
+						Path:    "/web",
+						Handler: WebHandler,
+					},
+				},
+			}, nil
+		},
+		yggdrasil.WithAppName("github.com.codesjoy.yggdrasil.example.sample"),
 	)
 	if err != nil {
-		os.Exit(1)
-	}
-
-	if err := app.Start(context.Background()); err != nil {
 		os.Exit(1)
 	}
 }

@@ -152,14 +152,22 @@ func main() {
 	ss := &GreeterServer{
 		instanceID: instanceID,
 	}
-	app, err := yggdrasil.New(
-		fmt.Sprintf("github.com.codesjoy.yggdrasil.example.advanced.load-balancing.%d", port),
-		yggdrasil.WithRPCService(&helloworldpb.GreeterServiceServiceDesc, ss),
+	err := yggdrasil.Run(
+		context.Background(),
+		func(yggdrasil.Runtime) (*yggdrasil.BusinessBundle, error) {
+			return &yggdrasil.BusinessBundle{
+				RPCBindings: []yggdrasil.RPCBinding{
+					{
+						ServiceName: helloworldpb.GreeterServiceServiceDesc.ServiceName,
+						Desc:        &helloworldpb.GreeterServiceServiceDesc,
+						Impl:        ss,
+					},
+				},
+			}, nil
+		},
+		yggdrasil.WithAppName(fmt.Sprintf("github.com.codesjoy.yggdrasil.example.advanced.load-balancing.%d", port)),
 	)
 	if err != nil {
-		os.Exit(1)
-	}
-	if err := app.Start(context.Background()); err != nil {
 		os.Exit(1)
 	}
 }
