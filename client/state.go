@@ -23,7 +23,7 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/code"
 
 	"github.com/codesjoy/yggdrasil/v3/remote"
-	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 )
 
 // Close closes the client.

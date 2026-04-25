@@ -46,7 +46,7 @@ func TestStatsOtelAutoSpecEnablesRealModule(t *testing.T) {
 	require.NoError(t, app.Prepare(context.Background()))
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })
 
-	require.Contains(t, app.lastPlanResult.CapabilityBindings["stats.handler"], "otel")
+	require.Contains(t, app.lastPlanResult.CapabilityBindings["observability.stats.handler"], "otel")
 	require.Contains(t, app.lastPlanResult.AffectedPathsByDomain["modules"], "yggdrasil.telemetry.stats.server")
 	require.True(t, containsPlannedModule(app.assemblySpec, "telemetry.stats.otel"))
 }
@@ -76,7 +76,7 @@ func TestDiagnosticsEndpointIncludesAssemblyState(t *testing.T) {
 		WithConfigManager(manager),
 		WithAppName("diagnostics-assembly"),
 		WithModules(testTransportModule{recorder: recorder}),
-		WithPlanOverrides(yassembly.ForceDefault("logger.handler", "text")),
+		WithPlanOverrides(yassembly.ForceDefault("observability.logger.handler", "text")),
 	)
 	require.NoError(t, err)
 	require.NoError(t, app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
@@ -124,8 +124,8 @@ func TestDiagnosticsEndpointIncludesAssemblyState(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&doc))
 	require.Equal(t, "prod-http-gateway", doc.Assembly.Mode.Name)
 	require.NotEmpty(t, doc.Assembly.CurrentSpecHash)
-	require.Equal(t, "text", doc.Assembly.SelectedDefaults["logger.handler"].Value)
-	require.Equal(t, "code_override", doc.Assembly.SelectedDefaults["logger.handler"].Source)
+	require.Equal(t, "text", doc.Assembly.SelectedDefaults["observability.logger.handler"].Value)
+	require.Equal(t, "code_override", doc.Assembly.SelectedDefaults["observability.logger.handler"].Source)
 	require.NotEmpty(t, doc.Assembly.BusinessInputPaths)
 	require.Equal(t, string(yassembly.ErrComposeLocalResourceLeaked), doc.Assembly.BundleDiagnostics[0].Code)
 

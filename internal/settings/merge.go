@@ -22,7 +22,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/internal/backoff"
 	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/transport/grpc"
 	rpchttp "github.com/codesjoy/yggdrasil/v3/remote/transport/rpchttp"
-	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 )
 
 func mergeClientServiceSettings(

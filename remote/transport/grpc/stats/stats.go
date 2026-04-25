@@ -15,7 +15,7 @@
 // Package stats provides stats objects for gRPC.
 package stats
 
-import "github.com/codesjoy/yggdrasil/v3/stats"
+import "github.com/codesjoy/yggdrasil/v3/observability/stats"
 
 // ClientInHeader is the stats object for incoming headers.
 type ClientInHeader struct {

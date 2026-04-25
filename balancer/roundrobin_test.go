@@ -24,9 +24,9 @@ import (
 	"testing"
 
 	"github.com/codesjoy/yggdrasil/v3/remote"
-	"github.com/codesjoy/yggdrasil/v3/resolver"
-	ygstatus "github.com/codesjoy/yggdrasil/v3/status"
-	"github.com/codesjoy/yggdrasil/v3/stream"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
+	ygstatus "github.com/codesjoy/yggdrasil/v3/rpc/status"
+	"github.com/codesjoy/yggdrasil/v3/rpc/stream"
 	"google.golang.org/genproto/googleapis/rpc/code"
 )
 

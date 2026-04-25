@@ -27,9 +27,9 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/codesjoy/yggdrasil/v3/governor"
+	"github.com/codesjoy/yggdrasil/v3/admin/governor"
 	"github.com/codesjoy/yggdrasil/v3/internal/defers"
-	"github.com/codesjoy/yggdrasil/v3/registry"
+	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/server"
 )
 

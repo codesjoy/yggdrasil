@@ -25,12 +25,12 @@ import (
 	"github.com/codesjoy/pkg/basic/xerror"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
-	"github.com/codesjoy/yggdrasil/v3/metadata"
+	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	"github.com/codesjoy/yggdrasil/v3/remote"
 	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
-	"github.com/codesjoy/yggdrasil/v3/resolver"
-	"github.com/codesjoy/yggdrasil/v3/stats"
-	"github.com/codesjoy/yggdrasil/v3/stream"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
+	"github.com/codesjoy/yggdrasil/v3/observability/stats"
+	"github.com/codesjoy/yggdrasil/v3/rpc/stream"
 )
 
 // Protocol is the http transport protocol name.

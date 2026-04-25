@@ -25,7 +25,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/balancer"
 	istatus "github.com/codesjoy/yggdrasil/v3/internal/status"
 	"github.com/codesjoy/yggdrasil/v3/remote"
-	"github.com/codesjoy/yggdrasil/v3/status"
+	"github.com/codesjoy/yggdrasil/v3/rpc/status"
 )
 
 // pickerSnap store  a picker and a channel used to signal that a picker

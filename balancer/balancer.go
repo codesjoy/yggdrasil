@@ -22,7 +22,7 @@ import (
 	"sync"
 
 	"github.com/codesjoy/yggdrasil/v3/remote"
-	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 )
 
 // ErrNoAvailableInstance is returned when no available instance is found

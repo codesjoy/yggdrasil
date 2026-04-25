@@ -27,10 +27,10 @@ import (
 
 	"github.com/codesjoy/pkg/utils/xsync"
 	"github.com/codesjoy/yggdrasil/v3/balancer"
-	"github.com/codesjoy/yggdrasil/v3/interceptor"
+	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
 	"github.com/codesjoy/yggdrasil/v3/remote"
-	"github.com/codesjoy/yggdrasil/v3/resolver"
-	"github.com/codesjoy/yggdrasil/v3/stream"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
+	"github.com/codesjoy/yggdrasil/v3/rpc/stream"
 )
 
 type testResolveNowResolver struct {

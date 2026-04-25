@@ -22,7 +22,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/codesjoy/yggdrasil/v3/stream"
+	"github.com/codesjoy/yggdrasil/v3/rpc/stream"
 )
 
 // RegisterService registers a service and its implementation to the gRPC

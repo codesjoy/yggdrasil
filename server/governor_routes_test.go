@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codesjoy/yggdrasil/v3/config"
-	"github.com/codesjoy/yggdrasil/v3/governor"
+	"github.com/codesjoy/yggdrasil/v3/admin/governor"
 )
 
 func TestRegisterGovernorRoutesInstanceIsolation(t *testing.T) {

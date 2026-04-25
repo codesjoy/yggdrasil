@@ -18,8 +18,8 @@ package remote
 import (
 	"context"
 
-	"github.com/codesjoy/yggdrasil/v3/resolver"
-	"github.com/codesjoy/yggdrasil/v3/stats"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
+	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 )
 
 // ClientState is the state of the client.

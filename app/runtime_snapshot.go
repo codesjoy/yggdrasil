@@ -24,19 +24,19 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/balancer"
 	"github.com/codesjoy/yggdrasil/v3/client"
-	"github.com/codesjoy/yggdrasil/v3/interceptor"
+	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
-	"github.com/codesjoy/yggdrasil/v3/logger"
-	xotel "github.com/codesjoy/yggdrasil/v3/otel"
-	"github.com/codesjoy/yggdrasil/v3/registry"
+	"github.com/codesjoy/yggdrasil/v3/observability/logger"
+	xotel "github.com/codesjoy/yggdrasil/v3/observability/otel"
+	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/remote"
 	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
 	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
-	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 	"github.com/codesjoy/yggdrasil/v3/server"
 	"github.com/codesjoy/yggdrasil/v3/server/rest"
 	restmiddleware "github.com/codesjoy/yggdrasil/v3/server/rest/middleware"
-	"github.com/codesjoy/yggdrasil/v3/stats"
+	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 )
 
 // Snapshot is the immutable App-scoped runtime assembly result.

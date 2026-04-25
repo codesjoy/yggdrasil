@@ -24,7 +24,7 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/internal/instance"
 	"github.com/codesjoy/yggdrasil/v3/internal/remotelog"
-	xotel "github.com/codesjoy/yggdrasil/v3/otel"
+	xotel "github.com/codesjoy/yggdrasil/v3/observability/otel"
 	"github.com/codesjoy/yggdrasil/v3/server"
 )
 

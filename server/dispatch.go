@@ -21,10 +21,10 @@ import (
 	"github.com/codesjoy/pkg/basic/xerror"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
-	"github.com/codesjoy/yggdrasil/v3/interceptor"
-	"github.com/codesjoy/yggdrasil/v3/metadata"
+	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
+	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	"github.com/codesjoy/yggdrasil/v3/remote"
-	"github.com/codesjoy/yggdrasil/v3/stream"
+	"github.com/codesjoy/yggdrasil/v3/rpc/stream"
 )
 
 func (s *server) handleStream(ss remote.ServerStream) {

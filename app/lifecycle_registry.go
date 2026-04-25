@@ -22,7 +22,7 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/internal/constant"
 	"github.com/codesjoy/yggdrasil/v3/internal/instance"
-	"github.com/codesjoy/yggdrasil/v3/registry"
+	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 )
 
 func (runner *lifecycleRunner) register() error {

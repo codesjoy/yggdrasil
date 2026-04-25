@@ -26,7 +26,7 @@ import (
 	gstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
-	yggstatus "github.com/codesjoy/yggdrasil/v3/status"
+	yggstatus "github.com/codesjoy/yggdrasil/v3/rpc/status"
 )
 
 func TestToRPCErr(t *testing.T) {

@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/codesjoy/yggdrasil/v3/interceptor"
+	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
 	"github.com/codesjoy/yggdrasil/v3/remote"
 	restserver "github.com/codesjoy/yggdrasil/v3/server/rest"
-	"github.com/codesjoy/yggdrasil/v3/stream"
+	"github.com/codesjoy/yggdrasil/v3/rpc/stream"
 )
 
 func TestNewAndInitRemoteServer(t *testing.T) {

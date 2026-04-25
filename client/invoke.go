@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/codesjoy/yggdrasil/v3/balancer"
-	"github.com/codesjoy/yggdrasil/v3/metadata"
-	"github.com/codesjoy/yggdrasil/v3/stream"
+	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
+	"github.com/codesjoy/yggdrasil/v3/rpc/stream"
 )
 
 // Invoke performs a unary RPC and returns after the response is received into reply.

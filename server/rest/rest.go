@@ -33,11 +33,11 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	internalutils "github.com/codesjoy/yggdrasil/v3/internal/utils"
-	"github.com/codesjoy/yggdrasil/v3/metadata"
+	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
 	"github.com/codesjoy/yggdrasil/v3/remote/peer"
 	"github.com/codesjoy/yggdrasil/v3/server/rest/middleware"
-	"github.com/codesjoy/yggdrasil/v3/status"
+	"github.com/codesjoy/yggdrasil/v3/rpc/status"
 )
 
 // Config is the configuration for the server.

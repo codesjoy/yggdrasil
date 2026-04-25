@@ -23,7 +23,7 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/balancer"
 	"github.com/codesjoy/yggdrasil/v3/remote"
-	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 )
 
 type balancerClient struct {

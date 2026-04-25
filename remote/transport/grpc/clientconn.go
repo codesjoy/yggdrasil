@@ -29,13 +29,13 @@ import (
 	gkeepalive "google.golang.org/grpc/keepalive"
 	gmetadata "google.golang.org/grpc/metadata"
 
-	"github.com/codesjoy/yggdrasil/v3/metadata"
+	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	"github.com/codesjoy/yggdrasil/v3/remote"
 	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
 	"github.com/codesjoy/yggdrasil/v3/remote/transport/grpc/encoding"
-	"github.com/codesjoy/yggdrasil/v3/resolver"
-	"github.com/codesjoy/yggdrasil/v3/stats"
-	"github.com/codesjoy/yggdrasil/v3/stream"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
+	"github.com/codesjoy/yggdrasil/v3/observability/stats"
+	"github.com/codesjoy/yggdrasil/v3/rpc/stream"
 )
 
 const (

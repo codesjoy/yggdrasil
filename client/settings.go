@@ -16,7 +16,7 @@ package client
 
 import (
 	"github.com/codesjoy/yggdrasil/v3/internal/backoff"
-	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 )
 
 // RemoteSettings contains static endpoints and attributes for a client service.

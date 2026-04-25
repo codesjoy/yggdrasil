@@ -22,12 +22,12 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/balancer"
 	"github.com/codesjoy/yggdrasil/v3/config"
-	"github.com/codesjoy/yggdrasil/v3/interceptor"
-	intlogging "github.com/codesjoy/yggdrasil/v3/interceptor/logging"
-	"github.com/codesjoy/yggdrasil/v3/logger"
+	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
+	intlogging "github.com/codesjoy/yggdrasil/v3/rpc/interceptor/logging"
+	"github.com/codesjoy/yggdrasil/v3/observability/logger"
 	"github.com/codesjoy/yggdrasil/v3/module"
-	xotel "github.com/codesjoy/yggdrasil/v3/otel"
-	"github.com/codesjoy/yggdrasil/v3/registry"
+	xotel "github.com/codesjoy/yggdrasil/v3/observability/otel"
+	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/remote"
 	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
 	"github.com/codesjoy/yggdrasil/v3/remote/credentials/insecure"
@@ -36,35 +36,35 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
 	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/transport/grpc"
 	rpchttp "github.com/codesjoy/yggdrasil/v3/remote/transport/rpchttp"
-	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 	restmiddleware "github.com/codesjoy/yggdrasil/v3/server/rest/middleware"
-	"github.com/codesjoy/yggdrasil/v3/stats"
-	statsotel "github.com/codesjoy/yggdrasil/v3/stats/otel"
+	"github.com/codesjoy/yggdrasil/v3/observability/stats"
+	statsotel "github.com/codesjoy/yggdrasil/v3/observability/stats/otel"
 )
 
 var (
 	loggerHandlerCapabilitySpec = module.CapabilitySpec{
-		Name:        "logger.handler",
+		Name:        "observability.logger.handler",
 		Cardinality: module.NamedOne,
 		Type:        reflect.TypeOf((logger.HandlerBuilder)(nil)),
 	}
 	loggerWriterCapabilitySpec = module.CapabilitySpec{
-		Name:        "logger.writer",
+		Name:        "observability.logger.writer",
 		Cardinality: module.NamedOne,
 		Type:        reflect.TypeOf((logger.WriterBuilder)(nil)),
 	}
 	tracerProviderCapabilitySpec = module.CapabilitySpec{
-		Name:        "otel.tracer_provider",
+		Name:        "observability.otel.tracer_provider",
 		Cardinality: module.NamedOne,
 		Type:        reflect.TypeOf((xotel.TracerProviderBuilder)(nil)),
 	}
 	meterProviderCapabilitySpec = module.CapabilitySpec{
-		Name:        "otel.meter_provider",
+		Name:        "observability.otel.meter_provider",
 		Cardinality: module.NamedOne,
 		Type:        reflect.TypeOf((xotel.MeterProviderBuilder)(nil)),
 	}
 	statsHandlerCapabilitySpec = module.CapabilitySpec{
-		Name:        "stats.handler",
+		Name:        "observability.stats.handler",
 		Cardinality: module.NamedOne,
 		Type:        reflect.TypeOf((stats.HandlerBuilder)(nil)),
 	}
@@ -89,22 +89,22 @@ var (
 		Type:        reflect.TypeOf((*remote.TransportClientProvider)(nil)).Elem(),
 	}
 	unaryServerInterceptorCapabilitySpec = module.CapabilitySpec{
-		Name:        "interceptor.unary_server",
+		Name:        "rpc.interceptor.unary_server",
 		Cardinality: module.OrderedMany,
 		Type:        reflect.TypeOf((*interceptor.UnaryServerInterceptorProvider)(nil)).Elem(),
 	}
 	streamServerInterceptorCapabilitySpec = module.CapabilitySpec{
-		Name:        "interceptor.stream_server",
+		Name:        "rpc.interceptor.stream_server",
 		Cardinality: module.OrderedMany,
 		Type:        reflect.TypeOf((*interceptor.StreamServerInterceptorProvider)(nil)).Elem(),
 	}
 	unaryClientInterceptorCapabilitySpec = module.CapabilitySpec{
-		Name:        "interceptor.unary_client",
+		Name:        "rpc.interceptor.unary_client",
 		Cardinality: module.OrderedMany,
 		Type:        reflect.TypeOf((*interceptor.UnaryClientInterceptorProvider)(nil)).Elem(),
 	}
 	streamClientInterceptorCapabilitySpec = module.CapabilitySpec{
-		Name:        "interceptor.stream_client",
+		Name:        "rpc.interceptor.stream_client",
 		Cardinality: module.OrderedMany,
 		Type:        reflect.TypeOf((*interceptor.StreamClientInterceptorProvider)(nil)).Elem(),
 	}
@@ -114,12 +114,12 @@ var (
 		Type:        reflect.TypeOf((*restmiddleware.Provider)(nil)).Elem(),
 	}
 	registryProviderCapabilitySpec = module.CapabilitySpec{
-		Name:        "registry.provider",
+		Name:        "discovery.registry.provider",
 		Cardinality: module.NamedOne,
 		Type:        reflect.TypeOf((*registry.Provider)(nil)).Elem(),
 	}
 	resolverProviderCapabilitySpec = module.CapabilitySpec{
-		Name:        "resolver.provider",
+		Name:        "discovery.resolver.provider",
 		Cardinality: module.NamedOne,
 		Type:        reflect.TypeOf((*resolver.Provider)(nil)).Elem(),
 	}

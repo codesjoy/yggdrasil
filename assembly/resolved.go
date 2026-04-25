@@ -20,7 +20,7 @@ import (
 	"strings"
 
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
-	"github.com/codesjoy/yggdrasil/v3/logger"
+	"github.com/codesjoy/yggdrasil/v3/observability/logger"
 	"github.com/codesjoy/yggdrasil/v3/remote/transport/grpc"
 	"github.com/codesjoy/yggdrasil/v3/remote/transport/rpchttp"
 )

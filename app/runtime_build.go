@@ -20,20 +20,20 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/balancer"
 	"github.com/codesjoy/yggdrasil/v3/config"
-	"github.com/codesjoy/yggdrasil/v3/interceptor"
-	intlogging "github.com/codesjoy/yggdrasil/v3/interceptor/logging"
-	"github.com/codesjoy/yggdrasil/v3/logger"
+	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
+	intlogging "github.com/codesjoy/yggdrasil/v3/rpc/interceptor/logging"
+	"github.com/codesjoy/yggdrasil/v3/observability/logger"
 	"github.com/codesjoy/yggdrasil/v3/module"
-	xotel "github.com/codesjoy/yggdrasil/v3/otel"
-	"github.com/codesjoy/yggdrasil/v3/registry"
+	xotel "github.com/codesjoy/yggdrasil/v3/observability/otel"
+	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/remote"
 	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
 	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
 	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/transport/grpc"
 	rpchttp "github.com/codesjoy/yggdrasil/v3/remote/transport/rpchttp"
-	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 	restmiddleware "github.com/codesjoy/yggdrasil/v3/server/rest/middleware"
-	"github.com/codesjoy/yggdrasil/v3/stats"
+	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 )
 
 func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
@@ -46,7 +46,7 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 	writerBuilders, err := resolveNamedRuntimeCapabilities[logger.WriterBuilder](
 		a.hub,
 		bindings,
-		"logger.writer",
+		"observability.logger.writer",
 		loggerWriterCapabilitySpec,
 	)
 	if err != nil {
@@ -57,7 +57,7 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 	handlerBuilders, err := resolveNamedRuntimeCapabilities[logger.HandlerBuilder](
 		a.hub,
 		bindings,
-		"logger.handler",
+		"observability.logger.handler",
 		loggerHandlerCapabilitySpec,
 	)
 	if err != nil {
@@ -68,7 +68,7 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 	tracerBuilders, err := resolveNamedRuntimeCapabilities[xotel.TracerProviderBuilder](
 		a.hub,
 		bindings,
-		"otel.tracer_provider",
+		"observability.otel.tracer_provider",
 		tracerProviderCapabilitySpec,
 	)
 	if err != nil {
@@ -77,7 +77,7 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 	meterBuilders, err := resolveNamedRuntimeCapabilities[xotel.MeterProviderBuilder](
 		a.hub,
 		bindings,
-		"otel.meter_provider",
+		"observability.otel.meter_provider",
 		meterProviderCapabilitySpec,
 	)
 	if err != nil {
@@ -86,7 +86,7 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 	statsBuilders, err := resolveNamedRuntimeCapabilities[stats.HandlerBuilder](
 		a.hub,
 		bindings,
-		"stats.handler",
+		"observability.stats.handler",
 		statsHandlerCapabilitySpec,
 	)
 	if err != nil {
@@ -215,7 +215,7 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	unaryServerProviders, err := resolveOrderedRuntimeCapabilities[interceptor.UnaryServerInterceptorProvider](
 		a.hub,
 		bindings,
-		"interceptor.unary_server",
+		"rpc.interceptor.unary_server",
 		unaryServerInterceptorCapabilitySpec,
 	)
 	if err != nil {
@@ -226,7 +226,7 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	streamServerProviders, err := resolveOrderedRuntimeCapabilities[interceptor.StreamServerInterceptorProvider](
 		a.hub,
 		bindings,
-		"interceptor.stream_server",
+		"rpc.interceptor.stream_server",
 		streamServerInterceptorCapabilitySpec,
 	)
 	if err != nil {
@@ -237,7 +237,7 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	unaryClientProviders, err := resolveOrderedRuntimeCapabilities[interceptor.UnaryClientInterceptorProvider](
 		a.hub,
 		bindings,
-		"interceptor.unary_client",
+		"rpc.interceptor.unary_client",
 		unaryClientInterceptorCapabilitySpec,
 	)
 	if err != nil {
@@ -248,7 +248,7 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	streamClientProviders, err := resolveOrderedRuntimeCapabilities[interceptor.StreamClientInterceptorProvider](
 		a.hub,
 		bindings,
-		"interceptor.stream_client",
+		"rpc.interceptor.stream_client",
 		streamClientInterceptorCapabilitySpec,
 	)
 	if err != nil {
@@ -279,7 +279,7 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	registryProviders, err := resolveNamedRuntimeCapabilities[registry.Provider](
 		a.hub,
 		bindings,
-		"registry.provider",
+		"discovery.registry.provider",
 		registryProviderCapabilitySpec,
 	)
 	if err != nil {
@@ -297,7 +297,7 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	resolverProviders, err := resolveNamedRuntimeCapabilities[resolver.Provider](
 		a.hub,
 		bindings,
-		"resolver.provider",
+		"discovery.resolver.provider",
 		resolverProviderCapabilitySpec,
 	)
 	if err != nil {

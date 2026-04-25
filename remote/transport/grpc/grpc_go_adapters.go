@@ -39,13 +39,13 @@ import (
 	"github.com/codesjoy/pkg/basic/xerror"
 	istatus "github.com/codesjoy/yggdrasil/v3/internal/status"
 	internalutils "github.com/codesjoy/yggdrasil/v3/internal/utils"
-	ymetadata "github.com/codesjoy/yggdrasil/v3/metadata"
+	ymetadata "github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	"github.com/codesjoy/yggdrasil/v3/remote"
 	ycredentials "github.com/codesjoy/yggdrasil/v3/remote/credentials"
 	"github.com/codesjoy/yggdrasil/v3/remote/peer"
 	stats2 "github.com/codesjoy/yggdrasil/v3/remote/transport/grpc/stats"
-	ystats "github.com/codesjoy/yggdrasil/v3/stats"
-	ystatus "github.com/codesjoy/yggdrasil/v3/status"
+	ystats "github.com/codesjoy/yggdrasil/v3/observability/stats"
+	ystatus "github.com/codesjoy/yggdrasil/v3/rpc/status"
 )
 
 func toGRPCMetadata(md ymetadata.MD) gmetadata.MD {

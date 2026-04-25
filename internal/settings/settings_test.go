@@ -32,21 +32,21 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/client"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
-	"github.com/codesjoy/yggdrasil/v3/interceptor"
+	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
 	"github.com/codesjoy/yggdrasil/v3/internal/backoff"
-	"github.com/codesjoy/yggdrasil/v3/logger"
-	xotel "github.com/codesjoy/yggdrasil/v3/otel"
-	"github.com/codesjoy/yggdrasil/v3/registry"
+	"github.com/codesjoy/yggdrasil/v3/observability/logger"
+	xotel "github.com/codesjoy/yggdrasil/v3/observability/otel"
+	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
 	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
 	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/transport/grpc"
 	rpchttp "github.com/codesjoy/yggdrasil/v3/remote/transport/rpchttp"
-	"github.com/codesjoy/yggdrasil/v3/resolver"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 	"github.com/codesjoy/yggdrasil/v3/server"
 	"github.com/codesjoy/yggdrasil/v3/server/rest"
 	restmiddleware "github.com/codesjoy/yggdrasil/v3/server/rest/middleware"
-	"github.com/codesjoy/yggdrasil/v3/stats"
-	"github.com/codesjoy/yggdrasil/v3/stream"
+	"github.com/codesjoy/yggdrasil/v3/observability/stats"
+	"github.com/codesjoy/yggdrasil/v3/rpc/stream"
 )
 
 func TestCatalogAccessorsAndDecodePayload(t *testing.T) {
@@ -411,11 +411,11 @@ func TestCompile_ProducesOrderedExtensionsAndCapabilityBindings(t *testing.T) {
 	require.Equal(t, []string{"a", "b"}, resolved.OrderedExtensions.UnaryServer)
 	require.Equal(t, []string{"m1"}, resolved.OrderedExtensions.RestAll)
 	require.NotEmpty(t, resolved.ModuleViews["logging"])
-	require.Equal(t, []string{"json", "text"}, resolved.CapabilityBindings["logger.handler"])
-	require.Equal(t, []string{"console", "file"}, resolved.CapabilityBindings["logger.writer"])
-	require.Equal(t, []string{"noop-tracer"}, resolved.CapabilityBindings["otel.tracer_provider"])
-	require.Equal(t, []string{"noop-meter"}, resolved.CapabilityBindings["otel.meter_provider"])
-	require.Equal(t, []string{"otel"}, resolved.CapabilityBindings["stats.handler"])
+	require.Equal(t, []string{"json", "text"}, resolved.CapabilityBindings["observability.logger.handler"])
+	require.Equal(t, []string{"console", "file"}, resolved.CapabilityBindings["observability.logger.writer"])
+	require.Equal(t, []string{"noop-tracer"}, resolved.CapabilityBindings["observability.otel.tracer_provider"])
+	require.Equal(t, []string{"noop-meter"}, resolved.CapabilityBindings["observability.otel.meter_provider"])
+	require.Equal(t, []string{"otel"}, resolved.CapabilityBindings["observability.stats.handler"])
 	require.Equal(t, []string{"insecure", "tls"}, resolved.CapabilityBindings["credentials.transport"])
 	require.Equal(t, []string{"jsonpb", "proto"}, resolved.CapabilityBindings["marshaler.scheme"])
 }

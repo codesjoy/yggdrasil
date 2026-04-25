@@ -22,10 +22,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v3/metadata"
+	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	"github.com/codesjoy/yggdrasil/v3/remote"
 	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
-	"github.com/codesjoy/yggdrasil/v3/stats"
+	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 )
 
 // ServerProvider returns the built-in http server transport provider.

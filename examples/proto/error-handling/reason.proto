@@ -1,0 +1,45 @@
+// Copyright 2024 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package codesjoy.yggdrasil.example.proto.errorhandling;
+
+import "codesjoy/reason/v1/reason.proto";
+
+option go_package = "github.com/codesjoy/yggdrasil/v3/examples/protogen/error-handling;error_handling";
+
+enum Reason {
+  option (codesjoy.reason.v1.default_reason) = 500;
+
+  // Default unspecified error
+  ERROR_REASON_UNSPECIFIED = 0;
+
+  // User errors (4xx)
+  USER_NOT_FOUND = 10 [(codesjoy.reason.v1.code) = NOT_FOUND];
+  INVALID_CREDENTIALS = 11 [(codesjoy.reason.v1.code) = UNAUTHENTICATED];
+  INVALID_INPUT = 12 [(codesjoy.reason.v1.code) = INVALID_ARGUMENT];
+  EMAIL_ALREADY_EXISTS = 13 [(codesjoy.reason.v1.code) = ALREADY_EXISTS];
+
+  // Resource errors (4xx)
+  BOOK_NOT_FOUND = 20 [(codesjoy.reason.v1.code) = NOT_FOUND];
+  SHELF_NOT_FOUND = 21 [(codesjoy.reason.v1.code) = NOT_FOUND];
+  BOOK_ALREADY_BORROWED = 22 [(codesjoy.reason.v1.code) = FAILED_PRECONDITION];
+  SHELF_FULL = 23 [(codesjoy.reason.v1.code) = RESOURCE_EXHAUSTED];
+
+  // System errors (5xx)
+  INTERNAL_ERROR = 100 [(codesjoy.reason.v1.code) = INTERNAL];
+  DATABASE_ERROR = 101 [(codesjoy.reason.v1.code) = UNAVAILABLE];
+  NETWORK_ERROR = 102 [(codesjoy.reason.v1.code) = UNAVAILABLE];
+}

@@ -25,7 +25,7 @@ import (
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/client"
 	"github.com/codesjoy/yggdrasil/v3/config"
-	"github.com/codesjoy/yggdrasil/v3/governor"
+	"github.com/codesjoy/yggdrasil/v3/admin/governor"
 	"github.com/codesjoy/yggdrasil/v3/internal/instance"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 	"github.com/codesjoy/yggdrasil/v3/module"

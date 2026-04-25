@@ -21,11 +21,11 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/balancer"
 	"github.com/codesjoy/yggdrasil/v3/client"
-	"github.com/codesjoy/yggdrasil/v3/logger"
+	"github.com/codesjoy/yggdrasil/v3/observability/logger"
 	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/transport/grpc"
 	rpchttp "github.com/codesjoy/yggdrasil/v3/remote/transport/rpchttp"
-	"github.com/codesjoy/yggdrasil/v3/resolver"
-	"github.com/codesjoy/yggdrasil/v3/stats"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
+	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 )
 
 // Compile normalizes the raw framework root into per-module resolved settings.
@@ -235,20 +235,20 @@ func normalizeExtensionOrderList(raw any) ([]string, bool) {
 
 func compileCapabilityBindings(resolved Resolved) map[string][]string {
 	out := map[string][]string{}
-	out["logger.handler"] = sortedHandlerTypes(resolved.Logging.Handlers)
-	out["logger.writer"] = sortedWriterTypes(resolved.Logging.Writers)
+	out["observability.logger.handler"] = sortedHandlerTypes(resolved.Logging.Handlers)
+	out["observability.logger.writer"] = sortedWriterTypes(resolved.Logging.Writers)
 	if resolved.Telemetry.Tracer != "" {
-		out["otel.tracer_provider"] = []string{resolved.Telemetry.Tracer}
+		out["observability.otel.tracer_provider"] = []string{resolved.Telemetry.Tracer}
 	}
 	if resolved.Telemetry.Meter != "" {
-		out["otel.meter_provider"] = []string{resolved.Telemetry.Meter}
+		out["observability.otel.meter_provider"] = []string{resolved.Telemetry.Meter}
 	}
 	statsNames := dedupStrings(append(
 		stats.ParseHandlerNames(resolved.Telemetry.Stats.Server),
 		stats.ParseHandlerNames(resolved.Telemetry.Stats.Client)...,
 	))
 	if len(statsNames) > 0 {
-		out["stats.handler"] = statsNames
+		out["observability.stats.handler"] = statsNames
 	}
 	credentialNames := map[string]struct{}{}
 	if resolved.Transports.GRPC.Server.CredsProto != "" {
@@ -301,16 +301,16 @@ func compileCapabilityBindings(resolved Resolved) map[string][]string {
 	}
 	out["transport.client.provider"] = dedupStrings(clientProtocols)
 
-	out["interceptor.unary_server"] = dedupStrings(append([]string(nil), resolved.Server.Interceptors.Unary...))
-	out["interceptor.stream_server"] = dedupStrings(append([]string(nil), resolved.Server.Interceptors.Stream...))
+	out["rpc.interceptor.unary_server"] = dedupStrings(append([]string(nil), resolved.Server.Interceptors.Unary...))
+	out["rpc.interceptor.stream_server"] = dedupStrings(append([]string(nil), resolved.Server.Interceptors.Stream...))
 	clientUnary := append([]string(nil), resolved.Root.Yggdrasil.Clients.Defaults.Interceptors.Unary...)
 	clientStream := append([]string(nil), resolved.Root.Yggdrasil.Clients.Defaults.Interceptors.Stream...)
 	for _, cfg := range resolved.Clients.Services {
 		clientUnary = append(clientUnary, cfg.Interceptors.Unary...)
 		clientStream = append(clientStream, cfg.Interceptors.Stream...)
 	}
-	out["interceptor.unary_client"] = dedupStrings(clientUnary)
-	out["interceptor.stream_client"] = dedupStrings(clientStream)
+	out["rpc.interceptor.unary_client"] = dedupStrings(clientUnary)
+	out["rpc.interceptor.stream_client"] = dedupStrings(clientStream)
 
 	restMiddlewares := []string{"marshaler"}
 	if resolved.Transports.Rest != nil {
@@ -321,7 +321,7 @@ func compileCapabilityBindings(resolved Resolved) map[string][]string {
 	out["rest.middleware"] = dedupStrings(restMiddlewares)
 
 	if resolved.Discovery.Registry.Type != "" {
-		out["registry.provider"] = []string{resolved.Discovery.Registry.Type}
+		out["discovery.registry.provider"] = []string{resolved.Discovery.Registry.Type}
 	}
 	resolverTypes := make([]string, 0, len(resolved.Discovery.Resolvers))
 	for _, spec := range resolved.Discovery.Resolvers {
@@ -330,7 +330,7 @@ func compileCapabilityBindings(resolved Resolved) map[string][]string {
 		}
 		resolverTypes = append(resolverTypes, spec.Type)
 	}
-	out["resolver.provider"] = dedupStrings(resolverTypes)
+	out["discovery.resolver.provider"] = dedupStrings(resolverTypes)
 
 	balancerTypes := []string{balancer.DefaultBalancerType}
 	for _, spec := range resolved.Balancers.Defaults {

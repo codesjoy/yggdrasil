@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/codesjoy/yggdrasil/v3/governor"
+	"github.com/codesjoy/yggdrasil/v3/admin/governor"
 	"github.com/codesjoy/yggdrasil/v3/internal/instance"
 )
 

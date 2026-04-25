@@ -3,8 +3,8 @@ package server
 import (
 	"context"
 
-	"github.com/codesjoy/yggdrasil/v3/metadata"
-	"github.com/codesjoy/yggdrasil/v3/stream"
+	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
+	"github.com/codesjoy/yggdrasil/v3/rpc/stream"
 )
 
 type TestService interface {

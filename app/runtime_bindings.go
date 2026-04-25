@@ -25,9 +25,9 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/codesjoy/yggdrasil/v3/config"
-	"github.com/codesjoy/yggdrasil/v3/interceptor"
+	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
-	"github.com/codesjoy/yggdrasil/v3/logger"
+	"github.com/codesjoy/yggdrasil/v3/observability/logger"
 	"github.com/codesjoy/yggdrasil/v3/module"
 	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
 	"github.com/codesjoy/yggdrasil/v3/remote/credentials/insecure"
@@ -35,8 +35,8 @@ import (
 	ytls "github.com/codesjoy/yggdrasil/v3/remote/credentials/tls"
 	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
 	restmiddleware "github.com/codesjoy/yggdrasil/v3/server/rest/middleware"
-	"github.com/codesjoy/yggdrasil/v3/stats"
-	statsotel "github.com/codesjoy/yggdrasil/v3/stats/otel"
+	"github.com/codesjoy/yggdrasil/v3/observability/stats"
+	statsotel "github.com/codesjoy/yggdrasil/v3/observability/stats/otel"
 )
 
 func resolveNamedCapabilityMap[T any](

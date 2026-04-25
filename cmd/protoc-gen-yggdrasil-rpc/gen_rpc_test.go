@@ -99,7 +99,7 @@ func TestGenerateFiles_UnaryOnly_HasInterceptorImport(t *testing.T) {
 		newMethod("SayHello", "HelloRequest", "HelloResponse", false, false),
 	))
 
-	assert.Contains(t, content, "interceptor \"github.com/codesjoy/yggdrasil/v3/interceptor\"")
+	assert.Contains(t, content, "interceptor \"github.com/codesjoy/yggdrasil/v3/rpc/interceptor\"")
 	assert.Contains(t, content, "UnaryServerInterceptor")
 	assert.Contains(t, content, "SayHello(context.Context, *HelloRequest) (*HelloResponse, error)")
 }
@@ -111,7 +111,7 @@ func TestGenerateFiles_StreamingOnly_NoInterceptorImport(t *testing.T) {
 		newMethod("Watch", "WatchRequest", "WatchResponse", false, true),
 	))
 
-	assert.NotContains(t, content, "interceptor \"github.com/codesjoy/yggdrasil/v3/interceptor\"")
+	assert.NotContains(t, content, "interceptor \"github.com/codesjoy/yggdrasil/v3/rpc/interceptor\"")
 	assert.NotContains(t, content, "UnaryServerInterceptor")
 }
 

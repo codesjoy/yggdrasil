@@ -31,10 +31,10 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/internal/remotelog"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
-	"github.com/codesjoy/yggdrasil/v3/logger"
+	"github.com/codesjoy/yggdrasil/v3/observability/logger"
 	"github.com/codesjoy/yggdrasil/v3/module"
-	xotel "github.com/codesjoy/yggdrasil/v3/otel"
-	"github.com/codesjoy/yggdrasil/v3/resolver"
+	xotel "github.com/codesjoy/yggdrasil/v3/observability/otel"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 )
 
 func TestAppNewClientUsesAppScopedRuntimeInsteadOfGlobalStores(t *testing.T) {
@@ -92,7 +92,7 @@ func (resolverCapabilityModule) Capabilities() []module.Capability {
 	return []module.Capability{
 		{
 			Spec: module.CapabilitySpec{
-				Name:        "resolver.provider",
+				Name:        "discovery.resolver.provider",
 				Cardinality: module.NamedOne,
 				Type:        reflect.TypeOf((*resolver.Provider)(nil)).Elem(),
 			},
@@ -149,7 +149,7 @@ func TestModuleSuppliedResolverProviderIsUsedByRuntimeSnapshotAndClient(t *testi
 	require.NotNil(t, cli)
 
 	diag := app.hub.Diagnostics()
-	binding := findBindingDiag(t, diag, "resolver.provider")
+	binding := findBindingDiag(t, diag, "discovery.resolver.provider")
 	require.Equal(t, []string{"module-resolver"}, binding.Requested)
 	require.Equal(t, []string{"module-resolver"}, binding.Resolved)
 }

@@ -27,11 +27,11 @@ import (
 	gcredentials "google.golang.org/grpc/credentials"
 	gkeepalive "google.golang.org/grpc/keepalive"
 
-	"github.com/codesjoy/yggdrasil/v3/metadata"
+	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	"github.com/codesjoy/yggdrasil/v3/remote"
 	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
 	"github.com/codesjoy/yggdrasil/v3/remote/transport/grpc/encoding"
-	"github.com/codesjoy/yggdrasil/v3/stats"
+	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 )
 
 // ServerProvider returns the built-in grpc server transport provider.
