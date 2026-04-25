@@ -42,7 +42,10 @@ copyright.verify:
 		$(LOG_ERROR) "$(COPYRIGHT_TOOL) not found. Run 'make tools' to install."; \
 		exit 1; \
 	fi
-	@$(COPYRIGHT_TOOL) -check -f $(BOILERPLATE) $(COPYRIGHT_FILES) || \
+	@TMP_BOILERPLATE="$$(mktemp "$${TMPDIR:-/tmp}/copyright-boilerplate.XXXXXX")"; \
+		trap 'rm -f "$$TMP_BOILERPLATE"' EXIT; \
+		sed "s/{{YEAR}}/$$(date +%Y)/g" "$(BOILERPLATE)" > "$$TMP_BOILERPLATE"; \
+		$(COPYRIGHT_TOOL) -check -f "$$TMP_BOILERPLATE" $(COPYRIGHT_FILES) || \
 		{ $(LOG_ERROR) "Copyright headers missing or incorrect. Run 'make copyright.add' to fix."; exit 1; }
 	@$(LOG_SUCCESS) "All copyright headers verified"
 
@@ -53,7 +56,10 @@ copyright.add:
 		$(LOG_INFO) "Installing $(COPYRIGHT_TOOL)"; \
 		$(GO) install github.com/google/addlicense@latest; \
 	fi
-	@$(COPYRIGHT_TOOL) -f $(BOILERPLATE) -y $(shell date +%Y) $(COPYRIGHT_FILES)
+	@TMP_BOILERPLATE="$$(mktemp "$${TMPDIR:-/tmp}/copyright-boilerplate.XXXXXX")"; \
+		trap 'rm -f "$$TMP_BOILERPLATE"' EXIT; \
+		sed "s/{{YEAR}}/$$(date +%Y)/g" "$(BOILERPLATE)" > "$$TMP_BOILERPLATE"; \
+		$(COPYRIGHT_TOOL) -f "$$TMP_BOILERPLATE" $(COPYRIGHT_FILES)
 	@$(LOG_SUCCESS) "Copyright headers added"
 
 ## copyright.check: Check copyright (alias for verify)

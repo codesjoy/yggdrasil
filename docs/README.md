@@ -1,11 +1,25 @@
 # Documentation
 
-This directory contains the public documentation set for the cleaned-up Yggdrasil v3 repository layout.
+This directory contains the public documentation set for the Yggdrasil v3 framework.
 
-## Index
+## Architecture
 
-- [Architecture Overview](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/docs/architecture/overview.md)
-- [Module Hub Architecture](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/docs/architecture/module-hub.md)
-- [Package Map](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/docs/package-map.md)
-- [Layout Cleanup Migration Guide](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/docs/migration/v3-layout-cleanup.md)
-- [Module Hub Diagnostics Schema](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/docs/schemas/module-hub-diagnostics.schema.json)
+- [Architecture Overview](overview.md) — framework layers, package map, and module hub summary
+
+## Modularity
+
+- [Module System Design](module-system.md) — module interfaces, hub lifecycle, DAG ordering, and capability model
+- [Declarative Assembly Planning](assembly-planning.md) — config-driven module selection, overrides, and spec diffing
+
+## Lifecycle
+
+- [App Lifecycle & Business Composition](app-lifecycle.md) — state machine, hot reload, two-phase commit, and business bundle pattern
+
+## Infrastructure
+
+- [Layered Configuration System](configuration.md) — immutable snapshots, layered merging, and config change detection
+- [Transport & Service Discovery](transport-and-discovery.md) — transport providers, security profiles, service registry, and load balancing
+
+## Schemas
+
+- [Module Hub Diagnostics Schema](schemas/module-hub-diagnostics.schema.json)
