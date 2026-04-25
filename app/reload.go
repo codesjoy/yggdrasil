@@ -104,7 +104,12 @@ func (a *App) recordReloadError(err error) error {
 	return err
 }
 
-func (a *App) storeReloadPlan(result *yassembly.Result, diff *yassembly.SpecDiff, stable bool, reloadErr error) {
+func (a *App) storeReloadPlan(
+	result *yassembly.Result,
+	diff *yassembly.SpecDiff,
+	stable bool,
+	reloadErr error,
+) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 

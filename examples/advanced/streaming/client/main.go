@@ -38,12 +38,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	cli, err := app.NewClient(context.Background(), "github.com.codesjoy.yggdrasil.example.advanced.streaming")
+	cli, err := app.NewClient(
+		context.Background(),
+		"github.com.codesjoy.yggdrasil.example.advanced.streaming",
+	)
 	if err != nil {
 		slog.Error("failed to create client", slog.Any("error", err))
 		os.Exit(1)
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	client := helloworldpb.NewGreeterServiceClient(cli)
 	ctx := metadata.WithStreamContext(context.Background())

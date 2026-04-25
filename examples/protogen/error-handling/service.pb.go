@@ -1369,6 +1369,7 @@ var (
 		), // 22: codesjoy.yggdrasil.example.proto.errorhandling.Shelf
 	}
 )
+
 var file_error_handling_service_proto_depIdxs = []int32{
 	20, // 0: codesjoy.yggdrasil.example.proto.errorhandling.CreateUserResponse.user:type_name -> codesjoy.yggdrasil.example.proto.errorhandling.User
 	20, // 1: codesjoy.yggdrasil.example.proto.errorhandling.GetUserResponse.user:type_name -> codesjoy.yggdrasil.example.proto.errorhandling.User

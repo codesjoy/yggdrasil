@@ -24,14 +24,18 @@ import (
 )
 
 const (
-	contextPackage     = protogen.GoImportPath("context")
-	xerrorPackage      = protogen.GoImportPath("github.com/codesjoy/pkg/basic/xerror")
-	streamPackage      = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v3/rpc/stream")
-	clientPackage      = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v3/client")
+	contextPackage = protogen.GoImportPath("context")
+	xerrorPackage  = protogen.GoImportPath("github.com/codesjoy/pkg/basic/xerror")
+	streamPackage  = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v3/rpc/stream")
+	clientPackage  = protogen.GoImportPath(
+		"github.com/codesjoy/yggdrasil/v3/transport/runtime/client",
+	)
 	interceptorPackage = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v3/rpc/interceptor")
-	serverPackage      = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v3/server")
-	metadataPackage    = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v3/rpc/metadata")
-	codePackage        = protogen.GoImportPath("google.golang.org/genproto/googleapis/rpc/code")
+	serverPackage      = protogen.GoImportPath(
+		"github.com/codesjoy/yggdrasil/v3/transport/runtime/server",
+	)
+	metadataPackage = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v3/rpc/metadata")
+	codePackage     = protogen.GoImportPath("google.golang.org/genproto/googleapis/rpc/code")
 )
 
 func generateFiles(gen *protogen.Plugin, file *protogen.File) {

@@ -28,9 +28,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codesjoy/yggdrasil/v3/admin/governor"
-	"github.com/codesjoy/yggdrasil/v3/internal/constant"
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
-	yserver "github.com/codesjoy/yggdrasil/v3/server"
+	"github.com/codesjoy/yggdrasil/v3/internal/constant"
+	yserver "github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
 
 func TestNewLifecycleRunner(t *testing.T) {
@@ -336,7 +336,7 @@ func TestLifecycleEndpointsWithServer(t *testing.T) {
 	mainServer := &blockingAppServer{
 		endpts: []yserver.Endpoint{
 			stubAppEndpoint{
-				scheme:   "grpc",
+				protocol: "grpc",
 				address:  "127.0.0.1:9000",
 				metadata: nil,
 				kind:     constant.ServerKindRPC,
@@ -364,7 +364,11 @@ func TestLifecycleEndpointsIntegration(t *testing.T) {
 
 	endpoints := runner.Endpoints()
 	require.Len(t, endpoints, 1)
-	assert.Equal(t, string(constant.ServerKindGovernor), endpoints[0].Metadata()[registry.MDServerKind])
+	assert.Equal(
+		t,
+		string(constant.ServerKindGovernor),
+		endpoints[0].Metadata()[registry.MDServerKind],
+	)
 }
 
 func TestLifecycleEndpointsWithServerAndGovernor(t *testing.T) {
@@ -375,7 +379,7 @@ func TestLifecycleEndpointsWithServerAndGovernor(t *testing.T) {
 	mainServer := &blockingAppServer{
 		endpts: []yserver.Endpoint{
 			stubAppEndpoint{
-				scheme:   "grpc",
+				protocol: "grpc",
 				address:  "127.0.0.1:9001",
 				metadata: map[string]string{"version": "v1"},
 				kind:     constant.ServerKindRPC,
@@ -390,7 +394,11 @@ func TestLifecycleEndpointsWithServerAndGovernor(t *testing.T) {
 	require.Len(t, endpoints, 2)
 	assert.Equal(t, string(constant.ServerKindRPC), endpoints[0].Metadata()[registry.MDServerKind])
 	assert.Equal(t, "v1", endpoints[0].Metadata()["version"])
-	assert.Equal(t, string(constant.ServerKindGovernor), endpoints[1].Metadata()[registry.MDServerKind])
+	assert.Equal(
+		t,
+		string(constant.ServerKindGovernor),
+		endpoints[1].Metadata()[registry.MDServerKind],
+	)
 }
 
 func TestLifecycleRegistryStateTransitionsAreSafe(t *testing.T) {

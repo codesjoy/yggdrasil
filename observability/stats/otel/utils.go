@@ -22,8 +22,8 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 
-	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	xtrace "github.com/codesjoy/yggdrasil/v3/observability/otel"
+	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 )
 
 func parseFullMethod(fullMethod string) (string, []attribute.KeyValue) {

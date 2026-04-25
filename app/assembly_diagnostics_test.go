@@ -46,8 +46,16 @@ func TestStatsOtelAutoSpecEnablesRealModule(t *testing.T) {
 	require.NoError(t, app.Prepare(context.Background()))
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })
 
-	require.Contains(t, app.lastPlanResult.CapabilityBindings["observability.stats.handler"], "otel")
-	require.Contains(t, app.lastPlanResult.AffectedPathsByDomain["modules"], "yggdrasil.telemetry.stats.server")
+	require.Contains(
+		t,
+		app.lastPlanResult.CapabilityBindings["observability.stats.handler"],
+		"otel",
+	)
+	require.Contains(
+		t,
+		app.lastPlanResult.AffectedPathsByDomain["modules"],
+		"yggdrasil.telemetry.stats.server",
+	)
 	require.True(t, containsPlannedModule(app.assemblySpec, "telemetry.stats.otel"))
 }
 
@@ -79,16 +87,19 @@ func TestDiagnosticsEndpointIncludesAssemblyState(t *testing.T) {
 		WithPlanOverrides(yassembly.ForceDefault("observability.logger.handler", "text")),
 	)
 	require.NoError(t, err)
-	require.NoError(t, app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
-		return &BusinessBundle{
-			Diagnostics: []BundleDiag{
-				{
-					Code:    string(yassembly.ErrComposeLocalResourceLeaked),
-					Message: "local resource left outside managed bundle scope",
+	require.NoError(
+		t,
+		app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
+			return &BusinessBundle{
+				Diagnostics: []BundleDiag{
+					{
+						Code:    string(yassembly.ErrComposeLocalResourceLeaked),
+						Message: "local resource left outside managed bundle scope",
+					},
 				},
-			},
-		}, nil
-	}))
+			}, nil
+		}),
+	)
 	t.Cleanup(func() {
 		_ = app.opts.governor.Stop()
 		_ = app.Stop(context.Background())
@@ -125,9 +136,17 @@ func TestDiagnosticsEndpointIncludesAssemblyState(t *testing.T) {
 	require.Equal(t, "prod-http-gateway", doc.Assembly.Mode.Name)
 	require.NotEmpty(t, doc.Assembly.CurrentSpecHash)
 	require.Equal(t, "text", doc.Assembly.SelectedDefaults["observability.logger.handler"].Value)
-	require.Equal(t, "code_override", doc.Assembly.SelectedDefaults["observability.logger.handler"].Source)
+	require.Equal(
+		t,
+		"code_override",
+		doc.Assembly.SelectedDefaults["observability.logger.handler"].Source,
+	)
 	require.NotEmpty(t, doc.Assembly.BusinessInputPaths)
-	require.Equal(t, string(yassembly.ErrComposeLocalResourceLeaked), doc.Assembly.BundleDiagnostics[0].Code)
+	require.Equal(
+		t,
+		string(yassembly.ErrComposeLocalResourceLeaked),
+		doc.Assembly.BundleDiagnostics[0].Code,
+	)
 
 	require.NoError(t, app.opts.governor.Stop())
 	requireAsyncNoError(t, errCh, "governor serve goroutine did not exit")

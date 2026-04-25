@@ -18,6 +18,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
+
+	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/security/insecure"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/security/local"
+	ytls "github.com/codesjoy/yggdrasil/v3/transport/support/security/tls"
 )
 
 // Validate validates the resolved framework configuration.
@@ -47,39 +53,32 @@ func Validate(resolved Resolved) error {
 		slog.Warn(msg, args...)
 	}
 
-	validateCredential := func(protoName, serviceName string, client bool, key string) {
-		if protoName != "tls" {
-			return
-		}
-		if err := validateTLSCredentialConfig(resolved, serviceName, client); err != nil {
+	builtinProviders := map[string]security.Provider{
+		"insecure": insecure.BuiltinProvider(),
+		"local":    local.BuiltinProvider(),
+		"tls":      ytls.BuiltinProvider(),
+	}
+	for name, spec := range resolved.Transports.SecurityProfiles {
+		if strings.TrimSpace(spec.Type) == "" {
 			addErr(
-				"remote credentials config invalid",
-				fmt.Errorf("name=%s: %w", protoName, err),
-				slog.String("name", protoName),
-				slog.String("key", key),
+				"transport security profile invalid",
+				fmt.Errorf("profile=%s: missing type", name),
+				slog.String("profile", name),
+			)
+			continue
+		}
+		provider := builtinProviders[spec.Type]
+		if provider == nil {
+			continue
+		}
+		if _, err := provider.Compile(name, spec.Config); err != nil {
+			addErr(
+				"transport security profile invalid",
+				fmt.Errorf("profile=%s type=%s: %w", name, spec.Type, err),
+				slog.String("profile", name),
+				slog.String("type", spec.Type),
 			)
 		}
-	}
-
-	validateCredential(
-		resolved.Transports.GRPC.Server.CredsProto,
-		"",
-		false,
-		"yggdrasil.transports.grpc.server.creds_proto",
-	)
-	validateCredential(
-		resolved.Transports.GRPC.Client.Transport.CredsProto,
-		"",
-		true,
-		"yggdrasil.transports.grpc.client.transport.creds_proto",
-	)
-	for serviceName, cfg := range resolved.Transports.GRPC.ClientServices {
-		validateCredential(
-			cfg.Transport.CredsProto,
-			serviceName,
-			true,
-			fmt.Sprintf("yggdrasil.clients.services.%s.transports.grpc.transport.creds_proto", serviceName),
-		)
 	}
 
 	return multiErr

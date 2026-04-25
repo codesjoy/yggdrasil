@@ -18,22 +18,22 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/codesjoy/yggdrasil/v3/balancer"
 	"github.com/codesjoy/yggdrasil/v3/config"
+	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
+	"github.com/codesjoy/yggdrasil/v3/module"
+	"github.com/codesjoy/yggdrasil/v3/observability/logger"
+	xotel "github.com/codesjoy/yggdrasil/v3/observability/otel"
+	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
 	intlogging "github.com/codesjoy/yggdrasil/v3/rpc/interceptor/logging"
-	"github.com/codesjoy/yggdrasil/v3/observability/logger"
-	"github.com/codesjoy/yggdrasil/v3/module"
-	xotel "github.com/codesjoy/yggdrasil/v3/observability/otel"
-	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
-	"github.com/codesjoy/yggdrasil/v3/remote"
-	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
-	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
-	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/transport/grpc"
-	rpchttp "github.com/codesjoy/yggdrasil/v3/remote/transport/rpchttp"
-	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
-	restmiddleware "github.com/codesjoy/yggdrasil/v3/server/rest/middleware"
-	"github.com/codesjoy/yggdrasil/v3/observability/stats"
+	remote "github.com/codesjoy/yggdrasil/v3/transport"
+	"github.com/codesjoy/yggdrasil/v3/transport/gateway/rest"
+	grpcprotocol "github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc"
+	rpchttp "github.com/codesjoy/yggdrasil/v3/transport/protocol/rpchttp"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/client/balancer"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
 )
 
 func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
@@ -94,18 +94,17 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 	}
 	statsBuilders = bindStatsHandlerBuilders(resolved, statsBuilders)
 
-	credentialsBuilders, err := resolveNamedRuntimeCapabilities[credentials.Builder](
+	securityProviders, err := resolveNamedRuntimeCapabilities[security.Provider](
 		a.hub,
 		bindings,
-		"credentials.transport",
-		credentialsCapabilitySpec,
+		"security.profile.provider",
+		securityProfileCapabilitySpec,
 	)
 	if err != nil {
 		return nil, err
 	}
-	credentialsBuilders = bindCredentialsBuilders(resolved, credentialsBuilders)
 
-	marshalerBuilders, err := resolveNamedRuntimeCapabilities[marshaler.MarshallerBuilder](
+	marshalerBuilders, err := resolveNamedRuntimeCapabilities[marshaler.MarshalerBuilder](
 		a.hub,
 		bindings,
 		"marshaler.scheme",
@@ -116,15 +115,24 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 	}
 
 	return &Snapshot{
-		Resolved:                         resolved,
-		LoggerHandlerBuilders:            handlerBuilders,
-		LoggerWriterBuilders:             writerBuilders,
-		TracerProviderBuilders:           tracerBuilders,
-		MeterProviderBuilders:            meterBuilders,
-		StatsHandlerBuilders:             statsBuilders,
-		ServerStats:                      stats.BuildHandlerChainWithBuilders(resolved.Telemetry.Stats, statsBuilders, true),
-		ClientStats:                      stats.BuildHandlerChainWithBuilders(resolved.Telemetry.Stats, statsBuilders, false),
-		CredentialsBuilders:              credentialsBuilders,
+		Resolved:               resolved,
+		LoggerHandlerBuilders:  handlerBuilders,
+		LoggerWriterBuilders:   writerBuilders,
+		TracerProviderBuilders: tracerBuilders,
+		MeterProviderBuilders:  meterBuilders,
+		StatsHandlerBuilders:   statsBuilders,
+		ServerStats: stats.BuildHandlerChainWithBuilders(
+			resolved.Telemetry.Stats,
+			statsBuilders,
+			true,
+		),
+		ClientStats: stats.BuildHandlerChainWithBuilders(
+			resolved.Telemetry.Stats,
+			statsBuilders,
+			false,
+		),
+		SecurityProviders:                securityProviders,
+		SecurityProfiles:                 map[string]security.Profile{},
 		MarshalerBuilderMap:              marshalerBuilders,
 		TransportServerProviders:         map[string]remote.TransportServerProvider{},
 		TransportClientProviders:         map[string]remote.TransportClientProvider{},
@@ -132,7 +140,7 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 		StreamServerInterceptorProviders: map[string]interceptor.StreamServerInterceptorProvider{},
 		UnaryClientInterceptorProviders:  map[string]interceptor.UnaryClientInterceptorProvider{},
 		StreamClientInterceptorProviders: map[string]interceptor.StreamClientInterceptorProvider{},
-		RESTMiddlewareProviderMap:        map[string]restmiddleware.Provider{},
+		RESTMiddlewareProviderMap:        map[string]rest.Provider{},
 		RegistryProviders:                map[string]registry.Provider{},
 		ResolverProviders:                map[string]resolver.Provider{},
 		BalancerProviders:                map[string]balancer.Provider{},
@@ -151,6 +159,11 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	bindings := selectedCapabilityBindings(a.lastPlanResult, a.opts.resolvedSettings)
 	next := base.Copy()
 	next.Resolved = resolved
+	profiles, err := compileSecurityProfiles(resolved, next.SecurityProviders)
+	if err != nil {
+		return nil, false, err
+	}
+	next.SecurityProfiles = profiles
 
 	serverProviders, err := resolveNamedRuntimeCapabilities[remote.TransportServerProvider](
 		a.hub,
@@ -167,13 +180,14 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 			next.TransportServerProviders[name] = grpcprotocol.ServerProviderWithSettings(
 				resolved.Transports.GRPC,
 				next.ServerStats,
-				next.CredentialsBuilders,
+				next.SecurityProfiles,
 			)
 		case rpchttp.Protocol:
 			next.TransportServerProviders[name] = rpchttp.ServerProviderWithSettings(
 				resolved.Transports.HTTP,
 				next.ServerStats,
 				next.MarshalerBuilderMap,
+				next.SecurityProfiles,
 			)
 		default:
 			next.TransportServerProviders[name] = provider
@@ -194,12 +208,13 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 		case grpcprotocol.Protocol:
 			next.TransportClientProviders[name] = grpcprotocol.ClientProviderWithSettings(
 				resolved.Transports.GRPC,
-				next.CredentialsBuilders,
+				next.SecurityProfiles,
 			)
 		case rpchttp.Protocol:
 			next.TransportClientProviders[name] = rpchttp.ClientProviderWithSettings(
 				resolved.Transports.HTTP,
 				next.MarshalerBuilderMap,
+				next.SecurityProfiles,
 			)
 		default:
 			next.TransportClientProviders[name] = provider
@@ -207,10 +222,18 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	}
 
 	loggingCfg := loggingInterceptorSource(resolved)
-	unaryServerBuiltins := mapUnaryServerProviders(intlogging.BuiltinUnaryServerProvidersWithConfig(loggingCfg))
-	streamServerBuiltins := mapStreamServerProviders(intlogging.BuiltinStreamServerProvidersWithConfig(loggingCfg))
-	unaryClientBuiltins := mapUnaryClientProviders(intlogging.BuiltinUnaryClientProvidersWithConfig(loggingCfg))
-	streamClientBuiltins := mapStreamClientProviders(intlogging.BuiltinStreamClientProvidersWithConfig(loggingCfg))
+	unaryServerBuiltins := mapUnaryServerProviders(
+		intlogging.BuiltinUnaryServerProvidersWithConfig(loggingCfg),
+	)
+	streamServerBuiltins := mapStreamServerProviders(
+		intlogging.BuiltinStreamServerProvidersWithConfig(loggingCfg),
+	)
+	unaryClientBuiltins := mapUnaryClientProviders(
+		intlogging.BuiltinUnaryClientProvidersWithConfig(loggingCfg),
+	)
+	streamClientBuiltins := mapStreamClientProviders(
+		intlogging.BuiltinStreamClientProvidersWithConfig(loggingCfg),
+	)
 
 	unaryServerProviders, err := resolveOrderedRuntimeCapabilities[interceptor.UnaryServerInterceptorProvider](
 		a.hub,
@@ -221,7 +244,11 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	copyPreferredIntoMap(next.UnaryServerInterceptorProviders, unaryServerProviders, unaryServerBuiltins)
+	copyPreferredIntoMap(
+		next.UnaryServerInterceptorProviders,
+		unaryServerProviders,
+		unaryServerBuiltins,
+	)
 
 	streamServerProviders, err := resolveOrderedRuntimeCapabilities[interceptor.StreamServerInterceptorProvider](
 		a.hub,
@@ -232,7 +259,11 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	copyPreferredIntoMap(next.StreamServerInterceptorProviders, streamServerProviders, streamServerBuiltins)
+	copyPreferredIntoMap(
+		next.StreamServerInterceptorProviders,
+		streamServerProviders,
+		streamServerBuiltins,
+	)
 
 	unaryClientProviders, err := resolveOrderedRuntimeCapabilities[interceptor.UnaryClientInterceptorProvider](
 		a.hub,
@@ -243,7 +274,11 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	copyPreferredIntoMap(next.UnaryClientInterceptorProviders, unaryClientProviders, unaryClientBuiltins)
+	copyPreferredIntoMap(
+		next.UnaryClientInterceptorProviders,
+		unaryClientProviders,
+		unaryClientBuiltins,
+	)
 
 	streamClientProviders, err := resolveOrderedRuntimeCapabilities[interceptor.StreamClientInterceptorProvider](
 		a.hub,
@@ -254,12 +289,16 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	copyPreferredIntoMap(next.StreamClientInterceptorProviders, streamClientProviders, streamClientBuiltins)
+	copyPreferredIntoMap(
+		next.StreamClientInterceptorProviders,
+		streamClientProviders,
+		streamClientBuiltins,
+	)
 
-	restProviders, err := resolveOrderedRuntimeCapabilities[restmiddleware.Provider](
+	restProviders, err := resolveOrderedRuntimeCapabilities[rest.Provider](
 		a.hub,
 		bindings,
-		"rest.middleware",
+		"transport.rest.middleware",
 		restMiddlewareCapabilitySpec,
 	)
 	if err != nil {
@@ -268,7 +307,7 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	for name, provider := range restProviders {
 		switch name {
 		case "logger":
-			next.RESTMiddlewareProviderMap[name] = restmiddleware.BuiltinLoggingProvider()
+			next.RESTMiddlewareProviderMap[name] = rest.BuiltinLoggingProvider()
 		case "marshaler":
 			next.RESTMiddlewareProviderMap[name] = newRuntimeMarshalerProvider(next)
 		default:
@@ -308,7 +347,7 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	balancerProviders, err := resolveNamedRuntimeCapabilities[balancer.Provider](
 		a.hub,
 		bindings,
-		"balancer.provider",
+		"transport.balancer.provider",
 		balancerProviderCapabilitySpec,
 	)
 	if err != nil {
@@ -339,7 +378,10 @@ func (m foundationRuntimeModule) Init(context.Context, config.View) error {
 	return nil
 }
 
-func (m foundationRuntimeModule) PrepareReload(context.Context, config.View) (module.ReloadCommitter, error) {
+func (m foundationRuntimeModule) PrepareReload(
+	context.Context,
+	config.View,
+) (module.ReloadCommitter, error) {
 	next, err := m.app.buildFoundationRuntimeSnapshot()
 	if err != nil {
 		return nil, err
@@ -386,7 +428,10 @@ func (m connectivityRuntimeModule) Init(context.Context, config.View) error {
 	return nil
 }
 
-func (m connectivityRuntimeModule) PrepareReload(context.Context, config.View) (module.ReloadCommitter, error) {
+func (m connectivityRuntimeModule) PrepareReload(
+	context.Context,
+	config.View,
+) (module.ReloadCommitter, error) {
 	next, restartRequired, err := m.app.buildRuntimeSnapshot()
 	if err != nil {
 		return nil, err

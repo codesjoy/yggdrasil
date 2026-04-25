@@ -29,12 +29,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 	"github.com/codesjoy/yggdrasil/v3/internal/remotelog"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
-	"github.com/codesjoy/yggdrasil/v3/observability/logger"
 	"github.com/codesjoy/yggdrasil/v3/module"
+	"github.com/codesjoy/yggdrasil/v3/observability/logger"
 	xotel "github.com/codesjoy/yggdrasil/v3/observability/otel"
-	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 )
 
 func TestAppNewClientUsesAppScopedRuntimeInsteadOfGlobalStores(t *testing.T) {
@@ -97,9 +97,12 @@ func (resolverCapabilityModule) Capabilities() []module.Capability {
 				Type:        reflect.TypeOf((*resolver.Provider)(nil)).Elem(),
 			},
 			Name: "module-resolver",
-			Value: resolver.NewProvider("module-resolver", func(name string) (resolver.Resolver, error) {
-				return &moduleResolver{resolverName: name}, nil
-			}),
+			Value: resolver.NewProvider(
+				"module-resolver",
+				func(name string) (resolver.Resolver, error) {
+					return &moduleResolver{resolverName: name}, nil
+				},
+			),
 		},
 	}
 }

@@ -63,7 +63,10 @@ func TestLevelFilterHandlerDelegatesAndPreservesLevel(t *testing.T) {
 
 	require.False(t, handler.Enabled(context.Background(), slog.LevelInfo))
 	require.True(t, handler.Enabled(context.Background(), slog.LevelError))
-	require.NoError(t, handler.Handle(context.Background(), slog.NewRecord(time.Now(), slog.LevelInfo, "msg", 0)))
+	require.NoError(
+		t,
+		handler.Handle(context.Background(), slog.NewRecord(time.Now(), slog.LevelInfo, "msg", 0)),
+	)
 
 	withAttrs, ok := handler.WithAttrs([]slog.Attr{slog.String("k", "v")}).(*levelFilterHandler)
 	require.True(t, ok)

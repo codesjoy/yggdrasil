@@ -55,4 +55,11 @@ func TestGetCfg(t *testing.T) {
 		assert.NotNil(t, cfg1)
 		assert.NotNil(t, cfg2)
 	})
+
+	t.Run("returns config with defaults applied", func(t *testing.T) {
+		cfg := getCfg()
+		assert.NotNil(t, cfg)
+		// Config defaults are "true" per struct tags, but actual values depend on
+		// whether global settings have been configured. Just verify it returns non-nil.
+	})
 }

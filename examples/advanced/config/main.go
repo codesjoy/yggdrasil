@@ -19,7 +19,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	yapp "github.com/codesjoy/yggdrasil/v3/app"
@@ -82,7 +81,7 @@ func main() {
 	<-sigChan
 
 	slog.Info("Shutting down...")
-	_ = app.Stop(nil)
+	_ = app.Stop(nil) //nolint:staticcheck // intentional: example code using nil context
 	slog.Info("Shutdown complete")
 }
 
@@ -140,32 +139,4 @@ func validateConfig(cfg *AppConfig) error {
 		return fmt.Errorf("database name is required")
 	}
 	return nil
-}
-
-func getConfigValue(key string) string {
-	var value string
-	_ = config.Default().Section(append([]string{"app"}, strings.Split(key, ".")...)...).Decode(&value)
-	return value
-}
-
-func getServerHost() string {
-	var host string
-	if err := config.Default().Section("app", "server", "host").Decode(&host); err != nil || host == "" {
-		return "localhost"
-	}
-	return host
-}
-
-func getServerPort() int {
-	var port int
-	if err := config.Default().Section("app", "server", "port").Decode(&port); err != nil || port == 0 {
-		return 8080
-	}
-	return port
-}
-
-func isCacheEnabled() bool {
-	var enabled bool
-	_ = config.Default().Section("app", "cache", "enabled").Decode(&enabled)
-	return enabled
 }

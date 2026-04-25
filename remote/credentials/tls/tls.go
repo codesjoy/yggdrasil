@@ -24,7 +24,7 @@ import (
 	"strings"
 
 	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
-	"github.com/codesjoy/yggdrasil/v3/remote/peer"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/peer"
 )
 
 const name = "tls"

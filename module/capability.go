@@ -25,6 +25,7 @@ import (
 // CapabilityCardinality defines cardinality rules.
 type CapabilityCardinality int
 
+// Capability cardinality constraints.
 const (
 	ExactlyOne CapabilityCardinality = iota
 	OptionalOne
@@ -111,10 +112,17 @@ func collectCapabilities(modules []Module) (capabilityCollectResult, error) {
 		}
 		for _, cap := range provider.Capabilities() {
 			if cap.Spec.Name == "" {
-				return capabilityCollectResult{}, fmt.Errorf("module %q has capability with empty spec name", mod.Name())
+				return capabilityCollectResult{}, fmt.Errorf(
+					"module %q has capability with empty spec name",
+					mod.Name(),
+				)
 			}
 			if cap.Value == nil {
-				return capabilityCollectResult{}, fmt.Errorf("module %q capability %q has nil value", mod.Name(), cap.Spec.Name)
+				return capabilityCollectResult{}, fmt.Errorf(
+					"module %q capability %q has nil value",
+					mod.Name(),
+					cap.Spec.Name,
+				)
 			}
 			if cap.Name == "" {
 				cap.Name = mod.Name()
@@ -135,7 +143,8 @@ func collectCapabilities(modules []Module) (capabilityCollectResult, error) {
 						moduleConflicts: normalizeModuleConflicts(moduleConflicts),
 					}, errors.New(message)
 				}
-				if currentSpec.Type != nil && cap.Spec.Type != nil && currentSpec.Type != cap.Spec.Type {
+				if currentSpec.Type != nil && cap.Spec.Type != nil &&
+					currentSpec.Type != cap.Spec.Type {
 					message := fmt.Sprintf(
 						"capability %q type mismatch: %v vs %v",
 						cap.Spec.Name,
@@ -186,19 +195,31 @@ func collectCapabilities(modules []Module) (capabilityCollectResult, error) {
 		switch spec.Cardinality {
 		case ExactlyOne:
 			if len(entries) != 1 {
-				message := fmt.Sprintf("capability %q requires exactly one provider, got %d", specName, len(entries))
+				message := fmt.Sprintf(
+					"capability %q requires exactly one provider, got %d",
+					specName,
+					len(entries),
+				)
 				addConflict(message, modulesOfEntries(entries)...)
 			}
 		case OptionalOne:
 			if len(entries) > 1 {
-				message := fmt.Sprintf("capability %q allows at most one provider, got %d", specName, len(entries))
+				message := fmt.Sprintf(
+					"capability %q allows at most one provider, got %d",
+					specName,
+					len(entries),
+				)
 				addConflict(message, modulesOfEntries(entries)...)
 			}
 		case NamedOne:
 			seen := map[string]struct{}{}
 			for _, item := range entries {
 				if _, ok := seen[item.name]; ok {
-					message := fmt.Sprintf("capability %q has duplicate provider name %q", specName, item.name)
+					message := fmt.Sprintf(
+						"capability %q has duplicate provider name %q",
+						specName,
+						item.name,
+					)
 					addConflict(message, modulesOfEntries(entries)...)
 					continue
 				}
@@ -348,7 +369,11 @@ func ResolveExactlyOne[T any](h *Hub, spec CapabilitySpec) (T, error) {
 		return zero, err
 	}
 	if len(entries) != 1 {
-		return zero, fmt.Errorf("capability %q requires exactly one provider, got %d", spec.Name, len(entries))
+		return zero, fmt.Errorf(
+			"capability %q requires exactly one provider, got %d",
+			spec.Name,
+			len(entries),
+		)
 	}
 	return castValue[T](entries[0].value)
 }
@@ -367,7 +392,11 @@ func ResolveOptionalOne[T any](h *Hub, spec CapabilitySpec) (T, bool, error) {
 		return zero, false, nil
 	}
 	if len(entries) > 1 {
-		return zero, false, fmt.Errorf("capability %q allows at most one provider, got %d", spec.Name, len(entries))
+		return zero, false, fmt.Errorf(
+			"capability %q allows at most one provider, got %d",
+			spec.Name,
+			len(entries),
+		)
 	}
 	out, err := castValue[T](entries[0].value)
 	if err != nil {
@@ -432,7 +461,11 @@ func ResolveOrdered[T any](h *Hub, spec CapabilitySpec, names []string) ([]T, er
 	seen := map[string]struct{}{}
 	for _, item := range names {
 		if _, ok := seen[item]; ok {
-			return nil, fmt.Errorf("capability %q provider %q duplicated in ordered list", spec.Name, item)
+			return nil, fmt.Errorf(
+				"capability %q provider %q duplicated in ordered list",
+				spec.Name,
+				item,
+			)
 		}
 		seen[item] = struct{}{}
 		entry, ok := index[item]

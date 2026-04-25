@@ -39,9 +39,12 @@ func TestRegistryBuildAndRegister(t *testing.T) {
 	})
 	registry.Register("x", nil)
 
-	registry.Register("custom", func(spec SourceSpec) (src source.Source, p config.Priority, err error) {
-		return nil, config.PriorityOverride, nil
-	})
+	registry.Register(
+		"custom",
+		func(spec SourceSpec) (src source.Source, p config.Priority, err error) {
+			return nil, config.PriorityOverride, nil
+		},
+	)
 	_, priority, err := registry.Build(SourceSpec{Kind: "custom"})
 	require.NoError(t, err)
 	require.Equal(t, config.PriorityOverride, priority)

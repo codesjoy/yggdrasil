@@ -32,7 +32,11 @@ func TestSnapshotSectionAndDecode(t *testing.T) {
 	})
 
 	var resolver string
-	require.NoError(t, snapshot.Section("clients", "services", "github.com.demo.service", "resolver").Decode(&resolver))
+	require.NoError(
+		t,
+		snapshot.Section("clients", "services", "github.com.demo.service", "resolver").
+			Decode(&resolver),
+	)
 	require.Equal(t, "mock", resolver)
 }
 

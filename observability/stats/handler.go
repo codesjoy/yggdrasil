@@ -127,7 +127,11 @@ func (h *handlerChain) HandleChannel(ctx context.Context, cs ChanStats) {
 // GetServerHandler gets the server side stats handler.
 func GetServerHandler() Handler {
 	svrOnce.Do(func() {
-		svrHandler = BuildHandlerChainWithBuilders(CurrentSettings(), currentHandlerBuilders(), true)
+		svrHandler = BuildHandlerChainWithBuilders(
+			CurrentSettings(),
+			currentHandlerBuilders(),
+			true,
+		)
 	})
 	return svrHandler
 }
@@ -135,7 +139,11 @@ func GetServerHandler() Handler {
 // GetClientHandler gets the client side stats handler.
 func GetClientHandler() Handler {
 	cliOnce.Do(func() {
-		cliHandler = BuildHandlerChainWithBuilders(CurrentSettings(), currentHandlerBuilders(), false)
+		cliHandler = BuildHandlerChainWithBuilders(
+			CurrentSettings(),
+			currentHandlerBuilders(),
+			false,
+		)
 	})
 	return cliHandler
 }
@@ -151,7 +159,11 @@ func currentHandlerBuilders() map[string]HandlerBuilder {
 }
 
 // BuildHandlerChainWithBuilders builds one stats handler chain from explicit settings and builders.
-func BuildHandlerChainWithBuilders(settings Settings, builders map[string]HandlerBuilder, isServer bool) Handler {
+func BuildHandlerChainWithBuilders(
+	settings Settings,
+	builders map[string]HandlerBuilder,
+	isServer bool,
+) Handler {
 	h := &handlerChain{handlers: make([]Handler, 0)}
 	raw := settings.Client
 	if isServer {

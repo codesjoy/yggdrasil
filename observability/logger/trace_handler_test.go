@@ -135,11 +135,19 @@ func TestTraceHandlerHandleWithValidSpanAddsTraceFields(t *testing.T) {
 	}
 	traceID, ok := base.lastAttrs["trace_id"].(string)
 	if !ok || traceID == "" {
-		t.Fatalf("trace_id = %T(%v), want non-empty string", base.lastAttrs["trace_id"], base.lastAttrs["trace_id"])
+		t.Fatalf(
+			"trace_id = %T(%v), want non-empty string",
+			base.lastAttrs["trace_id"],
+			base.lastAttrs["trace_id"],
+		)
 	}
 	spanID, ok := base.lastAttrs["span_id"].(string)
 	if !ok || spanID == "" {
-		t.Fatalf("span_id = %T(%v), want non-empty string", base.lastAttrs["span_id"], base.lastAttrs["span_id"])
+		t.Fatalf(
+			"span_id = %T(%v), want non-empty string",
+			base.lastAttrs["span_id"],
+			base.lastAttrs["span_id"],
+		)
 	}
 }
 

@@ -18,20 +18,20 @@ package settings
 import (
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v3/balancer"
-	"github.com/codesjoy/yggdrasil/v3/client"
+	"github.com/codesjoy/yggdrasil/v3/admin/governor"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	configchain "github.com/codesjoy/yggdrasil/v3/config/chain"
-	"github.com/codesjoy/yggdrasil/v3/admin/governor"
+	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 	"github.com/codesjoy/yggdrasil/v3/internal/instance"
 	"github.com/codesjoy/yggdrasil/v3/observability/logger"
-	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
-	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/transport/grpc"
-	rpchttp "github.com/codesjoy/yggdrasil/v3/remote/transport/rpchttp"
-	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
-	"github.com/codesjoy/yggdrasil/v3/server"
-	"github.com/codesjoy/yggdrasil/v3/server/rest"
 	"github.com/codesjoy/yggdrasil/v3/observability/stats"
+	"github.com/codesjoy/yggdrasil/v3/transport/gateway/rest"
+	grpcprotocol "github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc"
+	rpchttp "github.com/codesjoy/yggdrasil/v3/transport/protocol/rpchttp"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/client"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/client/balancer"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 
 	gkeepalive "google.golang.org/grpc/keepalive"
 )
@@ -73,21 +73,20 @@ type Framework struct {
 
 // Transports contains global transport settings.
 type Transports struct {
-	GRPC GRPCTransport `mapstructure:"grpc"`
-	HTTP HTTPTransport `mapstructure:"http"`
+	GRPC     GRPCTransport     `mapstructure:"grpc"`
+	HTTP     HTTPTransport     `mapstructure:"http"`
+	Security SecurityTransport `mapstructure:"security"`
 }
 
 // GRPCTransport contains global gRPC transport settings.
 type GRPCTransport struct {
-	Client      grpcprotocol.Config       `mapstructure:"client"`
-	Server      grpcprotocol.ServerConfig `mapstructure:"server"`
-	Credentials map[string]map[string]any `mapstructure:"credentials"`
+	Client grpcprotocol.ClientConfig `mapstructure:"client"`
+	Server grpcprotocol.ServerConfig `mapstructure:"server"`
 }
 
 // GRPCClientTransport contains service-level gRPC client overrides.
 type GRPCClientTransport struct {
-	Config      grpcClientConfigOverlay   `mapstructure:",squash"`
-	Credentials map[string]map[string]any `mapstructure:"credentials"`
+	Config grpcClientConfigOverlay `mapstructure:",squash"`
 }
 
 // HTTPTransport contains global HTTP transport settings.
@@ -95,6 +94,17 @@ type HTTPTransport struct {
 	Client rpchttp.ClientConfig `mapstructure:"client"`
 	Server rpchttp.ServerConfig `mapstructure:"server"`
 	Rest   *rest.Config         `mapstructure:"rest"`
+}
+
+// SecurityTransport contains global reusable security profile definitions.
+type SecurityTransport struct {
+	Profiles map[string]SecurityProfileSpec `mapstructure:"profiles"`
+}
+
+// SecurityProfileSpec defines one reusable transport security profile.
+type SecurityProfileSpec struct {
+	Type   string         `mapstructure:"type"`
+	Config map[string]any `mapstructure:"config"`
 }
 
 // ClientTransports contains service-level transport overrides.
@@ -127,8 +137,9 @@ type ClientServiceSpec struct {
 
 // HTTPClientTransport contains service-level HTTP client overrides.
 type HTTPClientTransport struct {
-	Timeout   *time.Duration              `mapstructure:"timeout"`
-	Marshaler *rpchttp.MarshalerConfigSet `mapstructure:"marshaler"`
+	Timeout         *time.Duration              `mapstructure:"timeout"`
+	Marshaler       *rpchttp.MarshalerConfigSet `mapstructure:"marshaler"`
+	SecurityProfile *string                     `mapstructure:"security_profile"`
 }
 
 type backoffConfigOverlay struct {
@@ -162,7 +173,7 @@ type grpcClientConfigOverlay struct {
 
 type grpcClientTransportOptionsOverlay struct {
 	UserAgent             *string                      `mapstructure:"user_agent"`
-	CredsProto            *string                      `mapstructure:"creds_proto"`
+	SecurityProfile       *string                      `mapstructure:"security_profile"`
 	Authority             *string                      `mapstructure:"authority"`
 	KeepaliveParams       *gkeepalive.ClientParameters `mapstructure:"keepalive_params"`
 	InitialWindowSize     *int32                       `mapstructure:"initial_window_size"`
@@ -265,11 +276,10 @@ type Resolved struct {
 
 // ResolvedTransports contains normalized transport settings.
 type ResolvedTransports struct {
-	GRPC                   grpcprotocol.Settings
-	HTTP                   rpchttp.Settings
-	Rest                   *rest.Config
-	GRPCCredentials        map[string]map[string]any
-	GRPCServiceCredentials map[string]map[string]map[string]any
+	GRPC             grpcprotocol.Settings
+	HTTP             rpchttp.Settings
+	Rest             *rest.Config
+	SecurityProfiles map[string]SecurityProfileSpec
 }
 
 // Catalog provides typed section accessors over a config manager.

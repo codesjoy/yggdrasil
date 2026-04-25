@@ -44,6 +44,7 @@ type BackgroundTask = yapp.BackgroundTask
 // BusinessHookStage identifies one business hook stage.
 type BusinessHookStage = yapp.BusinessHookStage
 
+// Business lifecycle hook stages, re-exported from app.
 const (
 	BusinessHookBeforeStart = yapp.BusinessHookBeforeStart
 	BusinessHookBeforeStop  = yapp.BusinessHookBeforeStop

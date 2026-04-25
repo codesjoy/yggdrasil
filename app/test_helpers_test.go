@@ -27,16 +27,16 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/codesjoy/yggdrasil/v3/admin/governor"
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
 	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
-	"github.com/codesjoy/yggdrasil/v3/admin/governor"
-	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
+	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/internal/constant"
 	"github.com/codesjoy/yggdrasil/v3/module"
-	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
-	yserver "github.com/codesjoy/yggdrasil/v3/server"
+	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
+	yserver "github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
 
 type mockConfigSource struct {
@@ -50,6 +50,7 @@ func (m *mockConfigSource) Name() string { return m.name }
 func (m *mockConfigSource) Read() (source.Data, error) {
 	return source.NewMapData(m.data), nil
 }
+
 func (m *mockConfigSource) Close() error {
 	if m.closeCount != nil {
 		atomic.AddInt32(m.closeCount, 1)
@@ -109,7 +110,10 @@ func newTestManager(t *testing.T, data map[string]any) *config.Manager {
 
 	manager := config.NewManager()
 	if data != nil {
-		require.NoError(t, manager.LoadLayer("test", config.PriorityOverride, memory.NewSource("test", data)))
+		require.NoError(
+			t,
+			manager.LoadLayer("test", config.PriorityOverride, memory.NewSource("test", data)),
+		)
 	}
 	return manager
 }
@@ -130,7 +134,12 @@ func newInitializedApp(t *testing.T, name string, ops ...Option) *App {
 	return app
 }
 
-func newTestAppWithConfig(t *testing.T, name string, data map[string]any, ops ...Option) (*App, *config.Manager) {
+func newTestAppWithConfig(
+	t *testing.T,
+	name string,
+	data map[string]any,
+	ops ...Option,
+) (*App, *config.Manager) {
 	t.Helper()
 
 	manager := newTestManager(t, data)
@@ -138,7 +147,12 @@ func newTestAppWithConfig(t *testing.T, name string, data map[string]any, ops ..
 	return newTestApp(t, name, ops...), manager
 }
 
-func newInitializedAppWithConfig(t *testing.T, name string, data map[string]any, ops ...Option) (*App, *config.Manager) {
+func newInitializedAppWithConfig(
+	t *testing.T,
+	name string,
+	data map[string]any,
+	ops ...Option,
+) (*App, *config.Manager) {
 	t.Helper()
 
 	manager := newTestManager(t, data)
@@ -173,7 +187,11 @@ func requireAsyncNoError(t *testing.T, errCh <-chan error, timeoutMsg string) {
 	}
 }
 
-func findBindingDiag(t *testing.T, diag module.Diagnostics, spec string) module.CapabilityBindingDiag {
+func findBindingDiag(
+	t *testing.T,
+	diag module.Diagnostics,
+	spec string,
+) module.CapabilityBindingDiag {
 	t.Helper()
 	for _, item := range diag.Bindings {
 		if item.Spec == spec {
@@ -303,7 +321,12 @@ type blockingAppServer struct {
 func (b *blockingAppServer) RegisterService(*yserver.ServiceDesc, interface{})                    {}
 func (b *blockingAppServer) RegisterRestService(*yserver.RestServiceDesc, interface{}, ...string) {}
 func (b *blockingAppServer) RegisterRestRawHandlers(...*yserver.RestRawHandlerDesc)               {}
-func (b *blockingAppServer) Serve(chan<- struct{}) error                                          { return nil }
+
+func (b *blockingAppServer) Serve(
+	chan<- struct{},
+) error {
+	return nil
+}
 
 func (b *blockingAppServer) Stop(ctx context.Context) error {
 	b.stopCtx = ctx
@@ -366,14 +389,14 @@ func (f *failingInternalServer) Stop(ctx context.Context) error {
 }
 
 type stubAppEndpoint struct {
-	scheme   string
+	protocol string
 	address  string
 	metadata map[string]string
 	kind     constant.ServerKind
 }
 
-func (e stubAppEndpoint) Scheme() string {
-	return e.scheme
+func (e stubAppEndpoint) Protocol() string {
+	return e.protocol
 }
 
 func (e stubAppEndpoint) Address() string {

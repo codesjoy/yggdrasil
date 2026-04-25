@@ -24,10 +24,10 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/codesjoy/yggdrasil/v3/client"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
-	"github.com/codesjoy/yggdrasil/v3/server"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/client"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
 
 // Runtime is the business-safe runtime surface exposed after Prepare succeeds.
@@ -78,6 +78,7 @@ type BackgroundTask interface {
 // BusinessHookStage identifies the lifecycle stage of one business hook.
 type BusinessHookStage string
 
+// Business lifecycle hook stages.
 const (
 	BusinessHookBeforeStart BusinessHookStage = "before_start"
 	BusinessHookBeforeStop  BusinessHookStage = "before_stop"

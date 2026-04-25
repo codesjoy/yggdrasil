@@ -23,7 +23,9 @@ import (
 
 	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/code"
+	statuspb "google.golang.org/genproto/googleapis/rpc/status"
 
 	istatus "github.com/codesjoy/yggdrasil/v3/internal/status"
 )
@@ -126,4 +128,26 @@ func TestFromContextError(t *testing.T) {
 		st := FromContextError(context.Canceled)
 		assert.Equal(t, code.Code_CANCELLED, st.Code())
 	})
+
+	t.Run("nil returns nil", func(t *testing.T) {
+		st := FromContextError(nil)
+		assert.Nil(t, st)
+	})
+
+	t.Run("generic error", func(t *testing.T) {
+		st := FromContextError(errors.New("something"))
+		assert.NotNil(t, st)
+		assert.Equal(t, code.Code_UNKNOWN, st.Code())
+	})
+}
+
+func TestFromProto(t *testing.T) {
+	stu := &statuspb.Status{
+		Code:    int32(code.Code_NOT_FOUND),
+		Message: "not found",
+	}
+	st := FromProto(stu)
+	require.NotNil(t, st)
+	assert.Equal(t, code.Code_NOT_FOUND, st.Code())
+	assert.Equal(t, "not found", st.Message())
 }

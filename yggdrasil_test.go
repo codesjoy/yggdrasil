@@ -86,11 +86,14 @@ func TestOpenComposeAndInstallStartStop(t *testing.T) {
 	require.NoError(t, err)
 
 	task := newBlockingTask(nil)
-	require.NoError(t, app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
-		return &BusinessBundle{
-			Tasks: []BackgroundTask{task},
-		}, nil
-	}))
+	require.NoError(
+		t,
+		app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
+			return &BusinessBundle{
+				Tasks: []BackgroundTask{task},
+			}, nil
+		}),
+	)
 
 	require.NoError(t, app.Start(context.Background()))
 	select {
@@ -156,11 +159,14 @@ func TestWaitPropagatesServeFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	taskErr := errors.New("serve failed")
-	require.NoError(t, app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
-		return &BusinessBundle{
-			Tasks: []BackgroundTask{newBlockingTask(taskErr)},
-		}, nil
-	}))
+	require.NoError(
+		t,
+		app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
+			return &BusinessBundle{
+				Tasks: []BackgroundTask{newBlockingTask(taskErr)},
+			}, nil
+		}),
+	)
 	require.NoError(t, app.Start(context.Background()))
 	require.ErrorIs(t, app.Wait(), taskErr)
 }

@@ -20,7 +20,7 @@ import (
 )
 
 // ModuleDiag is one module diagnostic snapshot item.
-type ModuleDiag struct {
+type ModuleDiag struct { //nolint:revive // stutter is acceptable for clarity
 	Name                string   `json:"name"`
 	DependsOn           []string `json:"depends_on"`
 	TopoIndex           int      `json:"topo_index"`

@@ -182,22 +182,34 @@ func (p streamServerProvider) New() StreamServerInterceptor {
 }
 
 // NewUnaryClientInterceptorProvider wraps a builder as unary client provider.
-func NewUnaryClientInterceptorProvider(name string, builder UnaryClientIntBuilder) UnaryClientInterceptorProvider {
+func NewUnaryClientInterceptorProvider(
+	name string,
+	builder UnaryClientIntBuilder,
+) UnaryClientInterceptorProvider {
 	return unaryClientProvider{name: name, builder: builder}
 }
 
 // NewStreamClientInterceptorProvider wraps a builder as stream client provider.
-func NewStreamClientInterceptorProvider(name string, builder StreamClientIntBuilder) StreamClientInterceptorProvider {
+func NewStreamClientInterceptorProvider(
+	name string,
+	builder StreamClientIntBuilder,
+) StreamClientInterceptorProvider {
 	return streamClientProvider{name: name, builder: builder}
 }
 
 // NewUnaryServerInterceptorProvider wraps a builder as unary server provider.
-func NewUnaryServerInterceptorProvider(name string, builder UnaryServerIntBuilder) UnaryServerInterceptorProvider {
+func NewUnaryServerInterceptorProvider(
+	name string,
+	builder UnaryServerIntBuilder,
+) UnaryServerInterceptorProvider {
 	return unaryServerProvider{name: name, builder: builder}
 }
 
 // NewStreamServerInterceptorProvider wraps a builder as stream server provider.
-func NewStreamServerInterceptorProvider(name string, builder StreamServerIntBuilder) StreamServerInterceptorProvider {
+func NewStreamServerInterceptorProvider(
+	name string,
+	builder StreamServerIntBuilder,
+) StreamServerInterceptorProvider {
 	return streamServerProvider{name: name, builder: builder}
 }
 

@@ -30,15 +30,21 @@ import (
 
 // Import path constants used to qualify identifiers in generated code.
 const (
-	httpPkg        = protogen.GoImportPath("net/http")
-	ctxPkg         = protogen.GoImportPath("context")
-	ioPkg          = protogen.GoImportPath("io")
-	marshalerPkg   = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v3/remote/marshaler")
+	httpPkg      = protogen.GoImportPath("net/http")
+	ctxPkg       = protogen.GoImportPath("context")
+	ioPkg        = protogen.GoImportPath("io")
+	marshalerPkg = protogen.GoImportPath(
+		"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler",
+	)
 	statusPkg      = protogen.GoImportPath("github.com/codesjoy/pkg/basic/xerror")
 	interceptorPkg = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v3/rpc/interceptor")
-	restPkg        = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v3/server/rest")
-	svrPkg         = protogen.GoImportPath("github.com/codesjoy/yggdrasil/v3/server")
-	codePkg        = protogen.GoImportPath("google.golang.org/genproto/googleapis/rpc/code")
+	restPkg        = protogen.GoImportPath(
+		"github.com/codesjoy/yggdrasil/v3/transport/gateway/rest",
+	)
+	svrPkg = protogen.GoImportPath(
+		"github.com/codesjoy/yggdrasil/v3/transport/runtime/server",
+	)
+	codePkg = protogen.GoImportPath("google.golang.org/genproto/googleapis/rpc/code")
 )
 
 // methodSets tracks the per-method-name counter used to disambiguate overloaded
@@ -83,7 +89,7 @@ func generateFileContent(
 ) error {
 	g.P("// This is a compile-time assertion to ensure that this generated file")
 	g.P("// is compatible with the yggdrasil package it is being compiled against.")
-	g.P("var _ = new(", marshalerPkg.Ident("ProtoMarshaller"), ")")
+	g.P("var _ = new(", marshalerPkg.Ident("ProtoMarshaler"), ")")
 	g.P("var _ = ", ioPkg.Ident("EOF"))
 
 	g.P()

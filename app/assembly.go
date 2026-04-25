@@ -23,7 +23,7 @@ import (
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 	"github.com/codesjoy/yggdrasil/v3/module"
-	"github.com/codesjoy/yggdrasil/v3/server"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
 
 type preparedAssembly struct {
@@ -88,7 +88,10 @@ func effectiveResolved(result *yassembly.Result, fallback settings.Resolved) set
 	return result.EffectiveResolved
 }
 
-func selectedCapabilityBindings(result *yassembly.Result, fallback settings.Resolved) map[string][]string {
+func selectedCapabilityBindings(
+	result *yassembly.Result,
+	fallback settings.Resolved,
+) map[string][]string {
 	if result == nil {
 		return cloneCapabilityBindings(fallback.CapabilityBindings)
 	}
@@ -383,7 +386,9 @@ func (a *App) assemblyDiagnostics() assemblyDiagnostics {
 		for key, items := range a.lastPlanResult.DefaultCandidates {
 			diag.DefaultCandidates[key] = append([]yassembly.DefaultCandidate(nil), items...)
 		}
-		diag.MatchedAutoRules = append([]yassembly.MatchedAutoRule(nil), a.lastPlanResult.MatchedAutoRules...)
+		diag.MatchedAutoRules = append(
+			[]yassembly.MatchedAutoRule(nil),
+			a.lastPlanResult.MatchedAutoRules...)
 		diag.BusinessInputPaths = append([]string(nil), a.lastPlanResult.BusinessInputPaths...)
 		for key, value := range a.lastPlanResult.AffectedPathsByDomain {
 			diag.AffectedPathsByDomain[key] = append([]string(nil), value...)

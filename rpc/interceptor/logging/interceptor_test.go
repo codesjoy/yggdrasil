@@ -764,3 +764,66 @@ func BenchmarkUnaryClientInterceptor(b *testing.B) {
 		_ = l.UnaryClientInterceptor(ctx, method, req, reply, invoker)
 	}
 }
+
+func TestBuiltinUnaryClientProviders(t *testing.T) {
+	providers := BuiltinUnaryClientProviders()
+	assert.Len(t, providers, 2)
+	assert.Equal(t, "logging", providers[0].Name())
+	assert.Equal(t, "logger", providers[1].Name())
+}
+
+func TestBuiltinStreamClientProviders(t *testing.T) {
+	providers := BuiltinStreamClientProviders()
+	assert.Len(t, providers, 2)
+	assert.Equal(t, "logging", providers[0].Name())
+	assert.Equal(t, "logger", providers[1].Name())
+}
+
+func TestBuiltinUnaryServerProviders(t *testing.T) {
+	providers := BuiltinUnaryServerProviders()
+	assert.Len(t, providers, 2)
+	assert.Equal(t, "logging", providers[0].Name())
+	assert.Equal(t, "logger", providers[1].Name())
+}
+
+func TestBuiltinStreamServerProviders(t *testing.T) {
+	providers := BuiltinStreamServerProviders()
+	assert.Len(t, providers, 2)
+	assert.Equal(t, "logging", providers[0].Name())
+	assert.Equal(t, "logger", providers[1].Name())
+}
+
+func TestBuiltinProvidersWithConfig(t *testing.T) {
+	t.Run("unary client with config", func(t *testing.T) {
+		providers := BuiltinUnaryClientProvidersWithConfig(nil)
+		assert.Len(t, providers, 2)
+		for _, p := range providers {
+			ic := p.New("svc")
+			assert.NotNil(t, ic)
+		}
+	})
+	t.Run("stream client with config", func(t *testing.T) {
+		providers := BuiltinStreamClientProvidersWithConfig(nil)
+		assert.Len(t, providers, 2)
+		for _, p := range providers {
+			ic := p.New("svc")
+			assert.NotNil(t, ic)
+		}
+	})
+	t.Run("unary server with config", func(t *testing.T) {
+		providers := BuiltinUnaryServerProvidersWithConfig(nil)
+		assert.Len(t, providers, 2)
+		for _, p := range providers {
+			ic := p.New()
+			assert.NotNil(t, ic)
+		}
+	})
+	t.Run("stream server with config", func(t *testing.T) {
+		providers := BuiltinStreamServerProvidersWithConfig(nil)
+		assert.Len(t, providers, 2)
+		for _, p := range providers {
+			ic := p.New()
+			assert.NotNil(t, ic)
+		}
+	})
+}

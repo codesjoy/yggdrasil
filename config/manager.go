@@ -28,6 +28,7 @@ import (
 // Priority defines layer precedence.
 type Priority uint8
 
+// Layer priority levels, from lowest to highest precedence.
 const (
 	PriorityDefaults Priority = iota
 	PriorityFile
@@ -233,7 +234,10 @@ func (m *Manager) replaceLayerData(name string, data map[string]any) {
 	m.dispatch(notify)
 }
 
-func (m *Manager) commitLayer(name string, next layer) (source.Source, chan struct{}, []notification) {
+func (m *Manager) commitLayer(
+	name string,
+	next layer,
+) (source.Source, chan struct{}, []notification) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {

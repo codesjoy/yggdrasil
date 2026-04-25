@@ -165,7 +165,9 @@ func main() {
 				},
 			}, nil
 		},
-		yggdrasil.WithAppName(fmt.Sprintf("github.com.codesjoy.yggdrasil.example.advanced.load-balancing.%d", port)),
+		yggdrasil.WithAppName(
+			fmt.Sprintf("github.com.codesjoy.yggdrasil.example.advanced.load-balancing.%d", port),
+		),
 	)
 	if err != nil {
 		os.Exit(1)

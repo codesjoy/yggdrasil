@@ -40,7 +40,10 @@ func ValidateV3RootShape(raw map[string]any) error {
 			continue
 		}
 		if hasYggdrasil {
-			return fmt.Errorf("legacy top-level key %q is not allowed with yggdrasil.* v3 config", key)
+			return fmt.Errorf(
+				"legacy top-level key %q is not allowed with yggdrasil.* v3 config",
+				key,
+			)
 		}
 		return fmt.Errorf("legacy top-level key %q is not allowed; use yggdrasil.%s", key, key)
 	}

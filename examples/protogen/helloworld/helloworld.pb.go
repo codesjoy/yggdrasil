@@ -561,6 +561,7 @@ var (
 		), // 9: codesjoy.yggdrasil.example.proto.helloword.SayHelloServerStreamResponse
 	}
 )
+
 var file_helloworld_helloworld_proto_depIdxs = []int32{
 	0, // 0: codesjoy.yggdrasil.example.proto.helloword.GreeterService.SayHello:input_type -> codesjoy.yggdrasil.example.proto.helloword.SayHelloRequest
 	2, // 1: codesjoy.yggdrasil.example.proto.helloword.GreeterService.SayError:input_type -> codesjoy.yggdrasil.example.proto.helloword.SayErrorRequest

@@ -76,6 +76,7 @@ type ReloadReporter interface {
 // ReloadPhase is the staged reload phase.
 type ReloadPhase string
 
+// Reload phases for module hot-reload state machine.
 const (
 	ReloadPhaseIdle       ReloadPhase = "idle"
 	ReloadPhasePreparing  ReloadPhase = "preparing"
@@ -87,6 +88,7 @@ const (
 // ReloadFailedStage marks the failed stage in one reload cycle.
 type ReloadFailedStage string
 
+// Reload failed stages identifying which phase failed.
 const (
 	ReloadFailedStageNone     ReloadFailedStage = ""
 	ReloadFailedStagePrepare  ReloadFailedStage = "prepare"

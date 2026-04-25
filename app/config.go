@@ -157,15 +157,6 @@ func loadConfigSources(opts *options) error {
 	return loadLayersAndTrack(opts, opts.configSources, "option")
 }
 
-func loadSourcesAndTrack(opts *options, sources []source.Source, priority config.Priority, scope string) error {
-	for i, item := range sources {
-		if err := loadConfigLayer(opts, fmt.Sprintf("%s:%d", scope, i), priority, item, scope, i); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func loadLayersAndTrack(opts *options, layers []configLayerSource, scope string) error {
 	for i, item := range layers {
 		if err := loadConfigLayer(opts, item.Name, item.Priority, item.Source, scope, i); err != nil {

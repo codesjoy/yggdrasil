@@ -43,12 +43,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	cli, err := app.NewClient(context.Background(), "github.com.codesjoy.yggdrasil.example.protogen.error-handling")
+	cli, err := app.NewClient(
+		context.Background(),
+		"github.com.codesjoy.yggdrasil.example.protogen.error-handling",
+	)
 	if err != nil {
 		slog.Error("failed to create client", slog.Any("error", err))
 		os.Exit(1)
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	client := errorhandlingpb.NewLibraryServiceClient(cli)
 	ctx := context.Background()

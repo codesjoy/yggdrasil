@@ -1015,6 +1015,7 @@ var (
 		(*emptypb.Empty)(nil),         // 16: google.protobuf.Empty
 	}
 )
+
 var file_library_v1_library_proto_depIdxs = []int32{
 	1,  // 0: codesjoy.yggdrasil.example.proto.library.v1.CreateShelfRequest.shelf:type_name -> codesjoy.yggdrasil.example.proto.library.v1.Shelf
 	1,  // 1: codesjoy.yggdrasil.example.proto.library.v1.ListShelvesResponse.shelves:type_name -> codesjoy.yggdrasil.example.proto.library.v1.Shelf

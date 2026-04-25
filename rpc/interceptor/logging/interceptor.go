@@ -50,15 +50,23 @@ func BuiltinUnaryClientProviders() []interceptor.UnaryClientInterceptorProvider 
 }
 
 // BuiltinUnaryClientProvidersWithConfig returns built-in unary client interceptor providers bound to explicit config.
-func BuiltinUnaryClientProvidersWithConfig(source any) []interceptor.UnaryClientInterceptorProvider {
+func BuiltinUnaryClientProvidersWithConfig(
+	source any,
+) []interceptor.UnaryClientInterceptorProvider {
 	loggingCfg := mustLoadConfig(source)
 	names := providerNames()
 	out := make([]interceptor.UnaryClientInterceptorProvider, 0, len(names))
 	for _, name := range names {
 		l := &logging{cfg: loggingCfg}
-		out = append(out, interceptor.NewUnaryClientInterceptorProvider(name, func(string) interceptor.UnaryClientInterceptor {
-			return l.UnaryClientInterceptor
-		}))
+		out = append(
+			out,
+			interceptor.NewUnaryClientInterceptorProvider(
+				name,
+				func(string) interceptor.UnaryClientInterceptor {
+					return l.UnaryClientInterceptor
+				},
+			),
+		)
 	}
 	return out
 }
@@ -69,15 +77,23 @@ func BuiltinStreamClientProviders() []interceptor.StreamClientInterceptorProvide
 }
 
 // BuiltinStreamClientProvidersWithConfig returns built-in stream client interceptor providers bound to explicit config.
-func BuiltinStreamClientProvidersWithConfig(source any) []interceptor.StreamClientInterceptorProvider {
+func BuiltinStreamClientProvidersWithConfig(
+	source any,
+) []interceptor.StreamClientInterceptorProvider {
 	loggingCfg := mustLoadConfig(source)
 	names := providerNames()
 	out := make([]interceptor.StreamClientInterceptorProvider, 0, len(names))
 	for _, name := range names {
 		l := &logging{cfg: loggingCfg}
-		out = append(out, interceptor.NewStreamClientInterceptorProvider(name, func(string) interceptor.StreamClientInterceptor {
-			return l.StreamClientInterceptor
-		}))
+		out = append(
+			out,
+			interceptor.NewStreamClientInterceptorProvider(
+				name,
+				func(string) interceptor.StreamClientInterceptor {
+					return l.StreamClientInterceptor
+				},
+			),
+		)
 	}
 	return out
 }
@@ -88,15 +104,23 @@ func BuiltinUnaryServerProviders() []interceptor.UnaryServerInterceptorProvider 
 }
 
 // BuiltinUnaryServerProvidersWithConfig returns built-in unary server interceptor providers bound to explicit config.
-func BuiltinUnaryServerProvidersWithConfig(source any) []interceptor.UnaryServerInterceptorProvider {
+func BuiltinUnaryServerProvidersWithConfig(
+	source any,
+) []interceptor.UnaryServerInterceptorProvider {
 	loggingCfg := mustLoadConfig(source)
 	names := providerNames()
 	out := make([]interceptor.UnaryServerInterceptorProvider, 0, len(names))
 	for _, name := range names {
 		l := &logging{cfg: loggingCfg}
-		out = append(out, interceptor.NewUnaryServerInterceptorProvider(name, func() interceptor.UnaryServerInterceptor {
-			return l.UnaryServerInterceptor
-		}))
+		out = append(
+			out,
+			interceptor.NewUnaryServerInterceptorProvider(
+				name,
+				func() interceptor.UnaryServerInterceptor {
+					return l.UnaryServerInterceptor
+				},
+			),
+		)
 	}
 	return out
 }
@@ -107,15 +131,23 @@ func BuiltinStreamServerProviders() []interceptor.StreamServerInterceptorProvide
 }
 
 // BuiltinStreamServerProvidersWithConfig returns built-in stream server interceptor providers bound to explicit config.
-func BuiltinStreamServerProvidersWithConfig(source any) []interceptor.StreamServerInterceptorProvider {
+func BuiltinStreamServerProvidersWithConfig(
+	source any,
+) []interceptor.StreamServerInterceptorProvider {
 	loggingCfg := mustLoadConfig(source)
 	names := providerNames()
 	out := make([]interceptor.StreamServerInterceptorProvider, 0, len(names))
 	for _, name := range names {
 		l := &logging{cfg: loggingCfg}
-		out = append(out, interceptor.NewStreamServerInterceptorProvider(name, func() interceptor.StreamServerInterceptor {
-			return l.StreamServerInterceptor
-		}))
+		out = append(
+			out,
+			interceptor.NewStreamServerInterceptorProvider(
+				name,
+				func() interceptor.StreamServerInterceptor {
+					return l.StreamServerInterceptor
+				},
+			),
+		)
 	}
 	return out
 }

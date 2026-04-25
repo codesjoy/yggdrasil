@@ -26,7 +26,7 @@ MODULE_INCLUDE ?=
 MODULE_EXCLUDE ?=
 
 # Example module filtering (default excludes examples unless explicitly opted in)
-EXAMPLE_MODULE_PATTERNS ?= example example/% %/example %/example/% %/examples %/examples/%
+EXAMPLE_MODULE_PATTERNS ?= example example/% %/example %/examples/% %/examples %/examples/%
 INCLUDE_EXAMPLES ?= 0
 
 # Track whether MODULES was explicitly set by caller.

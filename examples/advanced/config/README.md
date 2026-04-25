@@ -30,7 +30,7 @@
 
 ## 示例代码
 
-示例主程序在 [main.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/example/advanced/config/main.go)。
+示例主程序在 [main.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/advanced/config/main.go)。
 
 核心加载逻辑：
 

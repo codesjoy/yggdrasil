@@ -31,9 +31,12 @@ func TestDefaultSetDefaultBindCurrent(t *testing.T) {
 	require.Equal(t, prev, old)
 	require.Equal(t, manager, Default())
 
-	require.NoError(t, manager.LoadLayer("defaults", PriorityDefaults, memory.NewSource("defaults", map[string]any{
-		"app": map[string]any{"port": 8088},
-	})))
+	require.NoError(
+		t,
+		manager.LoadLayer("defaults", PriorityDefaults, memory.NewSource("defaults", map[string]any{
+			"app": map[string]any{"port": 8088},
+		})),
+	)
 	section := Bind[struct {
 		Port int `mapstructure:"port"`
 	}](nil, "app")

@@ -92,9 +92,12 @@ func TestLoaderLoadFileSuccessAndDisabledSourceSkipped(t *testing.T) {
 
 func TestLoaderLoadFileBuildAndLoadErrors(t *testing.T) {
 	buildErrRegistry := NewRegistry()
-	buildErrRegistry.Register("custom", func(spec SourceSpec) (source.Source, config.Priority, error) {
-		return nil, 0, errors.New("build failed")
-	})
+	buildErrRegistry.Register(
+		"custom",
+		func(spec SourceSpec) (source.Source, config.Priority, error) {
+			return nil, 0, errors.New("build failed")
+		},
+	)
 	loader := NewLoader(buildErrRegistry)
 	manager := config.NewManager()
 
@@ -113,9 +116,12 @@ func TestLoaderLoadFileBuildAndLoadErrors(t *testing.T) {
 	require.Contains(t, err.Error(), "build failed")
 
 	loadErrRegistry := NewRegistry()
-	loadErrRegistry.Register("custom", func(spec SourceSpec) (source.Source, config.Priority, error) {
-		return &failingSource{err: errors.New("read failed")}, config.PriorityFile, nil
-	})
+	loadErrRegistry.Register(
+		"custom",
+		func(spec SourceSpec) (source.Source, config.Priority, error) {
+			return &failingSource{err: errors.New("read failed")}, config.PriorityFile, nil
+		},
+	)
 	loader = NewLoader(loadErrRegistry)
 
 	loadErrPath := filepath.Join(dir, "load.yaml")

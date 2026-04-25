@@ -12,15 +12,15 @@ import (
 	code "google.golang.org/genproto/googleapis/rpc/code"
 
 	interceptor "github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
-	marshaler "github.com/codesjoy/yggdrasil/v3/remote/marshaler"
-	server "github.com/codesjoy/yggdrasil/v3/server"
-	rest "github.com/codesjoy/yggdrasil/v3/server/rest"
+	rest "github.com/codesjoy/yggdrasil/v3/transport/gateway/rest"
+	server "github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
+	marshaler "github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
 )
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the yggdrasil package it is being compiled against.
 var (
-	_ = new(marshaler.ProtoMarshaller)
+	_ = new(marshaler.ProtoMarshaler)
 	_ = io.EOF
 )
 

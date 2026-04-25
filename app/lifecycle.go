@@ -28,9 +28,9 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/codesjoy/yggdrasil/v3/admin/governor"
-	"github.com/codesjoy/yggdrasil/v3/internal/defers"
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
-	"github.com/codesjoy/yggdrasil/v3/server"
+	"github.com/codesjoy/yggdrasil/v3/internal/defers"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
 
 // InternalServer is managed by the App lifecycle alongside the main server.
@@ -266,7 +266,10 @@ func (runner *lifecycleRunner) newStopAsyncOnFailure() func() {
 		stopOnce.Do(func() {
 			go func() {
 				if err := runner.Stop(); err != nil {
-					slog.Error("fault to stop application after serve failure", slog.Any("error", err))
+					slog.Error(
+						"fault to stop application after serve failure",
+						slog.Any("error", err),
+					)
 				}
 			}()
 		})
@@ -358,7 +361,9 @@ func stopManagedComponent(
 ) error {
 	slog.Info("stopping "+name, attrsToAny(attrs...)...)
 	if err := stop(ctx); err != nil {
-		errAttrs := append(attrs, slog.Any("error", err))
+		errAttrs := make([]slog.Attr, len(attrs), len(attrs)+1)
+		copy(errAttrs, attrs)
+		errAttrs = append(errAttrs, slog.Any("error", err))
 		slog.Error("failed to stop "+name, attrsToAny(errAttrs...)...)
 		return err
 	}
@@ -380,7 +385,12 @@ func (runner *lifecycleRunner) stopServers(ctx context.Context) error {
 		index := index
 		internalServer := item
 		group.Go(func() error {
-			return stopManagedComponent(ctx, "internal server", internalServer.Stop, slog.Int("index", index))
+			return stopManagedComponent(
+				ctx,
+				"internal server",
+				internalServer.Stop,
+				slog.Int("index", index),
+			)
 		})
 	}
 

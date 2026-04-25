@@ -21,9 +21,10 @@ import (
 	"strings"
 
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
-	"github.com/codesjoy/yggdrasil/v3/server"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
 
+// ImplementsHandler checks whether impl satisfies the handlerType interface.
 func ImplementsHandler(handlerType, impl any) bool {
 	if handlerType == nil || impl == nil {
 		return false
@@ -36,6 +37,7 @@ func ImplementsHandler(handlerType, impl any) bool {
 	return got.Implements(want.Elem())
 }
 
+// BuildRESTRoutePrefix joins the prefix list into a single route prefix.
 func BuildRESTRoutePrefix(prefixes []string) string {
 	if len(prefixes) == 0 || strings.TrimSpace(prefixes[0]) == "" {
 		return ""
@@ -43,10 +45,12 @@ func BuildRESTRoutePrefix(prefixes []string) string {
 	return "/" + strings.TrimPrefix(prefixes[0], "/")
 }
 
+// RouteKey builds a unique route key from method and path.
 func RouteKey(method, path string) string {
 	return strings.ToUpper(method) + " " + path
 }
 
+// NormalizeRawHTTPBinding fills a RestRawHandlerDesc from loose parts, validating inputs.
 func NormalizeRawHTTPBinding(
 	desc *server.RestRawHandlerDesc,
 	method, path string,
@@ -74,6 +78,7 @@ func NormalizeRawHTTPBinding(
 	}, nil
 }
 
+// NormalizeRawHTTPHandler adapts handler into http.HandlerFunc if possible.
 func NormalizeRawHTTPHandler(handler any) (http.HandlerFunc, bool) {
 	switch item := handler.(type) {
 	case nil:
@@ -87,14 +92,23 @@ func NormalizeRawHTTPHandler(handler any) (http.HandlerFunc, bool) {
 	}
 }
 
+// ValidationError creates a structured install validation error.
 func ValidationError(message string, cause error) error {
 	return yassembly.NewError(yassembly.ErrInstallValidationFailed, "install", message, cause, nil)
 }
 
+// ConflictError creates a structured install conflict error.
 func ConflictError(message string, cause error) error {
-	return yassembly.NewError(yassembly.ErrInstallRegistrationConflict, "install", message, cause, nil)
+	return yassembly.NewError(
+		yassembly.ErrInstallRegistrationConflict,
+		"install",
+		message,
+		cause,
+		nil,
+	)
 }
 
+// WrapError wraps an install error into a structured assembly error.
 func WrapError(err error) error {
 	if err == nil {
 		return nil

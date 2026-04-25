@@ -221,12 +221,20 @@ func TestDryRunRejectsAmbiguousDefault(t *testing.T) {
 		name: "tracer.providers",
 		capabilities: []module.Capability{
 			{
-				Spec:  module.CapabilitySpec{Name: capTracer, Cardinality: module.NamedOne, Type: reflect.TypeOf(struct{}{})},
+				Spec: module.CapabilitySpec{
+					Name:        capTracer,
+					Cardinality: module.NamedOne,
+					Type:        reflect.TypeOf(struct{}{}),
+				},
 				Name:  "trace-a",
 				Value: struct{}{},
 			},
 			{
-				Spec:  module.CapabilitySpec{Name: capTracer, Cardinality: module.NamedOne, Type: reflect.TypeOf(struct{}{})},
+				Spec: module.CapabilitySpec{
+					Name:        capTracer,
+					Cardinality: module.NamedOne,
+					Type:        reflect.TypeOf(struct{}{}),
+				},
 				Name:  "trace-b",
 				Value: struct{}{},
 			},
@@ -255,7 +263,11 @@ func TestDryRunSelectsAutoModulesAndDefaultPolicyDeterministically(t *testing.T)
 				name: "trace.high",
 				capabilities: []module.Capability{
 					{
-						Spec:  module.CapabilitySpec{Name: capTracer, Cardinality: module.NamedOne, Type: reflect.TypeOf(struct{}{})},
+						Spec: module.CapabilitySpec{
+							Name:        capTracer,
+							Cardinality: module.NamedOne,
+							Type:        reflect.TypeOf(struct{}{}),
+						},
 						Name:  "trace-high",
 						Value: struct{}{},
 					},
@@ -263,10 +275,17 @@ func TestDryRunSelectsAutoModulesAndDefaultPolicyDeterministically(t *testing.T)
 			},
 			autoSpec: module.AutoSpec{
 				Provides: []module.CapabilitySpec{
-					{Name: capTracer, Cardinality: module.NamedOne, Type: reflect.TypeOf(struct{}{})},
+					{
+						Name:        capTracer,
+						Cardinality: module.NamedOne,
+						Type:        reflect.TypeOf(struct{}{}),
+					},
 				},
 				AutoRules: []module.AutoRule{
-					testAutoRule{path: "yggdrasil.telemetry.stats.server", description: "telemetry stats enabled"},
+					testAutoRule{
+						path:        "yggdrasil.telemetry.stats.server",
+						description: "telemetry stats enabled",
+					},
 				},
 				DefaultPolicy: &module.DefaultPolicy{Score: 20},
 			},
@@ -276,7 +295,11 @@ func TestDryRunSelectsAutoModulesAndDefaultPolicyDeterministically(t *testing.T)
 				name: "trace.low",
 				capabilities: []module.Capability{
 					{
-						Spec:  module.CapabilitySpec{Name: capTracer, Cardinality: module.NamedOne, Type: reflect.TypeOf(struct{}{})},
+						Spec: module.CapabilitySpec{
+							Name:        capTracer,
+							Cardinality: module.NamedOne,
+							Type:        reflect.TypeOf(struct{}{}),
+						},
 						Name:  "trace-low",
 						Value: struct{}{},
 					},
@@ -284,10 +307,17 @@ func TestDryRunSelectsAutoModulesAndDefaultPolicyDeterministically(t *testing.T)
 			},
 			autoSpec: module.AutoSpec{
 				Provides: []module.CapabilitySpec{
-					{Name: capTracer, Cardinality: module.NamedOne, Type: reflect.TypeOf(struct{}{})},
+					{
+						Name:        capTracer,
+						Cardinality: module.NamedOne,
+						Type:        reflect.TypeOf(struct{}{}),
+					},
 				},
 				AutoRules: []module.AutoRule{
-					testAutoRule{path: "yggdrasil.telemetry.stats.server", description: "telemetry stats enabled"},
+					testAutoRule{
+						path:        "yggdrasil.telemetry.stats.server",
+						description: "telemetry stats enabled",
+					},
 				},
 				DefaultPolicy: &module.DefaultPolicy{Score: 10},
 			},
@@ -319,7 +349,11 @@ func TestDryRunRejectsInvalidAutoSpecAndAmbiguousAutoDefault(t *testing.T) {
 			name: "broken.auto",
 			capabilities: []module.Capability{
 				{
-					Spec:  module.CapabilitySpec{Name: capMeter, Cardinality: module.NamedOne, Type: reflect.TypeOf(struct{}{})},
+					Spec: module.CapabilitySpec{
+						Name:        capMeter,
+						Cardinality: module.NamedOne,
+						Type:        reflect.TypeOf(struct{}{}),
+					},
 					Name:  "meter",
 					Value: struct{}{},
 				},
@@ -330,7 +364,10 @@ func TestDryRunRejectsInvalidAutoSpecAndAmbiguousAutoDefault(t *testing.T) {
 				{Name: capTracer, Cardinality: module.NamedOne, Type: reflect.TypeOf(struct{}{})},
 			},
 			AutoRules: []module.AutoRule{
-				testAutoRule{path: "yggdrasil.telemetry.stats.server", description: "telemetry stats enabled"},
+				testAutoRule{
+					path:        "yggdrasil.telemetry.stats.server",
+					description: "telemetry stats enabled",
+				},
 			},
 		},
 	})
@@ -359,7 +396,11 @@ func TestDryRunRejectsInvalidAutoSpecAndAmbiguousAutoDefault(t *testing.T) {
 				name: "trace.a",
 				capabilities: []module.Capability{
 					{
-						Spec:  module.CapabilitySpec{Name: capTracer, Cardinality: module.NamedOne, Type: reflect.TypeOf(struct{}{})},
+						Spec: module.CapabilitySpec{
+							Name:        capTracer,
+							Cardinality: module.NamedOne,
+							Type:        reflect.TypeOf(struct{}{}),
+						},
 						Name:  "trace-a",
 						Value: struct{}{},
 					},
@@ -367,10 +408,17 @@ func TestDryRunRejectsInvalidAutoSpecAndAmbiguousAutoDefault(t *testing.T) {
 			},
 			autoSpec: module.AutoSpec{
 				Provides: []module.CapabilitySpec{
-					{Name: capTracer, Cardinality: module.NamedOne, Type: reflect.TypeOf(struct{}{})},
+					{
+						Name:        capTracer,
+						Cardinality: module.NamedOne,
+						Type:        reflect.TypeOf(struct{}{}),
+					},
 				},
 				AutoRules: []module.AutoRule{
-					testAutoRule{path: "yggdrasil.telemetry.stats.server", description: "telemetry stats enabled"},
+					testAutoRule{
+						path:        "yggdrasil.telemetry.stats.server",
+						description: "telemetry stats enabled",
+					},
 				},
 				DefaultPolicy: &module.DefaultPolicy{Score: 10},
 			},
@@ -380,7 +428,11 @@ func TestDryRunRejectsInvalidAutoSpecAndAmbiguousAutoDefault(t *testing.T) {
 				name: "trace.b",
 				capabilities: []module.Capability{
 					{
-						Spec:  module.CapabilitySpec{Name: capTracer, Cardinality: module.NamedOne, Type: reflect.TypeOf(struct{}{})},
+						Spec: module.CapabilitySpec{
+							Name:        capTracer,
+							Cardinality: module.NamedOne,
+							Type:        reflect.TypeOf(struct{}{}),
+						},
 						Name:  "trace-b",
 						Value: struct{}{},
 					},
@@ -388,10 +440,17 @@ func TestDryRunRejectsInvalidAutoSpecAndAmbiguousAutoDefault(t *testing.T) {
 			},
 			autoSpec: module.AutoSpec{
 				Provides: []module.CapabilitySpec{
-					{Name: capTracer, Cardinality: module.NamedOne, Type: reflect.TypeOf(struct{}{})},
+					{
+						Name:        capTracer,
+						Cardinality: module.NamedOne,
+						Type:        reflect.TypeOf(struct{}{}),
+					},
 				},
 				AutoRules: []module.AutoRule{
-					testAutoRule{path: "yggdrasil.telemetry.stats.server", description: "telemetry stats enabled"},
+					testAutoRule{
+						path:        "yggdrasil.telemetry.stats.server",
+						description: "telemetry stats enabled",
+					},
 				},
 				DefaultPolicy: &module.DefaultPolicy{Score: 10},
 			},

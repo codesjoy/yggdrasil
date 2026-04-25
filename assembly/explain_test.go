@@ -36,7 +36,12 @@ func TestHashAndDiffAreCanonical(t *testing.T) {
 			chainUnaryServer: {Items: []string{"logging"}},
 		},
 		Decisions: []Decision{
-			{Kind: "override.force_default", Target: capLoggerHandler, Value: "text", Source: "code_override"},
+			{
+				Kind:   "override.force_default",
+				Target: capLoggerHandler,
+				Value:  "text",
+				Source: "code_override",
+			},
 			{Kind: "mode", Target: "yggdrasil.mode", Value: "dev", Source: "config"},
 		},
 	}
@@ -56,7 +61,12 @@ func TestHashAndDiffAreCanonical(t *testing.T) {
 		},
 		Decisions: []Decision{
 			{Kind: "mode", Target: "yggdrasil.mode", Value: "dev", Source: "config"},
-			{Kind: "override.force_default", Target: capLoggerHandler, Value: "text", Source: "code_override"},
+			{
+				Kind:   "override.force_default",
+				Target: capLoggerHandler,
+				Value:  "text",
+				Source: "code_override",
+			},
 		},
 	}
 
@@ -78,10 +88,19 @@ func TestHashAndDiffAreCanonical(t *testing.T) {
 			capLoggerHandler: "json",
 		},
 		Chains: map[string]Chain{
-			chainUnaryServer: {Template: "default-observable", Version: "v1", Items: []string{"logging"}},
+			chainUnaryServer: {
+				Template: "default-observable",
+				Version:  "v1",
+				Items:    []string{"logging"},
+			},
 		},
 		Decisions: []Decision{
-			{Kind: "override.force_default", Target: capLoggerHandler, Value: "json", Source: "code_override"},
+			{
+				Kind:   "override.force_default",
+				Target: capLoggerHandler,
+				Value:  "json",
+				Source: "code_override",
+			},
 		},
 	})
 	require.NoError(t, err)

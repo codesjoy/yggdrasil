@@ -84,7 +84,11 @@ func (m testExtraModule) Capabilities() []module.Capability {
 }
 
 func TestWithModulesRegistersBusinessModules(t *testing.T) {
-	app := newInitializedApp(t, "with-modules", WithModules(testExtraModule{name: "test.extra.module"}))
+	app := newInitializedApp(
+		t,
+		"with-modules",
+		WithModules(testExtraModule{name: "test.extra.module"}),
+	)
 	diag := app.hub.Diagnostics()
 	names := make([]string, 0, len(diag.Topology))
 	names = append(names, diag.Topology...)
@@ -126,7 +130,14 @@ func TestReloadUpdatesCapabilityBindingsAndMarksRestartRequired(t *testing.T) {
 	app.state = lifecycleStateRunning
 	app.mu.Unlock()
 
-	require.NoError(t, manager.LoadLayer("test", config.PriorityOverride, memory.NewSource("test", minimalV3Config("http"))))
+	require.NoError(
+		t,
+		manager.LoadLayer(
+			"test",
+			config.PriorityOverride,
+			memory.NewSource("test", minimalV3Config("http")),
+		),
+	)
 	require.NoError(t, app.Reload(context.Background()))
 
 	state := app.hub.ReloadState()

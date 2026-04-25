@@ -43,8 +43,10 @@ func BuiltinWriterBuilders() map[string]WriterBuilder {
 // WriterBuilder is the interface that wraps the Write method.
 type WriterBuilder func(name string) (io.Writer, error)
 
-var writerBuilder = make(map[string]WriterBuilder)
-var writerBuilderMu sync.RWMutex
+var (
+	writerBuilder   = make(map[string]WriterBuilder)
+	writerBuilderMu sync.RWMutex
+)
 
 // RegisterWriterBuilder registers a WriterBuilder for the given type.
 func RegisterWriterBuilder(typeName string, f WriterBuilder) {

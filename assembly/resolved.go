@@ -21,8 +21,8 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 	"github.com/codesjoy/yggdrasil/v3/observability/logger"
-	"github.com/codesjoy/yggdrasil/v3/remote/transport/grpc"
-	"github.com/codesjoy/yggdrasil/v3/remote/transport/rpchttp"
+	"github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc"
+	"github.com/codesjoy/yggdrasil/v3/transport/protocol/rpchttp"
 )
 
 func (p *planner) buildEffectiveResolved() (settings.Resolved, error) {
@@ -94,7 +94,9 @@ func applyClientChain(target *settings.Resolved, path string, chain Chain) {
 	switch path {
 	case chainUnaryClient:
 		target.OrderedExtensions.UnaryClient = append([]string(nil), chain.Items...)
-		target.Root.Yggdrasil.Clients.Defaults.Interceptors.Unary = append([]string(nil), chain.Items...)
+		target.Root.Yggdrasil.Clients.Defaults.Interceptors.Unary = append(
+			[]string(nil),
+			chain.Items...)
 		for name, cfg := range target.Clients.Services {
 			if len(cfg.Interceptors.Unary) != 0 {
 				continue
@@ -104,7 +106,9 @@ func applyClientChain(target *settings.Resolved, path string, chain Chain) {
 		}
 	case chainStreamClient:
 		target.OrderedExtensions.StreamClient = append([]string(nil), chain.Items...)
-		target.Root.Yggdrasil.Clients.Defaults.Interceptors.Stream = append([]string(nil), chain.Items...)
+		target.Root.Yggdrasil.Clients.Defaults.Interceptors.Stream = append(
+			[]string(nil),
+			chain.Items...)
 		for name, cfg := range target.Clients.Services {
 			if len(cfg.Interceptors.Stream) != 0 {
 				continue
@@ -149,28 +153,14 @@ func compileCapabilityBindings(resolved settings.Resolved) map[string][]string {
 	if len(statsNames) > 0 {
 		out[capStatsHandler] = statsNames
 	}
-	credentialNames := map[string]struct{}{}
-	if resolved.Transports.GRPC.Server.CredsProto != "" {
-		credentialNames[resolved.Transports.GRPC.Server.CredsProto] = struct{}{}
-	}
-	if resolved.Transports.GRPC.Client.Transport.CredsProto != "" {
-		credentialNames[resolved.Transports.GRPC.Client.Transport.CredsProto] = struct{}{}
-	}
-	for _, cfg := range resolved.Transports.GRPC.ClientServices {
-		if cfg.Transport.CredsProto != "" {
-			credentialNames[cfg.Transport.CredsProto] = struct{}{}
+	securityTypes := map[string]struct{}{}
+	for _, spec := range resolved.Transports.SecurityProfiles {
+		if spec.Type != "" {
+			securityTypes[spec.Type] = struct{}{}
 		}
 	}
-	for name := range resolved.Transports.GRPCCredentials {
-		credentialNames[name] = struct{}{}
-	}
-	for _, items := range resolved.Transports.GRPCServiceCredentials {
-		for name := range items {
-			credentialNames[name] = struct{}{}
-		}
-	}
-	if len(credentialNames) > 0 {
-		out[capCredentials] = sortedKeys(credentialNames)
+	if len(securityTypes) > 0 {
+		out[capSecurity] = sortedKeys(securityTypes)
 	}
 	if resolved.Transports.Rest != nil {
 		schemes := append([]string(nil), resolved.Transports.Rest.Marshaler.Support...)
@@ -193,7 +183,9 @@ func compileCapabilityBindings(resolved settings.Resolved) map[string][]string {
 	}
 	out[capClientTrans] = dedupStrings(clientProtocols)
 	out[capUnaryServer] = dedupStrings(append([]string(nil), resolved.Server.Interceptors.Unary...))
-	out[capStreamServer] = dedupStrings(append([]string(nil), resolved.Server.Interceptors.Stream...))
+	out[capStreamServer] = dedupStrings(
+		append([]string(nil), resolved.Server.Interceptors.Stream...),
+	)
 	var clientUnary []string
 	var clientStream []string
 	for _, cfg := range resolved.Clients.Services {

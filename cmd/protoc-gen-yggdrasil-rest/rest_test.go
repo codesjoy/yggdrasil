@@ -730,7 +730,7 @@ func TestGenerateFiles_OmitsRestImportWhenHelpersAreUnused(t *testing.T) {
 	assert.NoError(t, err)
 
 	output := generatedFileContent(t, gen, "test_rest.pb.go")
-	assert.NotContains(t, output, `"github.com/codesjoy/yggdrasil/v3/server/rest"`)
+	assert.NotContains(t, output, `"github.com/codesjoy/yggdrasil/v3/transport/gateway/rest"`)
 	assert.NotContains(t, output, `PopulateQueryParameters(`)
 	assert.NotContains(t, output, `PopulateFieldFromPath(`)
 }

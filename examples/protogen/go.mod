@@ -13,7 +13,6 @@ require (
 	google.golang.org/protobuf v1.36.11
 )
 
-
 require (
 	github.com/codesjoy/pkg/utils v0.0.0-20260227125603-faf7bfdf00a7 // indirect
 	github.com/creasty/defaults v1.8.0 // indirect

@@ -18,11 +18,10 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/codesjoy/yggdrasil/v3/client"
 	"github.com/codesjoy/yggdrasil/v3/internal/backoff"
-	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/transport/grpc"
-	rpchttp "github.com/codesjoy/yggdrasil/v3/remote/transport/rpchttp"
-	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
+	grpcprotocol "github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc"
+	rpchttp "github.com/codesjoy/yggdrasil/v3/transport/protocol/rpchttp"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/client"
 )
 
 func mergeClientServiceSettings(
@@ -47,21 +46,33 @@ func mergeClientServiceSettings(
 			out.Remote.Endpoints = slices.Clone(*overlay.Remote.Endpoints)
 		}
 		if overlay.Remote.Attributes != nil {
-			out.Remote.Attributes = mergeRemoteAttributes(base.Remote.Attributes, *overlay.Remote.Attributes)
+			out.Remote.Attributes = mergeRemoteAttributes(
+				base.Remote.Attributes,
+				*overlay.Remote.Attributes,
+			)
 		}
 	}
 	if overlay.Interceptors != nil {
 		if overlay.Interceptors.Unary != nil {
-			out.Interceptors.Unary = mergeInterceptorNames(base.Interceptors.Unary, *overlay.Interceptors.Unary)
+			out.Interceptors.Unary = mergeInterceptorNames(
+				base.Interceptors.Unary,
+				*overlay.Interceptors.Unary,
+			)
 		}
 		if overlay.Interceptors.Stream != nil {
-			out.Interceptors.Stream = mergeInterceptorNames(base.Interceptors.Stream, *overlay.Interceptors.Stream)
+			out.Interceptors.Stream = mergeInterceptorNames(
+				base.Interceptors.Stream,
+				*overlay.Interceptors.Stream,
+			)
 		}
 	}
 	return out
 }
 
-func mergeHTTPClientConfig(base rpchttp.ClientConfig, overlay HTTPClientTransport) rpchttp.ClientConfig {
+func mergeHTTPClientConfig(
+	base rpchttp.ClientConfig,
+	overlay HTTPClientTransport,
+) rpchttp.ClientConfig {
 	out := base
 	if overlay.Timeout != nil {
 		out.Timeout = *overlay.Timeout
@@ -69,10 +80,16 @@ func mergeHTTPClientConfig(base rpchttp.ClientConfig, overlay HTTPClientTranspor
 	if overlay.Marshaler != nil {
 		out.Marshaler = overlay.Marshaler
 	}
+	if overlay.SecurityProfile != nil {
+		out.SecurityProfile = *overlay.SecurityProfile
+	}
 	return out
 }
 
-func mergeGRPCClientConfig(base grpcprotocol.Config, overlay grpcClientConfigOverlay) grpcprotocol.Config {
+func mergeGRPCClientConfig(
+	base grpcprotocol.ClientConfig,
+	overlay grpcClientConfigOverlay,
+) grpcprotocol.ClientConfig {
 	out := base
 	if overlay.WaitConnTimeout != nil {
 		out.WaitConnTimeout = *overlay.WaitConnTimeout
@@ -102,13 +119,16 @@ func mergeGRPCClientConfig(base grpcprotocol.Config, overlay grpcClientConfigOve
 	return out
 }
 
-func mergeGRPCTransportConfig(base grpcprotocol.ClientTransportOptions, overlay grpcClientTransportOptionsOverlay) grpcprotocol.ClientTransportOptions {
+func mergeGRPCTransportConfig(
+	base grpcprotocol.ClientTransportOptions,
+	overlay grpcClientTransportOptionsOverlay,
+) grpcprotocol.ClientTransportOptions {
 	out := base
 	if overlay.UserAgent != nil {
 		out.UserAgent = *overlay.UserAgent
 	}
-	if overlay.CredsProto != nil {
-		out.CredsProto = *overlay.CredsProto
+	if overlay.SecurityProfile != nil {
+		out.SecurityProfile = *overlay.SecurityProfile
 	}
 	if overlay.Authority != nil {
 		out.Authority = *overlay.Authority
@@ -197,8 +217,4 @@ func dedupStrings(values []string) []string {
 		out = append(out, item)
 	}
 	return out
-}
-
-func cloneEndpoints(src []resolver.BaseEndpoint) []resolver.BaseEndpoint {
-	return slices.Clone(src)
 }

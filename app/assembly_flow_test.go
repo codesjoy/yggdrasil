@@ -30,8 +30,8 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 	"github.com/codesjoy/yggdrasil/v3/module"
-	"github.com/codesjoy/yggdrasil/v3/remote"
-	"github.com/codesjoy/yggdrasil/v3/server"
+	remote "github.com/codesjoy/yggdrasil/v3/transport"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
 
 type transportRecorder struct {
@@ -101,9 +101,12 @@ func (m testTransportModule) Capabilities() []module.Capability {
 		{
 			Spec: transportServerProviderCapabilitySpec,
 			Name: "test",
-			Value: remote.NewTransportServerProvider("test", func(remote.MethodHandle) (remote.Server, error) {
-				return m.recorder.buildServer(), nil
-			}),
+			Value: remote.NewTransportServerProvider(
+				"test",
+				func(remote.MethodHandle) (remote.Server, error) {
+					return m.recorder.buildServer(), nil
+				},
+			),
 		},
 	}
 }
@@ -191,33 +194,40 @@ func TestComposeAndInstallRegistersBindingsAndRejectsConflicts(t *testing.T) {
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })
 
 	require.NoError(t, app.Prepare(context.Background()))
-	require.NoError(t, app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
-		return &BusinessBundle{
-			RPCBindings: []RPCBinding{
-				{
-					ServiceName: testAssemblyServiceName,
-					Desc:        &testAssemblyRPCServiceDesc,
-					Impl:        &testAssemblyServiceImpl{},
+	require.NoError(
+		t,
+		app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
+			return &BusinessBundle{
+				RPCBindings: []RPCBinding{
+					{
+						ServiceName: testAssemblyServiceName,
+						Desc:        &testAssemblyRPCServiceDesc,
+						Impl:        &testAssemblyServiceImpl{},
+					},
 				},
-			},
-			RESTBindings: []RESTBinding{
-				{
-					Name: "library-rest",
-					Desc: &testAssemblyRESTServiceDesc,
-					Impl: &testAssemblyServiceImpl{},
+				RESTBindings: []RESTBinding{
+					{
+						Name: "library-rest",
+						Desc: &testAssemblyRESTServiceDesc,
+						Impl: &testAssemblyServiceImpl{},
+					},
 				},
-			},
-			RawHTTP: []RawHTTPBinding{
-				{
-					Method:  http.MethodGet,
-					Path:    "/healthz",
-					Handler: func(http.ResponseWriter, *http.Request) {},
+				RawHTTP: []RawHTTPBinding{
+					{
+						Method:  http.MethodGet,
+						Path:    "/healthz",
+						Handler: func(http.ResponseWriter, *http.Request) {},
+					},
 				},
-			},
-		}, nil
-	}))
+			}, nil
+		}),
+	)
 	require.Contains(t, app.installedRPCServices, testAssemblyServiceName)
-	require.Contains(t, app.installedHTTPRoutes, internalinstall.RouteKey(http.MethodGet, "/healthz"))
+	require.Contains(
+		t,
+		app.installedHTTPRoutes,
+		internalinstall.RouteKey(http.MethodGet, "/healthz"),
+	)
 
 	conflictApp, err := Open(
 		WithConfigManager(newTestManager(t, assemblyTestConfig(true))),
@@ -225,14 +235,27 @@ func TestComposeAndInstallRegistersBindingsAndRejectsConflicts(t *testing.T) {
 		WithModules(testTransportModule{recorder: newTransportRecorder()}),
 	)
 	require.NoError(t, err)
-	err = conflictApp.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
-		return &BusinessBundle{
-			RawHTTP: []RawHTTPBinding{
-				{Method: http.MethodGet, Path: "/duplicate", Handler: func(http.ResponseWriter, *http.Request) {}},
-				{Desc: &server.RestRawHandlerDesc{Method: http.MethodGet, Path: "/duplicate", Handler: func(http.ResponseWriter, *http.Request) {}}},
-			},
-		}, nil
-	})
+	err = conflictApp.ComposeAndInstall(
+		context.Background(),
+		func(Runtime) (*BusinessBundle, error) {
+			return &BusinessBundle{
+				RawHTTP: []RawHTTPBinding{
+					{
+						Method:  http.MethodGet,
+						Path:    "/duplicate",
+						Handler: func(http.ResponseWriter, *http.Request) {},
+					},
+					{
+						Desc: &server.RestRawHandlerDesc{
+							Method:  http.MethodGet,
+							Path:    "/duplicate",
+							Handler: func(http.ResponseWriter, *http.Request) {},
+						},
+					},
+				},
+			}, nil
+		},
+	)
 	require.ErrorContains(t, err, "already installed")
 	require.ErrorIs(t, conflictApp.Start(context.Background()), errRestartUnsupported)
 
@@ -267,17 +290,20 @@ func TestStartWaitStopWithPreparedBusinessBundle(t *testing.T) {
 		WithModules(testTransportModule{recorder: recorder}),
 	)
 	require.NoError(t, err)
-	require.NoError(t, app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
-		return &BusinessBundle{
-			RPCBindings: []RPCBinding{
-				{
-					ServiceName: testAssemblyServiceName,
-					Desc:        &testAssemblyRPCServiceDesc,
-					Impl:        &testAssemblyServiceImpl{},
+	require.NoError(
+		t,
+		app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
+			return &BusinessBundle{
+				RPCBindings: []RPCBinding{
+					{
+						ServiceName: testAssemblyServiceName,
+						Desc:        &testAssemblyRPCServiceDesc,
+						Impl:        &testAssemblyServiceImpl{},
+					},
 				},
-			},
-		}, nil
-	}))
+			}, nil
+		}),
+	)
 
 	startDone := make(chan error, 1)
 	go func() {
@@ -322,16 +348,19 @@ func TestRuntimeLookupSupportsTypedTargets(t *testing.T) {
 		WithModules(testTransportModule{recorder: newTransportRecorder()}),
 	)
 	require.NoError(t, err)
-	require.NoError(t, app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
-		return &BusinessBundle{
-			Diagnostics: []BundleDiag{
-				{
-					Code:    string(yassembly.ErrComposeLocalResourceLeaked),
-					Message: "local resource left outside managed bundle scope",
+	require.NoError(
+		t,
+		app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
+			return &BusinessBundle{
+				Diagnostics: []BundleDiag{
+					{
+						Code:    string(yassembly.ErrComposeLocalResourceLeaked),
+						Message: "local resource left outside managed bundle scope",
+					},
 				},
-			},
-		}, nil
-	}))
+			}, nil
+		}),
+	)
 
 	var catalog settings.Catalog
 	require.NoError(t, app.Runtime().Lookup(&catalog))

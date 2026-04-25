@@ -16,7 +16,6 @@ package settings
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"testing"
@@ -29,72 +28,73 @@ import (
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 	gkeepalive "google.golang.org/grpc/keepalive"
 
-	"github.com/codesjoy/yggdrasil/v3/client"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
-	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
+	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 	"github.com/codesjoy/yggdrasil/v3/internal/backoff"
 	"github.com/codesjoy/yggdrasil/v3/observability/logger"
 	xotel "github.com/codesjoy/yggdrasil/v3/observability/otel"
-	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
-	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
-	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
-	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/transport/grpc"
-	rpchttp "github.com/codesjoy/yggdrasil/v3/remote/transport/rpchttp"
-	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
-	"github.com/codesjoy/yggdrasil/v3/server"
-	"github.com/codesjoy/yggdrasil/v3/server/rest"
-	restmiddleware "github.com/codesjoy/yggdrasil/v3/server/rest/middleware"
 	"github.com/codesjoy/yggdrasil/v3/observability/stats"
+	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
 	"github.com/codesjoy/yggdrasil/v3/rpc/stream"
+	"github.com/codesjoy/yggdrasil/v3/transport/gateway/rest"
+	grpcprotocol "github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc"
+	rpchttp "github.com/codesjoy/yggdrasil/v3/transport/protocol/rpchttp"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/client"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
 )
 
 func TestCatalogAccessorsAndDecodePayload(t *testing.T) {
 	manager := config.NewManager()
-	require.NoError(t, manager.LoadLayer("test", config.PriorityOverride, memory.NewSource("test", map[string]any{
-		"yggdrasil": map[string]any{
-			"server": map[string]any{
-				"transports": []any{"grpc", "http"},
-			},
-			"transports": map[string]any{
-				"grpc": map[string]any{
-					"client": map[string]any{
-						"network": "tcp4",
+	require.NoError(
+		t,
+		manager.LoadLayer("test", config.PriorityOverride, memory.NewSource("test", map[string]any{
+			"yggdrasil": map[string]any{
+				"server": map[string]any{
+					"transports": []any{"grpc", "http"},
+				},
+				"transports": map[string]any{
+					"grpc": map[string]any{
+						"client": map[string]any{
+							"network": "tcp4",
+						},
+					},
+				},
+				"clients": map[string]any{
+					"services": map[string]any{
+						"svc": map[string]any{
+							"resolver": "discovery",
+						},
+					},
+				},
+				"logging": map[string]any{
+					"handlers": map[string]any{
+						"main": map[string]any{
+							"type":   "json",
+							"writer": "stdout",
+						},
+					},
+					"writers": map[string]any{
+						"stdout": map[string]any{
+							"type": "console",
+						},
+					},
+				},
+				"discovery": map[string]any{
+					"registry": map[string]any{
+						"type": "memory",
+					},
+					"resolvers": map[string]any{
+						"svc": map[string]any{
+							"type": "static",
+						},
 					},
 				},
 			},
-			"clients": map[string]any{
-				"services": map[string]any{
-					"svc": map[string]any{
-						"resolver": "discovery",
-					},
-				},
-			},
-			"logging": map[string]any{
-				"handlers": map[string]any{
-					"main": map[string]any{
-						"type":   "json",
-						"writer": "stdout",
-					},
-				},
-				"writers": map[string]any{
-					"stdout": map[string]any{
-						"type": "console",
-					},
-				},
-			},
-			"discovery": map[string]any{
-				"registry": map[string]any{
-					"type": "memory",
-				},
-				"resolvers": map[string]any{
-					"svc": map[string]any{
-						"type": "static",
-					},
-				},
-			},
-		},
-	})))
+		})),
+	)
 
 	catalog := NewCatalog(manager)
 
@@ -171,7 +171,7 @@ func TestCompile_AppliesDefaultsAndMergesOverrides(t *testing.T) {
 						"min_connect_timeout": "4s",
 						"transport": map[string]any{
 							"user_agent":               "ua-base",
-							"creds_proto":              "base-creds",
+							"security_profile":         "base-creds",
 							"authority":                "base-auth",
 							"initial_window_size":      11,
 							"initial_conn_window_size": 22,
@@ -181,10 +181,7 @@ func TestCompile_AppliesDefaultsAndMergesOverrides(t *testing.T) {
 						},
 					},
 					"server": map[string]any{
-						"creds_proto": "server-creds",
-					},
-					"credentials": map[string]any{
-						"base": map[string]any{"enabled": true},
+						"security_profile": "server-creds",
 					},
 				},
 				"http": map[string]any{
@@ -195,6 +192,13 @@ func TestCompile_AppliesDefaultsAndMergesOverrides(t *testing.T) {
 						"middleware": map[string]any{
 							"rpc": []any{"rpcmw"},
 						},
+					},
+				},
+				"security": map[string]any{
+					"profiles": map[string]any{
+						"base-creds":   map[string]any{"type": "insecure"},
+						"server-creds": map[string]any{"type": "local"},
+						"svc-creds":    map[string]any{"type": "tls"},
 					},
 				},
 			},
@@ -250,7 +254,7 @@ func TestCompile_AppliesDefaultsAndMergesOverrides(t *testing.T) {
 								"connect_timeout": "9s",
 								"transport": map[string]any{
 									"user_agent":               "ua-svc",
-									"creds_proto":              "svc-creds",
+									"security_profile":         "svc-creds",
 									"authority":                "svc-auth",
 									"keepalive_params":         map[string]any{"time": "1s"},
 									"initial_window_size":      66,
@@ -258,9 +262,6 @@ func TestCompile_AppliesDefaultsAndMergesOverrides(t *testing.T) {
 									"write_buffer_size":        88,
 									"read_buffer_size":         99,
 									"max_header_list_size":     111,
-								},
-								"credentials": map[string]any{
-									"svc": map[string]any{"enabled": true},
 								},
 							},
 							"http": map[string]any{
@@ -309,9 +310,13 @@ func TestCompile_AppliesDefaultsAndMergesOverrides(t *testing.T) {
 	require.Equal(t, 9*time.Second, svcGRPC.ConnectTimeout)
 	require.Equal(t, "gzip", svcGRPC.Compressor)
 	require.Equal(t, "ua-svc", svcGRPC.Transport.UserAgent)
-	require.Equal(t, "svc-creds", svcGRPC.Transport.CredsProto)
+	require.Equal(t, "svc-creds", svcGRPC.Transport.SecurityProfile)
 	require.Equal(t, "svc-auth", svcGRPC.Transport.Authority)
-	require.Equal(t, gkeepalive.ClientParameters{Time: time.Second}, svcGRPC.Transport.KeepaliveParams)
+	require.Equal(
+		t,
+		gkeepalive.ClientParameters{Time: time.Second},
+		svcGRPC.Transport.KeepaliveParams,
+	)
 	require.EqualValues(t, 66, svcGRPC.Transport.InitialWindowSize)
 	require.EqualValues(t, 77, svcGRPC.Transport.InitialConnWindowSize)
 	require.Equal(t, 88, svcGRPC.Transport.WriteBufferSize)
@@ -324,18 +329,15 @@ func TestCompile_AppliesDefaultsAndMergesOverrides(t *testing.T) {
 	require.NotNil(t, svcHTTP.Marshaler)
 	require.Equal(t, "jsonpb", svcHTTP.Marshaler.Inbound.Type)
 
-	require.Equal(t, map[string]map[string]any{
-		"base": {"enabled": true},
-	}, resolved.Transports.GRPCCredentials)
-	require.Equal(t, map[string]map[string]map[string]any{
-		"svc": {
-			"svc": {"enabled": true},
-		},
-	}, resolved.Transports.GRPCServiceCredentials)
+	require.Equal(t, map[string]SecurityProfileSpec{
+		"base-creds":   {Type: "insecure", Config: map[string]any{}},
+		"server-creds": {Type: "local", Config: map[string]any{}},
+		"svc-creds":    {Type: "tls", Config: map[string]any{}},
+	}, resolved.Transports.SecurityProfiles)
 
-	cloned := resolved.Transports.GRPCCredentials
-	cloned["base"]["enabled"] = false
-	require.Equal(t, true, root.Yggdrasil.Transports.GRPC.Credentials["base"]["enabled"])
+	cloned := resolved.Transports.SecurityProfiles
+	cloned["base-creds"] = SecurityProfileSpec{Type: "changed"}
+	require.Equal(t, "insecure", root.Yggdrasil.Transports.Security.Profiles["base-creds"].Type)
 }
 
 func TestCompile_InitializesNilMaps(t *testing.T) {
@@ -350,8 +352,7 @@ func TestCompile_InitializesNilMaps(t *testing.T) {
 	require.NotNil(t, resolved.Clients.Services)
 	require.NotNil(t, resolved.Transports.GRPC.ClientServices)
 	require.NotNil(t, resolved.Transports.HTTP.ClientServices)
-	require.NotNil(t, resolved.Transports.GRPCCredentials)
-	require.NotNil(t, resolved.Transports.GRPCServiceCredentials)
+	require.NotNil(t, resolved.Transports.SecurityProfiles)
 }
 
 func TestCompile_ProducesOrderedExtensionsAndCapabilityBindings(t *testing.T) {
@@ -376,17 +377,17 @@ func TestCompile_ProducesOrderedExtensionsAndCapabilityBindings(t *testing.T) {
 				},
 			},
 			"transports": map[string]any{
+				"security": map[string]any{
+					"profiles": map[string]any{
+						"tls":      map[string]any{"type": "tls"},
+						"insecure": map[string]any{"type": "insecure"},
+					},
+				},
 				"http": map[string]any{
 					"rest": map[string]any{
 						"marshaler": map[string]any{
 							"support": []any{"jsonpb", "proto", "jsonpb"},
 						},
-					},
-				},
-				"grpc": map[string]any{
-					"credentials": map[string]any{
-						"tls":      map[string]any{},
-						"insecure": map[string]any{},
 					},
 				},
 			},
@@ -411,12 +412,32 @@ func TestCompile_ProducesOrderedExtensionsAndCapabilityBindings(t *testing.T) {
 	require.Equal(t, []string{"a", "b"}, resolved.OrderedExtensions.UnaryServer)
 	require.Equal(t, []string{"m1"}, resolved.OrderedExtensions.RestAll)
 	require.NotEmpty(t, resolved.ModuleViews["logging"])
-	require.Equal(t, []string{"json", "text"}, resolved.CapabilityBindings["observability.logger.handler"])
-	require.Equal(t, []string{"console", "file"}, resolved.CapabilityBindings["observability.logger.writer"])
-	require.Equal(t, []string{"noop-tracer"}, resolved.CapabilityBindings["observability.otel.tracer_provider"])
-	require.Equal(t, []string{"noop-meter"}, resolved.CapabilityBindings["observability.otel.meter_provider"])
+	require.Equal(
+		t,
+		[]string{"json", "text"},
+		resolved.CapabilityBindings["observability.logger.handler"],
+	)
+	require.Equal(
+		t,
+		[]string{"console", "file"},
+		resolved.CapabilityBindings["observability.logger.writer"],
+	)
+	require.Equal(
+		t,
+		[]string{"noop-tracer"},
+		resolved.CapabilityBindings["observability.otel.tracer_provider"],
+	)
+	require.Equal(
+		t,
+		[]string{"noop-meter"},
+		resolved.CapabilityBindings["observability.otel.meter_provider"],
+	)
 	require.Equal(t, []string{"otel"}, resolved.CapabilityBindings["observability.stats.handler"])
-	require.Equal(t, []string{"insecure", "tls"}, resolved.CapabilityBindings["credentials.transport"])
+	require.Equal(
+		t,
+		[]string{"insecure", "tls"},
+		resolved.CapabilityBindings["security.profile.provider"],
+	)
 	require.Equal(t, []string{"jsonpb", "proto"}, resolved.CapabilityBindings["marshaler.scheme"])
 }
 
@@ -442,7 +463,11 @@ func TestCompile_PreservesTemplateStyleExtensionsWithoutNormalizingThem(t *testi
 	require.NoError(t, err)
 	require.Empty(t, resolved.OrderedExtensions.UnaryServer)
 	require.Empty(t, resolved.OrderedExtensions.RestAll)
-	require.Equal(t, "default-observable@v1", resolved.Root.Yggdrasil.Extensions.Interceptors.UnaryServer)
+	require.Equal(
+		t,
+		"default-observable@v1",
+		resolved.Root.Yggdrasil.Extensions.Interceptors.UnaryServer,
+	)
 	value, ok := resolved.Root.Yggdrasil.Extensions.Middleware.RestAll.(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, "default-rest-observable", value["template"])
@@ -521,21 +546,12 @@ func TestValidate_EnableNonStrictWarnsButDoesNotFail(t *testing.T) {
 		},
 		Transports: ResolvedTransports{
 			GRPC: grpcprotocol.Settings{
-				Server: grpcprotocol.ServerConfig{
-					CredsProto: "missing-server-creds",
+				ClientServices: map[string]grpcprotocol.ClientConfig{
+					"svc": {},
 				},
-				Client: grpcprotocol.Config{
-					Transport: grpcprotocol.ClientTransportOptions{
-						CredsProto: "missing-client-creds",
-					},
-				},
-				ClientServices: map[string]grpcprotocol.Config{
-					"svc": {
-						Transport: grpcprotocol.ClientTransportOptions{
-							CredsProto: "missing-service-creds",
-						},
-					},
-				},
+			},
+			SecurityProfiles: map[string]SecurityProfileSpec{
+				"missing-security": {Type: "missing-security-provider"},
 			},
 			Rest: &rest.Config{
 				Middleware: struct {
@@ -588,9 +604,7 @@ func TestValidate_StrictReturnsJoinedErrorsAndHandlesInvalidCredentialConfig(t *
 	meterName := unique + "-meter"
 	statsName := unique + "-stats"
 	serverProto := unique + "-server"
-	serverCreds := unique + "-server-creds"
-	clientCreds := unique + "-client-creds"
-	serviceCreds := unique + "-service-creds"
+	securityType := unique + "-security"
 	unaryServer := unique + "-unary-server"
 	streamServer := unique + "-stream-server"
 	unaryClientDefault := unique + "-unary-client-default"
@@ -625,76 +639,93 @@ func TestValidate_StrictReturnsJoinedErrorsAndHandlesInvalidCredentialConfig(t *
 	stats.RegisterHandlerBuilder(statsName, func(bool) stats.Handler {
 		return stats.NoOpHandler
 	})
-	credentials.RegisterBuilder(serverCreds, func(string, bool) credentials.TransportCredentials {
-		return nil
-	})
-	credentials.RegisterBuilder(clientCreds, func(string, bool) credentials.TransportCredentials {
-		return nil
-	})
-	credentials.RegisterBuilder(serviceCreds, func(string, bool) credentials.TransportCredentials {
-		return nil
-	})
-	require.NoError(t, interceptor.ConfigureUnaryServerProviders([]interceptor.UnaryServerInterceptorProvider{
-		interceptor.NewUnaryServerInterceptorProvider(unaryServer, func() interceptor.UnaryServerInterceptor {
-			return func(ctx context.Context, req any, info *interceptor.UnaryServerInfo, handler interceptor.UnaryHandler) (any, error) {
-				return handler(ctx, req)
-			}
+	require.NoError(
+		t,
+		interceptor.ConfigureUnaryServerProviders([]interceptor.UnaryServerInterceptorProvider{
+			interceptor.NewUnaryServerInterceptorProvider(
+				unaryServer,
+				func() interceptor.UnaryServerInterceptor {
+					return func(ctx context.Context, req any, info *interceptor.UnaryServerInfo, handler interceptor.UnaryHandler) (any, error) {
+						return handler(ctx, req)
+					}
+				},
+			),
 		}),
-	}))
-	require.NoError(t, interceptor.ConfigureStreamServerProviders([]interceptor.StreamServerInterceptorProvider{
-		interceptor.NewStreamServerInterceptorProvider(streamServer, func() interceptor.StreamServerInterceptor {
-			return func(srv interface{}, ss stream.ServerStream, info *interceptor.StreamServerInfo, handler stream.Handler) error {
-				return handler(srv, ss)
-			}
+	)
+	require.NoError(
+		t,
+		interceptor.ConfigureStreamServerProviders([]interceptor.StreamServerInterceptorProvider{
+			interceptor.NewStreamServerInterceptorProvider(
+				streamServer,
+				func() interceptor.StreamServerInterceptor {
+					return func(srv interface{}, ss stream.ServerStream, info *interceptor.StreamServerInfo, handler stream.Handler) error {
+						return handler(srv, ss)
+					}
+				},
+			),
 		}),
-	}))
-	require.NoError(t, interceptor.ConfigureUnaryClientProviders([]interceptor.UnaryClientInterceptorProvider{
-		interceptor.NewUnaryClientInterceptorProvider(unaryClientDefault, func(string) interceptor.UnaryClientInterceptor {
-			return func(ctx context.Context, method string, req, reply any, invoker interceptor.UnaryInvoker) error {
-				return invoker(ctx, method, req, reply)
-			}
+	)
+	require.NoError(
+		t,
+		interceptor.ConfigureUnaryClientProviders([]interceptor.UnaryClientInterceptorProvider{
+			interceptor.NewUnaryClientInterceptorProvider(
+				unaryClientDefault,
+				func(string) interceptor.UnaryClientInterceptor {
+					return func(ctx context.Context, method string, req, reply any, invoker interceptor.UnaryInvoker) error {
+						return invoker(ctx, method, req, reply)
+					}
+				},
+			),
+			interceptor.NewUnaryClientInterceptorProvider(
+				unaryClientService,
+				func(string) interceptor.UnaryClientInterceptor {
+					return func(ctx context.Context, method string, req, reply any, invoker interceptor.UnaryInvoker) error {
+						return invoker(ctx, method, req, reply)
+					}
+				},
+			),
 		}),
-		interceptor.NewUnaryClientInterceptorProvider(unaryClientService, func(string) interceptor.UnaryClientInterceptor {
-			return func(ctx context.Context, method string, req, reply any, invoker interceptor.UnaryInvoker) error {
-				return invoker(ctx, method, req, reply)
-			}
+	)
+	require.NoError(
+		t,
+		interceptor.ConfigureStreamClientProviders([]interceptor.StreamClientInterceptorProvider{
+			interceptor.NewStreamClientInterceptorProvider(
+				streamClientDefault,
+				func(string) interceptor.StreamClientInterceptor {
+					return func(ctx context.Context, desc *stream.Desc, method string, streamer interceptor.Streamer) (stream.ClientStream, error) {
+						return streamer(ctx, desc, method)
+					}
+				},
+			),
+			interceptor.NewStreamClientInterceptorProvider(
+				streamClientService,
+				func(string) interceptor.StreamClientInterceptor {
+					return func(ctx context.Context, desc *stream.Desc, method string, streamer interceptor.Streamer) (stream.ClientStream, error) {
+						return streamer(ctx, desc, method)
+					}
+				},
+			),
 		}),
-	}))
-	require.NoError(t, interceptor.ConfigureStreamClientProviders([]interceptor.StreamClientInterceptorProvider{
-		interceptor.NewStreamClientInterceptorProvider(streamClientDefault, func(string) interceptor.StreamClientInterceptor {
-			return func(ctx context.Context, desc *stream.Desc, method string, streamer interceptor.Streamer) (stream.ClientStream, error) {
-				return streamer(ctx, desc, method)
-			}
-		}),
-		interceptor.NewStreamClientInterceptorProvider(streamClientService, func(string) interceptor.StreamClientInterceptor {
-			return func(ctx context.Context, desc *stream.Desc, method string, streamer interceptor.Streamer) (stream.ClientStream, error) {
-				return streamer(ctx, desc, method)
-			}
-		}),
-	}))
+	)
 	t.Cleanup(func() {
 		require.NoError(t, interceptor.ConfigureUnaryServerProviders(nil))
 		require.NoError(t, interceptor.ConfigureStreamServerProviders(nil))
 		require.NoError(t, interceptor.ConfigureUnaryClientProviders(nil))
 		require.NoError(t, interceptor.ConfigureStreamClientProviders(nil))
 	})
-	require.NoError(t, restmiddleware.ConfigureProviders([]restmiddleware.Provider{
-		restmiddleware.BuiltinLoggingProvider(),
-		restmiddleware.BuiltinMarshalerProvider(),
-		restmiddleware.NewProvider(restMW, func() func(http.Handler) http.Handler {
+	require.NoError(t, rest.ConfigureProviders([]rest.Provider{
+		rest.BuiltinLoggingProvider(),
+		rest.BuiltinMarshalerProvider(),
+		rest.NewProvider(restMW, func() func(http.Handler) http.Handler {
 			return func(next http.Handler) http.Handler { return next }
 		}),
 	}))
 	t.Cleanup(func() {
-		require.NoError(t, restmiddleware.ConfigureProviders([]restmiddleware.Provider{
-			restmiddleware.BuiltinLoggingProvider(),
-			restmiddleware.BuiltinMarshalerProvider(),
+		require.NoError(t, rest.ConfigureProviders([]rest.Provider{
+			rest.BuiltinLoggingProvider(),
+			rest.BuiltinMarshalerProvider(),
 		}))
 	})
-	marshaler.RegisterMarshallerBuilder(restMarshal, func() (marshaler.Marshaler, error) {
-		return nil, errors.New("unused")
-	})
-
 	resolved := Resolved{
 		Admin: Admin{
 			Validation: Validation{
@@ -748,21 +779,12 @@ func TestValidate_StrictReturnsJoinedErrorsAndHandlesInvalidCredentialConfig(t *
 		},
 		Transports: ResolvedTransports{
 			GRPC: grpcprotocol.Settings{
-				Server: grpcprotocol.ServerConfig{
-					CredsProto: serverCreds,
+				ClientServices: map[string]grpcprotocol.ClientConfig{
+					"svc": {},
 				},
-				Client: grpcprotocol.Config{
-					Transport: grpcprotocol.ClientTransportOptions{
-						CredsProto: clientCreds,
-					},
-				},
-				ClientServices: map[string]grpcprotocol.Config{
-					"svc": {
-						Transport: grpcprotocol.ClientTransportOptions{
-							CredsProto: serviceCreds,
-						},
-					},
-				},
+			},
+			SecurityProfiles: map[string]SecurityProfileSpec{
+				"custom": {Type: securityType},
 			},
 			Rest: &rest.Config{
 				Middleware: struct {
@@ -876,7 +898,7 @@ func TestMergeHTTPClientConfig(t *testing.T) {
 func TestMergeGRPCClientConfigAndTransport(t *testing.T) {
 	baseHeader := uint32(10)
 	overlayHeader := uint32(20)
-	base := grpcprotocol.Config{
+	base := grpcprotocol.ClientConfig{
 		WaitConnTimeout:   time.Second,
 		ConnectTimeout:    2 * time.Second,
 		MaxSendMsgSize:    10,
@@ -887,7 +909,7 @@ func TestMergeGRPCClientConfigAndTransport(t *testing.T) {
 		Network:           "tcp",
 		Transport: grpcprotocol.ClientTransportOptions{
 			UserAgent:             "base-ua",
-			CredsProto:            "base-creds",
+			SecurityProfile:       "base-creds",
 			Authority:             "base-auth",
 			InitialWindowSize:     1,
 			InitialConnWindowSize: 2,
@@ -906,7 +928,7 @@ func TestMergeGRPCClientConfigAndTransport(t *testing.T) {
 		Network:           ptr("unix"),
 		Transport: grpcClientTransportOptionsOverlay{
 			UserAgent:             ptr("overlay-ua"),
-			CredsProto:            ptr("overlay-creds"),
+			SecurityProfile:       ptr("overlay-creds"),
 			Authority:             ptr("overlay-auth"),
 			KeepaliveParams:       ptr(gkeepalive.ClientParameters{Time: time.Second}),
 			InitialWindowSize:     ptr(int32(11)),
@@ -927,9 +949,13 @@ func TestMergeGRPCClientConfigAndTransport(t *testing.T) {
 	require.Equal(t, 7*time.Second, merged.MinConnectTimeout)
 	require.Equal(t, "unix", merged.Network)
 	require.Equal(t, "overlay-ua", merged.Transport.UserAgent)
-	require.Equal(t, "overlay-creds", merged.Transport.CredsProto)
+	require.Equal(t, "overlay-creds", merged.Transport.SecurityProfile)
 	require.Equal(t, "overlay-auth", merged.Transport.Authority)
-	require.Equal(t, gkeepalive.ClientParameters{Time: time.Second}, merged.Transport.KeepaliveParams)
+	require.Equal(
+		t,
+		gkeepalive.ClientParameters{Time: time.Second},
+		merged.Transport.KeepaliveParams,
+	)
 	require.EqualValues(t, 11, merged.Transport.InitialWindowSize)
 	require.EqualValues(t, 12, merged.Transport.InitialConnWindowSize)
 	require.Equal(t, 13, merged.Transport.WriteBufferSize)

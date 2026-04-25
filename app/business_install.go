@@ -22,7 +22,7 @@ import (
 
 	internalinstall "github.com/codesjoy/yggdrasil/v3/app/internal/install"
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
-	"github.com/codesjoy/yggdrasil/v3/server"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
 
 // Runtime returns the prepared runtime surface.
@@ -156,7 +156,8 @@ func (a *App) InstallBusiness(bundle *BusinessBundle) error {
 		a.mu.Unlock()
 		return err
 	}
-	if a.state < lifecycleStateInitialized || a.state >= lifecycleStateServing || a.state == lifecycleStateStopped {
+	if a.state < lifecycleStateInitialized || a.state >= lifecycleStateServing ||
+		a.state == lifecycleStateStopped {
 		err := yassembly.NewError(
 			yassembly.ErrRuntimeNotReady,
 			"install",
@@ -225,7 +226,10 @@ func (a *App) installBundleLocked(bundle *BusinessBundle) error {
 			installer: a,
 		}
 		if err := item.Install(ctx); err != nil {
-			return internalinstall.ValidationError(fmt.Sprintf("install extension %q: %v", item.Kind(), err), err)
+			return internalinstall.ValidationError(
+				fmt.Sprintf("install extension %q: %v", item.Kind(), err),
+				err,
+			)
 		}
 	}
 	a.bundleDiagnostics = append(a.bundleDiagnostics, bundle.Diagnostics...)
@@ -238,7 +242,10 @@ func (a *App) installRPCBinding(binding RPCBinding) error {
 		return err
 	}
 	if len(opts.resolvedSettings.Server.Transports) == 0 {
-		return internalinstall.ValidationError("rpc bindings require at least one configured server transport", nil)
+		return internalinstall.ValidationError(
+			"rpc bindings require at least one configured server transport",
+			nil,
+		)
 	}
 	desc, ok := binding.Desc.(*server.ServiceDesc)
 	if !ok || desc == nil {
@@ -249,7 +256,10 @@ func (a *App) installRPCBinding(binding RPCBinding) error {
 		serviceName = desc.ServiceName
 	}
 	if binding.Impl == nil {
-		return internalinstall.ValidationError(fmt.Sprintf("rpc service %q implementation is nil", serviceName), nil)
+		return internalinstall.ValidationError(
+			fmt.Sprintf("rpc service %q implementation is nil", serviceName),
+			nil,
+		)
 	}
 	if !internalinstall.ImplementsHandler(desc.HandlerType, binding.Impl) {
 		return internalinstall.ValidationError(
@@ -258,7 +268,10 @@ func (a *App) installRPCBinding(binding RPCBinding) error {
 		)
 	}
 	if _, exists := a.installedRPCServices[desc.ServiceName]; exists {
-		return internalinstall.ConflictError(fmt.Sprintf("rpc service %q already installed", serviceName), nil)
+		return internalinstall.ConflictError(
+			fmt.Sprintf("rpc service %q already installed", serviceName),
+			nil,
+		)
 	}
 	svr, err := a.installServer("rpc")
 	if err != nil {
@@ -275,11 +288,17 @@ func (a *App) installRESTBinding(binding RESTBinding) error {
 		return err
 	}
 	if !opts.resolvedSettings.Server.RestEnabled {
-		return internalinstall.ValidationError("rest bindings require yggdrasil.transports.http.rest", nil)
+		return internalinstall.ValidationError(
+			"rest bindings require yggdrasil.transports.http.rest",
+			nil,
+		)
 	}
 	desc, ok := binding.Desc.(*server.RestServiceDesc)
 	if !ok || desc == nil {
-		return internalinstall.ValidationError("rest binding desc must be *server.RestServiceDesc", nil)
+		return internalinstall.ValidationError(
+			"rest binding desc must be *server.RestServiceDesc",
+			nil,
+		)
 	}
 	name := strings.TrimSpace(binding.Name)
 	if name == "" {
@@ -290,7 +309,10 @@ func (a *App) installRESTBinding(binding RESTBinding) error {
 		}
 	}
 	if binding.Impl == nil {
-		return internalinstall.ValidationError(fmt.Sprintf("rest binding %q implementation is nil", name), nil)
+		return internalinstall.ValidationError(
+			fmt.Sprintf("rest binding %q implementation is nil", name),
+			nil,
+		)
 	}
 	if !internalinstall.ImplementsHandler(desc.HandlerType, binding.Impl) {
 		return internalinstall.ValidationError(
@@ -303,7 +325,11 @@ func (a *App) installRESTBinding(binding RESTBinding) error {
 		key := internalinstall.RouteKey(method.Method, prefix+method.Path)
 		if _, exists := a.installedHTTPRoutes[key]; exists {
 			return internalinstall.ConflictError(
-				fmt.Sprintf("rest route %s %s already installed", method.Method, prefix+method.Path),
+				fmt.Sprintf(
+					"rest route %s %s already installed",
+					method.Method,
+					prefix+method.Path,
+				),
 				nil,
 			)
 		}
@@ -325,9 +351,17 @@ func (a *App) installRawHTTPBinding(binding RawHTTPBinding) error {
 		return err
 	}
 	if !opts.resolvedSettings.Server.RestEnabled {
-		return internalinstall.ValidationError("raw http bindings require yggdrasil.transports.http.rest", nil)
+		return internalinstall.ValidationError(
+			"raw http bindings require yggdrasil.transports.http.rest",
+			nil,
+		)
 	}
-	desc, err := internalinstall.NormalizeRawHTTPBinding(binding.Desc, binding.Method, binding.Path, binding.Handler)
+	desc, err := internalinstall.NormalizeRawHTTPBinding(
+		binding.Desc,
+		binding.Method,
+		binding.Path,
+		binding.Handler,
+	)
 	if err != nil {
 		return err
 	}
@@ -395,7 +429,10 @@ func (a *App) addBusinessHook(hook BusinessHook) error {
 	case BusinessHookAfterStop:
 		a.opts.afterStopHooks = append(a.opts.afterStopHooks, hook.Func)
 	default:
-		return internalinstall.ValidationError(fmt.Sprintf("unsupported business hook stage %q", hook.Stage), nil)
+		return internalinstall.ValidationError(
+			fmt.Sprintf("unsupported business hook stage %q", hook.Stage),
+			nil,
+		)
 	}
 	return nil
 }

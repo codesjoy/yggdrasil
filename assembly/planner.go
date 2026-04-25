@@ -189,7 +189,10 @@ func (p *planner) buildSpec() *Spec {
 		}
 		spec.Modules = append(spec.Modules, ref)
 	}
-	sort.Slice(spec.Modules, func(i, j int) bool { return spec.Modules[i].Name < spec.Modules[j].Name })
+	sort.Slice(
+		spec.Modules,
+		func(i, j int) bool { return spec.Modules[i].Name < spec.Modules[j].Name },
+	)
 	sort.Slice(spec.Decisions, func(i, j int) bool {
 		if spec.Decisions[i].Kind != spec.Decisions[j].Kind {
 			return spec.Decisions[i].Kind < spec.Decisions[j].Kind

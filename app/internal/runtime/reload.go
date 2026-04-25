@@ -23,6 +23,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 )
 
+// ReloadRequiresRestart reports whether the spec diff or changed paths require a full restart.
 func ReloadRequiresRestart(
 	diff *yassembly.SpecDiff,
 	changedPaths []string,
@@ -44,6 +45,7 @@ func ReloadRequiresRestart(
 	return false
 }
 
+// ChangedConfigPaths returns deduplicated config paths that differ between two assembly results.
 func ChangedConfigPaths(prevPlan, nextPlan *yassembly.Result) []string {
 	if prevPlan == nil || nextPlan == nil {
 		return nil
@@ -57,10 +59,16 @@ func ChangedConfigPaths(prevPlan, nextPlan *yassembly.Result) []string {
 		return nil
 	}
 	changes := map[string]struct{}{}
-	collectChangedPaths("yggdrasil", lookupRootSection(oldValue), lookupRootSection(newValue), changes)
+	collectChangedPaths(
+		"yggdrasil",
+		lookupRootSection(oldValue),
+		lookupRootSection(newValue),
+		changes,
+	)
 	return dedupStrings(sortedKeys(changes))
 }
 
+// CapabilityBindingsEqual reports whether two capability binding maps are equal.
 func CapabilityBindingsEqual(left, right map[string][]string) bool {
 	if len(left) != len(right) {
 		return false
@@ -136,6 +144,7 @@ func valuesEqual(left, right any) bool {
 	return string(leftBytes) == string(rightBytes)
 }
 
+// IntersectsPaths reports whether any path in left matches or is a prefix of any path in right.
 func IntersectsPaths(left, right []string) bool {
 	for _, leftItem := range left {
 		for _, rightItem := range right {

@@ -348,3 +348,202 @@ func TestServerStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestNewHandlerWithConfig_NilConfig(t *testing.T) {
+	h := newHandlerWithConfig(nil, true)
+	assert.NotNil(t, h)
+	assert.NotNil(t, h.cfg)
+}
+
+func TestNewHandlerWithConfig_MetricsDisabled(t *testing.T) {
+	cfg := &Config{EnableMetrics: false}
+	h := newHandlerWithConfig(cfg, true)
+	assert.NotNil(t, h)
+	// handleRPC should be handleWithOutMetrics when metrics disabled
+	assert.NotNil(t, h.handleRPC)
+}
+
+func TestHandleWithMetrics_RPCOutHeader(t *testing.T) {
+	h := newHandler(false)
+	h.cfg = &Config{EnableMetrics: true}
+
+	ctx, span := h.tracer.Start(context.Background(), "test")
+	defer span.End()
+
+	rs := &stats.OutHeaderBase{
+		Client:         true,
+		Protocol:       "grpc",
+		RemoteEndpoint: "server:8080",
+	}
+	// Should not panic
+	h.handleWithMetrics(ctx, rs, false)
+}
+
+func TestHandleWithMetrics_RPCOutTrailer(t *testing.T) {
+	h := newHandler(false)
+	h.cfg = &Config{EnableMetrics: true}
+
+	ctx, span := h.tracer.Start(context.Background(), "test")
+	defer span.End()
+
+	rs := &stats.OutTrailerBase{Client: true}
+	// No-op case
+	h.handleWithMetrics(ctx, rs, false)
+}
+
+func TestHandleWithMetrics_DefaultCase(t *testing.T) {
+	h := newHandler(false)
+	h.cfg = &Config{EnableMetrics: true}
+
+	ctx := context.Background()
+	// Unknown stats type should return early without panic
+	h.handleWithMetrics(ctx, &stats.RPCBeginBase{}, false)
+}
+
+func TestHandleWithOutMetrics_RPCInPayload_NoContext(t *testing.T) {
+	h := newHandler(false)
+	h.cfg = &Config{ReceivedEvent: true}
+
+	ctx, span := h.tracer.Start(context.Background(), "test")
+	defer span.End()
+
+	// No rpcContext in context - should not panic
+	rs := &stats.RPCInPayloadBase{
+		Client:        true,
+		Data:          []byte("data"),
+		TransportSize: 10,
+		Protocol:      "grpc",
+	}
+	h.handleWithOutMetrics(ctx, rs, false)
+}
+
+func TestHandleWithOutMetrics_RPCOutPayload_NoContext(t *testing.T) {
+	h := newHandler(false)
+	h.cfg = &Config{SentEvent: true}
+
+	ctx, span := h.tracer.Start(context.Background(), "test")
+	defer span.End()
+
+	// No rpcContext in context - should not panic
+	rs := &stats.RPCOutPayloadBase{
+		Client:        true,
+		Data:          []byte("data"),
+		TransportSize: 10,
+		Protocol:      "grpc",
+	}
+	h.handleWithOutMetrics(ctx, rs, false)
+}
+
+func TestHandleWithOutMetrics_RPCOutHeader(t *testing.T) {
+	h := newHandler(false)
+	h.cfg = &Config{}
+
+	ctx, span := h.tracer.Start(context.Background(), "test")
+	defer span.End()
+
+	rs := &stats.OutHeaderBase{
+		Client:         true,
+		Protocol:       "grpc",
+		RemoteEndpoint: "server:8080",
+	}
+	h.handleWithOutMetrics(ctx, rs, false)
+}
+
+func TestHandleWithOutMetrics_DefaultCase(t *testing.T) {
+	h := newHandler(false)
+	ctx := context.Background()
+	// Unknown stats type should return early
+	h.handleWithOutMetrics(ctx, &stats.RPCBeginBase{}, false)
+}
+
+func TestHandleWithMetrics_RPCEnd_WithNilRpcContext(t *testing.T) {
+	h := newHandler(true)
+	h.cfg = &Config{EnableMetrics: true}
+	dur := &spyFloat64Histogram{}
+	h.rpcDuration = dur
+
+	ctx, span := h.tracer.Start(context.Background(), "test")
+	defer span.End()
+
+	begin := time.Now()
+	// No rpcContext in context, should still record duration
+	h.handleWithMetrics(ctx, &stats.RPCEndBase{
+		Client:    false,
+		BeginTime: begin,
+		EndTime:   begin.Add(10 * time.Millisecond),
+		Protocol:  "grpc",
+	}, true)
+
+	assert.Len(t, dur.values, 1)
+}
+
+func TestHandleWithMetrics_ReceivedEventDisabled(t *testing.T) {
+	h := newHandler(true)
+	h.cfg = &Config{EnableMetrics: true, ReceivedEvent: false}
+
+	ctx, span := h.tracer.Start(context.Background(), "test")
+	defer span.End()
+	ctx = context.WithValue(ctx, rpcContextKey{}, &rpcContext{})
+
+	// Should not panic even with ReceivedEvent disabled
+	rs := &stats.RPCInPayloadBase{
+		Client:        false,
+		Data:          []byte("data"),
+		TransportSize: 10,
+		Protocol:      "grpc",
+	}
+	h.handleWithMetrics(ctx, rs, true)
+}
+
+func TestHandleWithMetrics_SentEventDisabled(t *testing.T) {
+	h := newHandler(false)
+	h.cfg = &Config{EnableMetrics: true, SentEvent: false}
+
+	ctx, span := h.tracer.Start(context.Background(), "test")
+	defer span.End()
+	ctx = context.WithValue(ctx, rpcContextKey{}, &rpcContext{})
+
+	rs := &stats.RPCOutPayloadBase{
+		Client:        true,
+		Data:          []byte("data"),
+		TransportSize: 10,
+		Protocol:      "grpc",
+	}
+	h.handleWithMetrics(ctx, rs, false)
+}
+
+func TestHandleWithMetrics_ServerErrorStatus(t *testing.T) {
+	h := newHandler(true)
+	h.cfg = &Config{EnableMetrics: true}
+	dur := &spyFloat64Histogram{}
+	h.rpcDuration = dur
+
+	ctx, span := h.tracer.Start(context.Background(), "test")
+	defer span.End()
+	ctx = context.WithValue(ctx, rpcContextKey{}, &rpcContext{})
+
+	begin := time.Now()
+	h.handleWithMetrics(ctx, &stats.RPCEndBase{
+		Client:    false,
+		BeginTime: begin,
+		EndTime:   begin.Add(10 * time.Millisecond),
+		Err:       xerror.New(code.Code_INTERNAL, "internal error"),
+		Protocol:  "grpc",
+	}, true)
+
+	assert.Len(t, dur.values, 1)
+}
+
+func TestNewSvrHandlerWithConfig(t *testing.T) {
+	cfg := &Config{EnableMetrics: false}
+	h := newSvrHandlerWithConfig(cfg)
+	assert.NotNil(t, h)
+	assert.Implements(t, (*stats.Handler)(nil), h)
+}
+
+func TestNewCliHandlerWithConfig(t *testing.T) {
+	cfg := &Config{EnableMetrics: false}
+	h := newCliHandlerWithConfig(cfg)
+	assert.NotNil(t, h)
+	assert.Implements(t, (*stats.Handler)(nil), h)
+}

@@ -20,26 +20,26 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/codesjoy/yggdrasil/v3/balancer"
 	"github.com/codesjoy/yggdrasil/v3/config"
-	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
-	intlogging "github.com/codesjoy/yggdrasil/v3/rpc/interceptor/logging"
-	"github.com/codesjoy/yggdrasil/v3/observability/logger"
-	"github.com/codesjoy/yggdrasil/v3/module"
-	xotel "github.com/codesjoy/yggdrasil/v3/observability/otel"
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
-	"github.com/codesjoy/yggdrasil/v3/remote"
-	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
-	"github.com/codesjoy/yggdrasil/v3/remote/credentials/insecure"
-	"github.com/codesjoy/yggdrasil/v3/remote/credentials/local"
-	ytls "github.com/codesjoy/yggdrasil/v3/remote/credentials/tls"
-	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
-	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/transport/grpc"
-	rpchttp "github.com/codesjoy/yggdrasil/v3/remote/transport/rpchttp"
 	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
-	restmiddleware "github.com/codesjoy/yggdrasil/v3/server/rest/middleware"
+	"github.com/codesjoy/yggdrasil/v3/module"
+	"github.com/codesjoy/yggdrasil/v3/observability/logger"
+	xotel "github.com/codesjoy/yggdrasil/v3/observability/otel"
 	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 	statsotel "github.com/codesjoy/yggdrasil/v3/observability/stats/otel"
+	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
+	intlogging "github.com/codesjoy/yggdrasil/v3/rpc/interceptor/logging"
+	remote "github.com/codesjoy/yggdrasil/v3/transport"
+	"github.com/codesjoy/yggdrasil/v3/transport/gateway/rest"
+	grpcprotocol "github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc"
+	rpchttp "github.com/codesjoy/yggdrasil/v3/transport/protocol/rpchttp"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/client/balancer"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/security/insecure"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/security/local"
+	ytls "github.com/codesjoy/yggdrasil/v3/transport/support/security/tls"
 )
 
 var (
@@ -68,15 +68,15 @@ var (
 		Cardinality: module.NamedOne,
 		Type:        reflect.TypeOf((stats.HandlerBuilder)(nil)),
 	}
-	credentialsCapabilitySpec = module.CapabilitySpec{
-		Name:        "credentials.transport",
+	securityProfileCapabilitySpec = module.CapabilitySpec{
+		Name:        "security.profile.provider",
 		Cardinality: module.NamedOne,
-		Type:        reflect.TypeOf((credentials.Builder)(nil)),
+		Type:        reflect.TypeOf((*security.Provider)(nil)).Elem(),
 	}
 	marshalerCapabilitySpec = module.CapabilitySpec{
 		Name:        "marshaler.scheme",
 		Cardinality: module.NamedOne,
-		Type:        reflect.TypeOf((marshaler.MarshallerBuilder)(nil)),
+		Type:        reflect.TypeOf((marshaler.MarshalerBuilder)(nil)),
 	}
 	transportServerProviderCapabilitySpec = module.CapabilitySpec{
 		Name:        "transport.server.provider",
@@ -109,9 +109,9 @@ var (
 		Type:        reflect.TypeOf((*interceptor.StreamClientInterceptorProvider)(nil)).Elem(),
 	}
 	restMiddlewareCapabilitySpec = module.CapabilitySpec{
-		Name:        "rest.middleware",
+		Name:        "transport.rest.middleware",
 		Cardinality: module.OrderedMany,
-		Type:        reflect.TypeOf((*restmiddleware.Provider)(nil)).Elem(),
+		Type:        reflect.TypeOf((*rest.Provider)(nil)).Elem(),
 	}
 	registryProviderCapabilitySpec = module.CapabilitySpec{
 		Name:        "discovery.registry.provider",
@@ -124,7 +124,7 @@ var (
 		Type:        reflect.TypeOf((*resolver.Provider)(nil)).Elem(),
 	}
 	balancerProviderCapabilitySpec = module.CapabilitySpec{
-		Name:        "balancer.provider",
+		Name:        "transport.balancer.provider",
 		Cardinality: module.NamedOne,
 		Type:        reflect.TypeOf((*balancer.Provider)(nil)).Elem(),
 	}
@@ -173,10 +173,10 @@ func (foundationBuiltinCapabilityModule) Capabilities() []module.Capability {
 	}
 	out = appendSortedCapabilities(out, loggerWriterCapabilitySpec, loggerWriters)
 
-	out = appendSortedCapabilities(out, credentialsCapabilitySpec, map[string]any{
-		"insecure": insecure.BuiltinBuilder(),
-		"local":    local.BuiltinBuilder(),
-		"tls":      ytls.BuiltinBuilder(),
+	out = appendSortedCapabilities(out, securityProfileCapabilitySpec, map[string]any{
+		"insecure": insecure.BuiltinProvider(),
+		"local":    local.BuiltinProvider(),
+		"tls":      ytls.BuiltinProvider(),
 	})
 	out = appendSortedCapabilities(out, marshalerCapabilitySpec, map[string]any{
 		"jsonpb": marshaler.JSONPbBuilder(),
@@ -300,8 +300,8 @@ func (connectivityBuiltinCapabilityModule) Capabilities() []module.Capability {
 	out = appendSortedCapabilities(out, streamClientInterceptorCapabilitySpec, streamClient)
 
 	out = appendSortedCapabilities(out, restMiddlewareCapabilitySpec, map[string]any{
-		"logger":    restmiddleware.BuiltinLoggingProvider(),
-		"marshaler": restmiddleware.BuiltinMarshalerProvider(),
+		"logger":    rest.BuiltinLoggingProvider(),
+		"marshaler": rest.BuiltinMarshalerProvider(),
 	})
 	out = appendSortedCapabilities(out, registryProviderCapabilitySpec, map[string]any{
 		"multi_registry": registry.BuiltinProvider(),

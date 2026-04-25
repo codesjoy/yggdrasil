@@ -44,6 +44,7 @@ func (s *testSource) Read() (source.Data, error) {
 	}
 	return s.data, nil
 }
+
 func (s *testSource) Close() error {
 	atomic.AddInt32(&s.closeCount, 1)
 	return s.closeErr
@@ -77,12 +78,15 @@ func waitFor(t *testing.T, cond func() bool) {
 func TestManagerLoadLayerRespectsPriorityAndReplacement(t *testing.T) {
 	manager := NewManager()
 
-	require.NoError(t, manager.LoadLayer("defaults", PriorityDefaults, memory.NewSource("defaults", map[string]any{
-		"app": map[string]any{
-			"name": "base",
-			"port": 8080,
-		},
-	})))
+	require.NoError(
+		t,
+		manager.LoadLayer("defaults", PriorityDefaults, memory.NewSource("defaults", map[string]any{
+			"app": map[string]any{
+				"name": "base",
+				"port": 8080,
+			},
+		})),
+	)
 	require.NoError(t, manager.LoadLayer("env", PriorityEnv, memory.NewSource("env", map[string]any{
 		"app": map[string]any{
 			"port": 9090,
@@ -120,12 +124,18 @@ func TestTypedSectionWatchIsScoped(t *testing.T) {
 	})
 	defer cancel()
 
-	require.NoError(t, manager.LoadLayer("first", PriorityFile, memory.NewSource("first", map[string]any{
-		"app": map[string]any{"enabled": true},
-	})))
-	require.NoError(t, manager.LoadLayer("other", PriorityOverride, memory.NewSource("other", map[string]any{
-		"other": map[string]any{"value": 1},
-	})))
+	require.NoError(
+		t,
+		manager.LoadLayer("first", PriorityFile, memory.NewSource("first", map[string]any{
+			"app": map[string]any{"enabled": true},
+		})),
+	)
+	require.NoError(
+		t,
+		manager.LoadLayer("other", PriorityOverride, memory.NewSource("other", map[string]any{
+			"other": map[string]any{"value": 1},
+		})),
+	)
 
 	require.Equal(t, []bool{false, true}, events)
 }
@@ -233,7 +243,8 @@ func TestManagerWatchLayerUpdatesAndIgnoresInvalidPayload(t *testing.T) {
 	var last bool
 	cancel := section.Watch(func(next struct {
 		Enabled bool `mapstructure:"enabled"`
-	}, err error) {
+	}, err error,
+	) {
 		require.NoError(t, err)
 		last = next.Enabled
 	})

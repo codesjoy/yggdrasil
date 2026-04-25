@@ -45,6 +45,7 @@ func TestIsStructuredTextParser(t *testing.T) {
 	require.False(t, isStructuredTextParser(nil))
 	require.True(t, isStructuredTextParser(json.Unmarshal))
 	require.True(t, isStructuredTextParser(yaml.Unmarshal))
+	//nolint:gocritic // intentional: wrapper must differ from direct reference
 	require.False(t, isStructuredTextParser(func(b []byte, v any) error {
 		return json.Unmarshal(b, v)
 	}))
@@ -86,7 +87,7 @@ func TestFileReadStructuredAndRawPlaceholders(t *testing.T) {
 
 	rawPath := filepath.Join(dir, "config.txt")
 	require.NoError(t, os.WriteFile(rawPath, []byte(`{"app":{"name":"${APP_NAME}"}}`), 0o600))
-	rawParser := func(b []byte, v any) error { return json.Unmarshal(b, v) }
+	rawParser := json.Unmarshal
 	rawSrc := NewSource(rawPath, false, rawParser)
 	rawData, err := rawSrc.Read()
 	require.NoError(t, err)

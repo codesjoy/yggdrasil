@@ -19,7 +19,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 )
@@ -206,4 +208,50 @@ func TestParseFullMethodAttributes(t *testing.T) {
 
 		assert.Nil(t, attrs, "single component should not have attributes")
 	})
+}
+
+func TestInject_WithActiveSpan(t *testing.T) {
+	propagators := propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	)
+
+	tracer := otel.Tracer("test")
+	ctx, span := tracer.Start(context.Background(), "test-span")
+	defer span.End()
+
+	result := inject(ctx, propagators)
+	assert.NotNil(t, result)
+
+	md, ok := metadata.FromOutContext(result)
+	assert.True(t, ok, "metadata should be in out context")
+	assert.NotNil(t, md)
+
+	// Verify the span object is not nil (non-recording spans are still valid objects)
+	assert.NotNil(t, span)
+}
+
+func TestExtract_WithValidTraceContext(t *testing.T) {
+	propagators := propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+	)
+
+	// First, inject a real trace context
+	tracer := otel.Tracer("test")
+	ctx, span := tracer.Start(context.Background(), "test-span")
+	defer span.End()
+
+	// Inject into metadata
+	result := inject(ctx, propagators)
+	md, _ := metadata.FromOutContext(result)
+
+	// Now extract from that metadata
+	ctx2 := metadata.WithInContext(context.Background(), md)
+	extracted := extract(ctx2, propagators)
+	assert.NotNil(t, extracted)
+
+	// Verify the span context was extracted
+	extractedSpanCtx := trace.SpanContextFromContext(extracted)
+	originalSpanCtx := trace.SpanContextFromContext(ctx)
+	assert.Equal(t, originalSpanCtx.TraceID(), extractedSpanCtx.TraceID())
 }

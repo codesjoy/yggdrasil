@@ -15,17 +15,18 @@
 package settings
 
 import (
+	"fmt"
 	"slices"
 	"sort"
 	"strings"
 
-	"github.com/codesjoy/yggdrasil/v3/balancer"
-	"github.com/codesjoy/yggdrasil/v3/client"
-	"github.com/codesjoy/yggdrasil/v3/observability/logger"
-	grpcprotocol "github.com/codesjoy/yggdrasil/v3/remote/transport/grpc"
-	rpchttp "github.com/codesjoy/yggdrasil/v3/remote/transport/rpchttp"
 	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
+	"github.com/codesjoy/yggdrasil/v3/observability/logger"
 	"github.com/codesjoy/yggdrasil/v3/observability/stats"
+	grpcprotocol "github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc"
+	rpchttp "github.com/codesjoy/yggdrasil/v3/transport/protocol/rpchttp"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/client"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/client/balancer"
 )
 
 // Compile normalizes the raw framework root into per-module resolved settings.
@@ -52,7 +53,7 @@ func Compile(root Root) (Resolved, error) {
 		Transports: ResolvedTransports{
 			GRPC: grpcprotocol.Settings{
 				Client:         fw.Transports.GRPC.Client,
-				ClientServices: map[string]grpcprotocol.Config{},
+				ClientServices: map[string]grpcprotocol.ClientConfig{},
 				Server:         fw.Transports.GRPC.Server,
 			},
 			HTTP: rpchttp.Settings{
@@ -60,15 +61,14 @@ func Compile(root Root) (Resolved, error) {
 				ClientServices: map[string]rpchttp.ClientConfig{},
 				Server:         fw.Transports.HTTP.Server,
 			},
-			Rest:                   fw.Transports.HTTP.Rest,
-			GRPCCredentials:        cloneNestedMap(fw.Transports.GRPC.Credentials),
-			GRPCServiceCredentials: map[string]map[string]map[string]any{},
+			Rest:             fw.Transports.HTTP.Rest,
+			SecurityProfiles: cloneSecurityProfiles(fw.Transports.Security.Profiles),
 		},
 		ModuleViews: map[string]string{
 			"logging":                 "yggdrasil.logging",
 			"telemetry":               "yggdrasil.telemetry",
 			"telemetry.stats":         "yggdrasil.telemetry.stats",
-			"transport.credentials":   "yggdrasil.transports.grpc.credentials",
+			"transport.security":      "yggdrasil.transports.security",
 			"transport.marshaler":     "yggdrasil.transports.http.rest.marshaler",
 			"server.transports":       "yggdrasil.server.transports",
 			"extensions.interceptors": "yggdrasil.extensions.interceptors",
@@ -116,11 +116,6 @@ func Compile(root Root) (Resolved, error) {
 			fw.Transports.HTTP.Client,
 			spec.Transports.HTTP,
 		)
-		if len(spec.Transports.GRPC.Credentials) != 0 {
-			resolved.Transports.GRPCServiceCredentials[serviceName] = cloneNestedMap(
-				spec.Transports.GRPC.Credentials,
-			)
-		}
 	}
 	if resolved.Transports.Rest != nil {
 		if items, ok := normalizeExtensionOrderList(fw.Extensions.Middleware.RestAll); ok {
@@ -135,6 +130,10 @@ func Compile(root Root) (Resolved, error) {
 			resolved.Transports.Rest.Middleware.Web = items
 			resolved.OrderedExtensions.RestWeb = append([]string(nil), items...)
 		}
+	}
+
+	if err := validateSecurityProfileReferences(resolved); err != nil {
+		return Resolved{}, err
 	}
 
 	resolved.CapabilityBindings = compileCapabilityBindings(resolved)
@@ -181,6 +180,23 @@ func ensureCollections(resolved *Resolved) {
 	if resolved.Root.Yggdrasil.Clients.Services == nil {
 		resolved.Root.Yggdrasil.Clients.Services = map[string]ClientServiceSpec{}
 	}
+	if resolved.Transports.SecurityProfiles == nil {
+		resolved.Transports.SecurityProfiles = map[string]SecurityProfileSpec{}
+	}
+}
+
+func cloneSecurityProfiles(src map[string]SecurityProfileSpec) map[string]SecurityProfileSpec {
+	if src == nil {
+		return map[string]SecurityProfileSpec{}
+	}
+	out := make(map[string]SecurityProfileSpec, len(src))
+	for name, spec := range src {
+		out[name] = SecurityProfileSpec{
+			Type:   spec.Type,
+			Config: cloneAnyMap(spec.Config),
+		}
+	}
+	return out
 }
 
 func normalizeOrderList(items []string) []string {
@@ -250,33 +266,20 @@ func compileCapabilityBindings(resolved Resolved) map[string][]string {
 	if len(statsNames) > 0 {
 		out["observability.stats.handler"] = statsNames
 	}
-	credentialNames := map[string]struct{}{}
-	if resolved.Transports.GRPC.Server.CredsProto != "" {
-		credentialNames[resolved.Transports.GRPC.Server.CredsProto] = struct{}{}
-	}
-	if resolved.Transports.GRPC.Client.Transport.CredsProto != "" {
-		credentialNames[resolved.Transports.GRPC.Client.Transport.CredsProto] = struct{}{}
-	}
-	for _, cfg := range resolved.Transports.GRPC.ClientServices {
-		if cfg.Transport.CredsProto != "" {
-			credentialNames[cfg.Transport.CredsProto] = struct{}{}
+	securityTypes := map[string]struct{}{}
+	for _, spec := range resolved.Transports.SecurityProfiles {
+		if spec.Type == "" {
+			continue
 		}
+		securityTypes[spec.Type] = struct{}{}
 	}
-	for name := range resolved.Transports.GRPCCredentials {
-		credentialNames[name] = struct{}{}
-	}
-	for _, items := range resolved.Transports.GRPCServiceCredentials {
-		for name := range items {
-			credentialNames[name] = struct{}{}
-		}
-	}
-	if len(credentialNames) > 0 {
-		names := make([]string, 0, len(credentialNames))
-		for name := range credentialNames {
+	if len(securityTypes) > 0 {
+		names := make([]string, 0, len(securityTypes))
+		for name := range securityTypes {
 			names = append(names, name)
 		}
 		sort.Strings(names)
-		out["credentials.transport"] = names
+		out["security.profile.provider"] = names
 	}
 	if resolved.Transports.Rest != nil {
 		schemes := slices.Clone(resolved.Transports.Rest.Marshaler.Support)
@@ -301,10 +304,18 @@ func compileCapabilityBindings(resolved Resolved) map[string][]string {
 	}
 	out["transport.client.provider"] = dedupStrings(clientProtocols)
 
-	out["rpc.interceptor.unary_server"] = dedupStrings(append([]string(nil), resolved.Server.Interceptors.Unary...))
-	out["rpc.interceptor.stream_server"] = dedupStrings(append([]string(nil), resolved.Server.Interceptors.Stream...))
-	clientUnary := append([]string(nil), resolved.Root.Yggdrasil.Clients.Defaults.Interceptors.Unary...)
-	clientStream := append([]string(nil), resolved.Root.Yggdrasil.Clients.Defaults.Interceptors.Stream...)
+	out["rpc.interceptor.unary_server"] = dedupStrings(
+		append([]string(nil), resolved.Server.Interceptors.Unary...),
+	)
+	out["rpc.interceptor.stream_server"] = dedupStrings(
+		append([]string(nil), resolved.Server.Interceptors.Stream...),
+	)
+	clientUnary := append(
+		[]string(nil),
+		resolved.Root.Yggdrasil.Clients.Defaults.Interceptors.Unary...)
+	clientStream := append(
+		[]string(nil),
+		resolved.Root.Yggdrasil.Clients.Defaults.Interceptors.Stream...)
 	for _, cfg := range resolved.Clients.Services {
 		clientUnary = append(clientUnary, cfg.Interceptors.Unary...)
 		clientStream = append(clientStream, cfg.Interceptors.Stream...)
@@ -318,7 +329,7 @@ func compileCapabilityBindings(resolved Resolved) map[string][]string {
 		restMiddlewares = append(restMiddlewares, resolved.Transports.Rest.Middleware.RPC...)
 		restMiddlewares = append(restMiddlewares, resolved.Transports.Rest.Middleware.Web...)
 	}
-	out["rest.middleware"] = dedupStrings(restMiddlewares)
+	out["transport.rest.middleware"] = dedupStrings(restMiddlewares)
 
 	if resolved.Discovery.Registry.Type != "" {
 		out["discovery.registry.provider"] = []string{resolved.Discovery.Registry.Type}
@@ -345,8 +356,62 @@ func compileCapabilityBindings(resolved Resolved) map[string][]string {
 			}
 		}
 	}
-	out["balancer.provider"] = dedupStrings(balancerTypes)
+	out["transport.balancer.provider"] = dedupStrings(balancerTypes)
 	return out
+}
+
+func validateSecurityProfileReferences(resolved Resolved) error {
+	defined := resolved.Transports.SecurityProfiles
+	check := func(name, key string) error {
+		if strings.TrimSpace(name) == "" {
+			return nil
+		}
+		if _, ok := defined[name]; ok {
+			return nil
+		}
+		return fmt.Errorf("%s references undefined security profile %q", key, name)
+	}
+	if err := check(
+		resolved.Transports.GRPC.Server.SecurityProfile,
+		"yggdrasil.transports.grpc.server.security_profile",
+	); err != nil {
+		return err
+	}
+	if err := check(
+		resolved.Transports.GRPC.Client.Transport.SecurityProfile,
+		"yggdrasil.transports.grpc.client.transport.security_profile",
+	); err != nil {
+		return err
+	}
+	for serviceName, cfg := range resolved.Transports.GRPC.ClientServices {
+		if err := check(
+			cfg.Transport.SecurityProfile,
+			"yggdrasil.clients.services."+serviceName+".transports.grpc.transport.security_profile",
+		); err != nil {
+			return err
+		}
+	}
+	if err := check(
+		resolved.Transports.HTTP.Server.SecurityProfile,
+		"yggdrasil.transports.http.server.security_profile",
+	); err != nil {
+		return err
+	}
+	if err := check(
+		resolved.Transports.HTTP.Client.SecurityProfile,
+		"yggdrasil.transports.http.client.security_profile",
+	); err != nil {
+		return err
+	}
+	for serviceName, cfg := range resolved.Transports.HTTP.ClientServices {
+		if err := check(
+			cfg.SecurityProfile,
+			"yggdrasil.clients.services."+serviceName+".transports.http.security_profile",
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func sortedHandlerTypes(in map[string]logger.HandlerSpec) []string {

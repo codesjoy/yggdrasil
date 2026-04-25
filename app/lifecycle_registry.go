@@ -20,9 +20,9 @@ import (
 	"maps"
 	"time"
 
+	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/internal/constant"
 	"github.com/codesjoy/yggdrasil/v3/internal/instance"
-	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 )
 
 func (runner *lifecycleRunner) register() error {
@@ -46,7 +46,10 @@ func (runner *lifecycleRunner) register() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		if err := runner.registry.Deregister(ctx, runner); err != nil {
-			slog.Error("fault to deregister application after concurrent stop", slog.Any("error", err))
+			slog.Error(
+				"fault to deregister application after concurrent stop",
+				slog.Any("error", err),
+			)
 			return err
 		}
 		return nil
@@ -157,7 +160,7 @@ func (runner *lifecycleRunner) Endpoints() []registry.Endpoint {
 			metadata[registry.MDServerKind] = string(item.Kind())
 			endpoints = append(endpoints, lifecycleEndpoint{
 				address:  item.Address(),
-				scheme:   item.Scheme(),
+				scheme:   item.Protocol(),
 				metadata: metadata,
 			})
 		}

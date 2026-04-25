@@ -1,0 +1,55 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package server
+
+import "github.com/codesjoy/yggdrasil/v3/internal/constant"
+
+func (si *serverInfo) Address() string {
+	return si.address
+}
+
+func (si *serverInfo) Metadata() map[string]string {
+	return si.metadata
+}
+
+func (si *serverInfo) Kind() constant.ServerKind {
+	return si.svrKind
+}
+
+func (si *serverInfo) Protocol() string {
+	return si.protocol
+}
+
+func (s *server) Endpoints() []Endpoint {
+	endpoints := make([]Endpoint, len(s.servers))
+	for i, item := range s.servers {
+		e := item.Info()
+		endpoints[i] = &serverInfo{
+			protocol: e.Protocol,
+			address:  e.Address,
+			metadata: e.Attributes,
+			svrKind:  constant.ServerKindRPC,
+		}
+	}
+	if s.restEnable {
+		endpoints = append(endpoints, &serverInfo{
+			protocol: "http",
+			address:  s.restSvr.Info().GetAddress(),
+			metadata: s.restSvr.Info().GetAttributes(),
+			svrKind:  constant.ServerKindRest,
+		})
+	}
+	return endpoints
+}

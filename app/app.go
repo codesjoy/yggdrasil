@@ -22,13 +22,13 @@ import (
 	"log/slog"
 	"sync"
 
-	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
-	"github.com/codesjoy/yggdrasil/v3/client"
-	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/admin/governor"
+	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
+	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/internal/instance"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 	"github.com/codesjoy/yggdrasil/v3/module"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/client"
 )
 
 type lifecycleState uint32
@@ -46,7 +46,9 @@ const (
 
 var (
 	errApplicationAlreadyRunning = errors.New("application is already running")
-	errRestartUnsupported        = errors.New("restarting yggdrasil in the same process is not supported")
+	errRestartUnsupported        = errors.New(
+		"restarting yggdrasil in the same process is not supported",
+	)
 )
 
 // App is the yggdrasil runtime composition root.
@@ -257,7 +259,10 @@ func (a *App) initializeLocked(ctx context.Context) (err error) {
 		a.clearAssemblyErrorLocked(assemblyStagePrepare)
 	}()
 	switch a.state {
-	case lifecycleStateInitialized, lifecycleStateBusinessInstalled, lifecycleStateServing, lifecycleStateRunning:
+	case lifecycleStateInitialized,
+		lifecycleStateBusinessInstalled,
+		lifecycleStateServing,
+		lifecycleStateRunning:
 		return nil
 	case lifecycleStateStopped:
 		return errRestartUnsupported
@@ -366,7 +371,9 @@ func (a *App) initHub(ctx context.Context) error {
 	if err := a.hub.Seal(); err != nil {
 		return err
 	}
-	a.hub.SetCapabilityBindings(selectedCapabilityBindings(a.lastPlanResult, a.opts.resolvedSettings))
+	a.hub.SetCapabilityBindings(
+		selectedCapabilityBindings(a.lastPlanResult, a.opts.resolvedSettings),
+	)
 	if err := a.hub.Init(ctx, a.opts.configManager.Snapshot()); err != nil {
 		return err
 	}
@@ -387,7 +394,10 @@ func initInstanceInfo(appName string, resolved settings.Resolved) {
 }
 
 func initGovernor(opts *options) error {
-	svr, err := governor.NewServerWithConfig(opts.resolvedSettings.Admin.Governor, opts.configManager)
+	svr, err := governor.NewServerWithConfig(
+		opts.resolvedSettings.Admin.Governor,
+		opts.configManager,
+	)
 	if err != nil {
 		return err
 	}

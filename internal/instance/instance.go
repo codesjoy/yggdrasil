@@ -24,11 +24,11 @@ var global = &instance{}
 // Config contains instance metadata resolved by the assembly layer.
 type Config struct {
 	Namespace string            `mapstructure:"namespace" default:"default"`
-	Version   string            `mapstructure:"version" default:"0.0.1"`
-	Campus    string            `mapstructure:"campus" default:"default"`
+	Version   string            `mapstructure:"version"   default:"0.0.1"`
+	Campus    string            `mapstructure:"campus"    default:"default"`
 	Metadata  map[string]string `mapstructure:"metadata"`
-	Region    string            `mapstructure:"region" default:"default"`
-	Zone      string            `mapstructure:"zone" default:"default"`
+	Region    string            `mapstructure:"region"    default:"default"`
+	Zone      string            `mapstructure:"zone"      default:"default"`
 }
 
 // InitInstanceInfo initializes the Instance information.

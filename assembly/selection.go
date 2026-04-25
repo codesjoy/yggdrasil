@@ -32,7 +32,7 @@ const (
 	capTracer        = "observability.otel.tracer_provider"
 	capMeter         = "observability.otel.meter_provider"
 	capStatsHandler  = "observability.stats.handler"
-	capCredentials   = "credentials.transport"
+	capSecurity      = "security.profile.provider"
 	capMarshaler     = "marshaler.scheme"
 	capServerTrans   = "transport.server.provider"
 	capClientTrans   = "transport.client.provider"
@@ -40,10 +40,10 @@ const (
 	capStreamServer  = "rpc.interceptor.stream_server"
 	capUnaryClient   = "rpc.interceptor.unary_client"
 	capStreamClient  = "rpc.interceptor.stream_client"
-	capRESTMW        = "rest.middleware"
+	capRESTMW        = "transport.rest.middleware"
 	capRegistry      = "discovery.registry.provider"
 	capResolver      = "discovery.resolver.provider"
-	capBalancer      = "balancer.provider"
+	capBalancer      = "transport.balancer.provider"
 
 	chainUnaryServer  = capUnaryServer
 	chainStreamServer = capStreamServer
@@ -295,7 +295,11 @@ func (p *planner) selectDefault(capability string) (string, string, error) {
 				return "", "", newError(
 					ErrAmbiguousDefault,
 					stagePlan,
-					fmt.Sprintf("capability %q has multiple candidates %v and no deterministic default", capability, p.availableProviders[capability]),
+					fmt.Sprintf(
+						"capability %q has multiple candidates %v and no deterministic default",
+						capability,
+						p.availableProviders[capability],
+					),
 					nil,
 					map[string]string{"capability": capability},
 				)
@@ -305,7 +309,9 @@ func (p *planner) selectDefault(capability string) (string, string, error) {
 	return "", "", nil
 }
 
-func (p *planner) selectModuleFallbackDefault(capability string) (string, string, []DefaultCandidate, error) {
+func (p *planner) selectModuleFallbackDefault(
+	capability string,
+) (string, string, []DefaultCandidate, error) {
 	rawCandidates := p.moduleDefaultCandidates(capability)
 	if len(rawCandidates) == 0 {
 		return "", "", nil, nil
@@ -351,7 +357,8 @@ func (p *planner) moduleDefaultCandidates(capability string) []moduleDefaultCand
 		if !ok {
 			continue
 		}
-		if state.spec.DefaultPolicy == nil || !defaultPolicyMatches(state.spec.DefaultPolicy, p.mode.Profile) {
+		if state.spec.DefaultPolicy == nil ||
+			!defaultPolicyMatches(state.spec.DefaultPolicy, p.mode.Profile) {
 			continue
 		}
 		name, ok := uniqueCapabilityProviderName(mod, capability)
@@ -468,7 +475,11 @@ func (p *planner) requireProvider(capability, name string, code ErrorCode) error
 		return newError(
 			ErrAmbiguousDefault,
 			stagePlan,
-			fmt.Sprintf("capability %q has no deterministic default among %v", capability, available),
+			fmt.Sprintf(
+				"capability %q has no deterministic default among %v",
+				capability,
+				available,
+			),
 			nil,
 			map[string]string{"capability": capability},
 		)
@@ -553,7 +564,11 @@ func (p *planner) selectChain(path string) (Chain, string, error) {
 	return Chain{}, "", nil
 }
 
-func (p *planner) expandTemplate(path string, selection templateSelection, source string) (Chain, string, error) {
+func (p *planner) expandTemplate(
+	path string,
+	selection templateSelection,
+	source string,
+) (Chain, string, error) {
 	template, ok := p.registry.template(selection.Name, selection.Version)
 	if !ok {
 		if selection.Version == "" {
@@ -570,7 +585,11 @@ func (p *planner) expandTemplate(path string, selection templateSelection, sourc
 			stagePlan,
 			fmt.Sprintf("template %q version %q not found", selection.Name, selection.Version),
 			nil,
-			map[string]string{"path": path, "template": selection.Name, "version": selection.Version},
+			map[string]string{
+				"path":     path,
+				"template": selection.Name,
+				"version":  selection.Version,
+			},
 		)
 	}
 	if err := p.validateChainItems(path, template.Items); err != nil {
@@ -596,19 +615,40 @@ func (p *planner) validateChainItems(path string, items []string) error {
 func chainConfigPaths(path string) []string {
 	switch path {
 	case chainUnaryServer:
-		return []string{"yggdrasil.server.interceptors.unary", "yggdrasil.extensions.interceptors.unary_server"}
+		return []string{
+			"yggdrasil.server.interceptors.unary",
+			"yggdrasil.extensions.interceptors.unary_server",
+		}
 	case chainStreamServer:
-		return []string{"yggdrasil.server.interceptors.stream", "yggdrasil.extensions.interceptors.stream_server"}
+		return []string{
+			"yggdrasil.server.interceptors.stream",
+			"yggdrasil.extensions.interceptors.stream_server",
+		}
 	case chainUnaryClient:
-		return []string{"yggdrasil.clients.defaults.interceptors.unary", "yggdrasil.extensions.interceptors.unary_client"}
+		return []string{
+			"yggdrasil.clients.defaults.interceptors.unary",
+			"yggdrasil.extensions.interceptors.unary_client",
+		}
 	case chainStreamClient:
-		return []string{"yggdrasil.clients.defaults.interceptors.stream", "yggdrasil.extensions.interceptors.stream_client"}
+		return []string{
+			"yggdrasil.clients.defaults.interceptors.stream",
+			"yggdrasil.extensions.interceptors.stream_client",
+		}
 	case chainRESTAll:
-		return []string{"yggdrasil.transports.http.rest.middleware.all", "yggdrasil.extensions.middleware.rest_all"}
+		return []string{
+			"yggdrasil.transports.http.rest.middleware.all",
+			"yggdrasil.extensions.middleware.rest_all",
+		}
 	case chainRESTRPC:
-		return []string{"yggdrasil.transports.http.rest.middleware.rpc", "yggdrasil.extensions.middleware.rest_rpc"}
+		return []string{
+			"yggdrasil.transports.http.rest.middleware.rpc",
+			"yggdrasil.extensions.middleware.rest_rpc",
+		}
 	case chainRESTWeb:
-		return []string{"yggdrasil.transports.http.rest.middleware.web", "yggdrasil.extensions.middleware.rest_web"}
+		return []string{
+			"yggdrasil.transports.http.rest.middleware.web",
+			"yggdrasil.extensions.middleware.rest_web",
+		}
 	default:
 		return nil
 	}
@@ -644,7 +684,11 @@ func capabilityForChain(path string) string {
 	}
 }
 
-func explicitDefaultValue(resolved settings.Resolved, snap config.Snapshot, capability string) (string, bool) {
+func explicitDefaultValue(
+	resolved settings.Resolved,
+	snap config.Snapshot,
+	capability string,
+) (string, bool) {
 	switch capability {
 	case capLoggerHandler:
 		if !pathExists(snap, "yggdrasil.logging.handlers.default.type") {
@@ -678,7 +722,11 @@ func explicitDefaultValue(resolved settings.Resolved, snap config.Snapshot, capa
 	}
 }
 
-func explicitChainValue(resolved settings.Resolved, snap config.Snapshot, path string) ([]string, bool) {
+func explicitChainValue(
+	resolved settings.Resolved,
+	snap config.Snapshot,
+	path string,
+) ([]string, bool) {
 	switch path {
 	case chainUnaryServer:
 		if !isExplicitOrderListPath(snap, "yggdrasil.server.interceptors.unary") &&
@@ -697,13 +745,17 @@ func explicitChainValue(resolved settings.Resolved, snap config.Snapshot, path s
 			!isExplicitOrderListPath(snap, "yggdrasil.extensions.interceptors.unary_client") {
 			return nil, false
 		}
-		return append([]string(nil), resolved.Root.Yggdrasil.Clients.Defaults.Interceptors.Unary...), true
+		return append(
+			[]string(nil),
+			resolved.Root.Yggdrasil.Clients.Defaults.Interceptors.Unary...), true
 	case chainStreamClient:
 		if !isExplicitOrderListPath(snap, "yggdrasil.clients.defaults.interceptors.stream") &&
 			!isExplicitOrderListPath(snap, "yggdrasil.extensions.interceptors.stream_client") {
 			return nil, false
 		}
-		return append([]string(nil), resolved.Root.Yggdrasil.Clients.Defaults.Interceptors.Stream...), true
+		return append(
+			[]string(nil),
+			resolved.Root.Yggdrasil.Clients.Defaults.Interceptors.Stream...), true
 	case chainRESTAll:
 		if resolved.Transports.Rest == nil {
 			return nil, false

@@ -19,6 +19,7 @@ import "fmt"
 // ErrorCode is one stable planner/app error code.
 type ErrorCode string
 
+// Error codes for assembly and install failures.
 const (
 	ErrInvalidMode                   ErrorCode = "InvalidMode"
 	ErrInvalidAutoRule               ErrorCode = "InvalidAutoRule"
@@ -42,11 +43,11 @@ const (
 
 // Error is one structured assembly/app error.
 type Error struct {
-	Code    ErrorCode         `json:"code" yaml:"code"`
-	Stage   string            `json:"stage" yaml:"stage"`
-	Message string            `json:"message" yaml:"message"`
+	Code    ErrorCode         `json:"code"              yaml:"code"`
+	Stage   string            `json:"stage"             yaml:"stage"`
+	Message string            `json:"message"           yaml:"message"`
 	Context map[string]string `json:"context,omitempty" yaml:"context,omitempty"`
-	Cause   error             `json:"-" yaml:"-"`
+	Cause   error             `json:"-"                 yaml:"-"`
 }
 
 func (e *Error) Error() string {

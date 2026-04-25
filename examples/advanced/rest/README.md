@@ -267,7 +267,7 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 ### 注册中间件
 
 ```go
-import "github.com/codesjoy/yggdrasil/v3/server/rest/middleware"
+import "github.com/codesjoy/yggdrasil/v3/transport/gateway/rest"
 
 middleware.Register("logger", LoggingMiddleware)
 ```

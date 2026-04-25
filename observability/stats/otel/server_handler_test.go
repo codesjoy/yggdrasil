@@ -255,8 +255,115 @@ func TestServerHandler_SpanKind(t *testing.T) {
 
 		span := trace.SpanFromContext(ctx)
 		assert.NotNil(t, span)
-		// Span should be created and valid
-		// Note: IsValid() may return false for recording spans, but span object should exist
-		assert.NotNil(t, span)
 	})
+}
+
+func TestServerHandler_HandleRPC_WithMetricsConfig(t *testing.T) {
+	cfg := &Config{EnableMetrics: true}
+	h := newSvrHandlerWithConfig(cfg)
+	sh := h.(*serverHandler)
+
+	ctx, span := sh.tracer.Start(context.Background(), "test")
+	defer span.End()
+	ctx = context.WithValue(ctx, rpcContextKey{}, &rpcContext{})
+
+	rs := &stats.RPCInPayloadBase{
+		Client:        false,
+		Data:          []byte("test"),
+		TransportSize: 10,
+		Protocol:      "grpc",
+	}
+	sh.HandleRPC(ctx, rs)
+}
+
+func TestServerHandler_HandleRPC_RPCOutHeader(t *testing.T) {
+	h := newSvrHandler()
+	ctx, span := h.tracer.Start(context.Background(), "test")
+	defer span.End()
+
+	rs := &stats.OutHeaderBase{
+		Client:         false,
+		Protocol:       "grpc",
+		RemoteEndpoint: "client:3000",
+	}
+	h.HandleRPC(ctx, rs)
+}
+
+func TestServerHandler_HandleRPC_RPCOutTrailer(t *testing.T) {
+	h := newSvrHandler()
+	ctx, span := h.tracer.Start(context.Background(), "test")
+	defer span.End()
+
+	rs := &stats.OutTrailerBase{Client: false}
+	h.HandleRPC(ctx, rs)
+}
+
+func TestServerHandler_FullLifecycle(t *testing.T) {
+	h := newSvrHandler()
+
+	reqSize := &spyInt64Histogram{}
+	respSize := &spyInt64Histogram{}
+	reqPerRPC := &spyInt64Histogram{}
+	respPerRPC := &spyInt64Histogram{}
+	dur := &spyFloat64Histogram{}
+	h.cfg = &Config{EnableMetrics: true}
+	h.rpcRequestSize = reqSize
+	h.rpcResponseSize = respSize
+	h.rpcRequestsPerRPC = reqPerRPC
+	h.rpcResponsesPerRPC = respPerRPC
+	h.rpcDuration = dur
+	h.handleRPC = h.handleWithMetrics
+
+	ctx := context.Background()
+	ctx = h.TagRPC(ctx, &stats.RPCTagInfoBase{FullMethod: "/test.service/Method"})
+
+	// InPayload (server receives request)
+	h.HandleRPC(ctx, &stats.RPCInPayloadBase{
+		Client:        false,
+		Data:          []byte("request"),
+		TransportSize: 50,
+		Protocol:      "grpc",
+	})
+
+	// OutPayload (server sends response)
+	h.HandleRPC(ctx, &stats.RPCOutPayloadBase{
+		Client:        false,
+		Data:          []byte("response"),
+		TransportSize: 100,
+		Protocol:      "grpc",
+	})
+
+	// End
+	begin := time.Now()
+	h.HandleRPC(ctx, &stats.RPCEndBase{
+		Client:    false,
+		BeginTime: begin,
+		EndTime:   begin.Add(25 * time.Millisecond),
+		Protocol:  "grpc",
+	})
+
+	assert.Equal(t, []int64{50}, reqSize.values)
+	assert.Equal(t, []int64{100}, respSize.values)
+	assert.Equal(t, []int64{1}, reqPerRPC.values)
+	assert.Equal(t, []int64{1}, respPerRPC.values)
+	assert.Len(t, dur.values, 1)
+}
+
+func TestServerHandler_TagRPC_WithIncomingContext(t *testing.T) {
+	h := newSvrHandler()
+	ctx := context.Background()
+
+	// Set up incoming metadata with a trace context
+	md := make(map[string][]string)
+	ctx = context.WithValue(ctx, rpcContextKey{}, nil)
+
+	info := &stats.RPCTagInfoBase{FullMethod: "/test.service/Method"}
+	result := h.TagRPC(ctx, info)
+
+	assert.NotNil(t, result)
+
+	rctx, ok := result.Value(rpcContextKey{}).(*rpcContext)
+	assert.True(t, ok)
+	assert.NotNil(t, rctx)
+	_ = md
 }

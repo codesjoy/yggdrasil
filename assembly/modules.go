@@ -260,7 +260,11 @@ func (p *planner) validateAutoModule(mod module.Module, autoSpec module.AutoSpec
 			return newError(
 				ErrInvalidAutoRule,
 				stagePlan,
-				fmt.Sprintf("module %q auto spec declares capability %q but does not provide it", name, specName),
+				fmt.Sprintf(
+					"module %q auto spec declares capability %q but does not provide it",
+					name,
+					specName,
+				),
 				nil,
 				map[string]string{"module": name, "capability": specName},
 			)
@@ -269,7 +273,11 @@ func (p *planner) validateAutoModule(mod module.Module, autoSpec module.AutoSpec
 			return newError(
 				ErrInvalidAutoRule,
 				stagePlan,
-				fmt.Sprintf("module %q auto spec capability %q does not match runtime capability declaration", name, specName),
+				fmt.Sprintf(
+					"module %q auto spec capability %q does not match runtime capability declaration",
+					name,
+					specName,
+				),
 				nil,
 				map[string]string{"module": name, "capability": specName},
 			)
@@ -290,7 +298,10 @@ func (p *planner) validateAutoModule(mod module.Module, autoSpec module.AutoSpec
 	return nil
 }
 
-func (p *planner) matchAutoModule(mod module.Module, autoSpec module.AutoSpec) ([]string, []MatchedAutoRule) {
+func (p *planner) matchAutoModule(
+	mod module.Module,
+	autoSpec module.AutoSpec,
+) ([]string, []MatchedAutoRule) {
 	ctx := module.AutoRuleContext{
 		AppName:  p.input.Identity.AppName,
 		Snapshot: p.input.Snapshot,
@@ -320,7 +331,9 @@ func (p *planner) matchAutoModule(mod module.Module, autoSpec module.AutoSpec) (
 	return reasons, matched
 }
 
-func (p *planner) expandModuleDependencies(enabled, available map[string]module.Module) []module.Module {
+func (p *planner) expandModuleDependencies(
+	enabled, available map[string]module.Module,
+) []module.Module {
 	visited := map[string]struct{}{}
 	var visit func(string)
 	visit = func(name string) {

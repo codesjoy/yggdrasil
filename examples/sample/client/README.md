@@ -101,8 +101,8 @@ yggdrasil:
 |------|------|
 | `application.namespace` | 应用命名空间 |
 | `client.<service>.remote.endpoints` | 服务端点列表 |
-| `rpc.interceptor.unary_client` | 一元 RPC 拦截器 |
-| `rpc.interceptor.stream_client` | 流式 RPC 拦截器 |
+| `interceptor.unary_client` | 一元 RPC 拦截器 |
+| `interceptor.stream_client` | 流式 RPC 拦截器 |
 | `remote.logger_level` | 远程通信日志级别 |
 
 ## 代码结构说明

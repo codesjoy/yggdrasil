@@ -81,7 +81,8 @@ func loadState(t testing.TB, st *state) {
 }
 
 func clearState(layerName string) {
-	_ = config.Default().LoadLayer(layerName, config.PriorityOverride, memory.NewSource(layerName, nil))
+	_ = config.Default().
+		LoadLayer(layerName, config.PriorityOverride, memory.NewSource(layerName, nil))
 }
 
 func applySet(dst map[string]any, key string, val any) {

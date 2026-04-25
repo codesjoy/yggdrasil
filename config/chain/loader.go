@@ -40,7 +40,11 @@ func NewLoader(registry *Registry) *Loader {
 }
 
 // LoadFile loads a config file and all declarative sources it defines.
-func (l *Loader) LoadFile(manager *config.Manager, path string, explicit bool) ([]source.Source, bool, error) {
+func (l *Loader) LoadFile(
+	manager *config.Manager,
+	path string,
+	explicit bool,
+) ([]source.Source, bool, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return nil, false, errors.New("config path is empty")
@@ -50,7 +54,10 @@ func (l *Loader) LoadFile(manager *config.Manager, path string, explicit bool) (
 			if explicit {
 				return nil, false, fmt.Errorf("config file %q not found", path)
 			}
-			slog.Warn("config file not found, fallback to default startup", slog.String("path", path))
+			slog.Warn(
+				"config file not found, fallback to default startup",
+				slog.String("path", path),
+			)
 			return nil, false, nil
 		}
 		return nil, false, fmt.Errorf("stat config file %q: %w", path, err)

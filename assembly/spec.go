@@ -35,81 +35,81 @@ type IdentitySpec struct {
 
 // Mode contains the final mode identity used for planning.
 type Mode struct {
-	Name    string `json:"name" yaml:"name"`
+	Name    string `json:"name"    yaml:"name"`
 	Profile string `json:"profile" yaml:"profile"`
-	Bundle  string `json:"bundle" yaml:"bundle"`
+	Bundle  string `json:"bundle"  yaml:"bundle"`
 }
 
 // ModuleRef is the canonical module reference stored in the plan.
 type ModuleRef struct {
-	Name    string   `json:"name" yaml:"name"`
-	Kind    string   `json:"kind" yaml:"kind"`
-	Source  string   `json:"source" yaml:"source"`
+	Name    string   `json:"name"              yaml:"name"`
+	Kind    string   `json:"kind"              yaml:"kind"`
+	Source  string   `json:"source"            yaml:"source"`
 	Reasons []string `json:"reasons,omitempty" yaml:"reasons,omitempty"`
 }
 
 // Chain is the fully expanded chain representation stored in the spec.
 type Chain struct {
 	Template string   `json:"template,omitempty" yaml:"template,omitempty"`
-	Version  string   `json:"version,omitempty" yaml:"version,omitempty"`
-	Items    []string `json:"items,omitempty" yaml:"items,omitempty"`
+	Version  string   `json:"version,omitempty"  yaml:"version,omitempty"`
+	Items    []string `json:"items,omitempty"    yaml:"items,omitempty"`
 }
 
 // Decision describes one deterministic planning decision.
 type Decision struct {
-	Kind   string `json:"kind" yaml:"kind"`
+	Kind   string `json:"kind"   yaml:"kind"`
 	Target string `json:"target" yaml:"target"`
-	Value  string `json:"value" yaml:"value"`
+	Value  string `json:"value"  yaml:"value"`
 	Source string `json:"source" yaml:"source"`
 	Reason string `json:"reason" yaml:"reason"`
-	Stage  string `json:"stage" yaml:"stage"`
+	Stage  string `json:"stage"  yaml:"stage"`
 }
 
 // Warning is one non-fatal planning warning.
 type Warning struct {
-	Code    string `json:"code" yaml:"code"`
+	Code    string `json:"code"    yaml:"code"`
 	Message string `json:"message" yaml:"message"`
 }
 
 // Conflict is one planning conflict item.
 type Conflict struct {
-	Code    string `json:"code" yaml:"code"`
+	Code    string `json:"code"    yaml:"code"`
 	Message string `json:"message" yaml:"message"`
 }
 
 // Spec is the canonical declarative planning result.
 type Spec struct {
-	Identity IdentitySpec      `json:"identity" yaml:"identity"`
-	Mode     Mode              `json:"mode" yaml:"mode"`
-	Modules  []ModuleRef       `json:"modules,omitempty" yaml:"modules,omitempty"`
+	Identity IdentitySpec      `json:"identity"           yaml:"identity"`
+	Mode     Mode              `json:"mode"               yaml:"mode"`
+	Modules  []ModuleRef       `json:"modules,omitempty"  yaml:"modules,omitempty"`
 	Defaults map[string]string `json:"defaults,omitempty" yaml:"defaults,omitempty"`
-	Chains   map[string]Chain  `json:"chains,omitempty" yaml:"chains,omitempty"`
+	Chains   map[string]Chain  `json:"chains,omitempty"   yaml:"chains,omitempty"`
 
 	Decisions []Decision `json:"decisions,omitempty" yaml:"decisions,omitempty"`
-	Warnings  []Warning  `json:"warnings,omitempty" yaml:"warnings,omitempty"`
+	Warnings  []Warning  `json:"warnings,omitempty"  yaml:"warnings,omitempty"`
 	Conflicts []Conflict `json:"conflicts,omitempty" yaml:"conflicts,omitempty"`
 }
 
 // Template is one named and versioned built-in chain template.
 type Template struct {
-	Name    string   `json:"name" yaml:"name"`
+	Name    string   `json:"name"    yaml:"name"`
 	Version string   `json:"version" yaml:"version"`
-	Items   []string `json:"items" yaml:"items"`
+	Items   []string `json:"items"   yaml:"items"`
 }
 
 // MatchedAutoRule records one auto rule that enabled a module.
 type MatchedAutoRule struct {
-	Module        string   `json:"module" yaml:"module"`
-	Description   string   `json:"description" yaml:"description"`
+	Module        string   `json:"module"                   yaml:"module"`
+	Description   string   `json:"description"              yaml:"description"`
 	AffectedPaths []string `json:"affected_paths,omitempty" yaml:"affected_paths,omitempty"`
 }
 
 // DefaultCandidate records one module fallback default candidate.
 type DefaultCandidate struct {
-	Module   string `json:"module" yaml:"module"`
-	Provider string `json:"provider" yaml:"provider"`
-	Source   string `json:"source" yaml:"source"`
-	Score    int    `json:"score" yaml:"score"`
+	Module   string `json:"module"             yaml:"module"`
+	Provider string `json:"provider"           yaml:"provider"`
+	Source   string `json:"source"             yaml:"source"`
+	Score    int    `json:"score"              yaml:"score"`
 	Selected bool   `json:"selected,omitempty" yaml:"selected,omitempty"`
 }
 
@@ -140,16 +140,16 @@ type Result struct {
 
 // ModuleDiffEntry describes one module add/remove change.
 type ModuleDiffEntry struct {
-	Name    string   `json:"name" yaml:"name"`
-	Kind    string   `json:"kind" yaml:"kind"`
-	Source  string   `json:"source" yaml:"source"`
-	Action  string   `json:"action" yaml:"action"`
+	Name    string   `json:"name"              yaml:"name"`
+	Kind    string   `json:"kind"              yaml:"kind"`
+	Source  string   `json:"source"            yaml:"source"`
+	Action  string   `json:"action"            yaml:"action"`
 	Reasons []string `json:"reasons,omitempty" yaml:"reasons,omitempty"`
 }
 
 // ValueDiffEntry describes one scalar change.
 type ValueDiffEntry struct {
-	Target string `json:"target" yaml:"target"`
+	Target string `json:"target"        yaml:"target"`
 	Old    string `json:"old,omitempty" yaml:"old,omitempty"`
 	New    string `json:"new,omitempty" yaml:"new,omitempty"`
 }
@@ -157,8 +157,8 @@ type ValueDiffEntry struct {
 // ChainDiffEntry describes one chain expansion change.
 type ChainDiffEntry struct {
 	Target string `json:"target" yaml:"target"`
-	Old    Chain  `json:"old" yaml:"old"`
-	New    Chain  `json:"new" yaml:"new"`
+	Old    Chain  `json:"old"    yaml:"old"`
+	New    Chain  `json:"new"    yaml:"new"`
 }
 
 // SpecDiff is the stable plan diff surface for diagnostics and reload decisions.
@@ -166,11 +166,11 @@ type SpecDiff struct {
 	HasChanges bool `json:"has_changes" yaml:"has_changes"`
 
 	AffectedDomains []string          `json:"affected_domains,omitempty" yaml:"affected_domains,omitempty"`
-	Mode            *ValueDiffEntry   `json:"mode,omitempty" yaml:"mode,omitempty"`
-	Modules         []ModuleDiffEntry `json:"modules,omitempty" yaml:"modules,omitempty"`
-	Defaults        []ValueDiffEntry  `json:"defaults,omitempty" yaml:"defaults,omitempty"`
-	Chains          []ChainDiffEntry  `json:"chains,omitempty" yaml:"chains,omitempty"`
-	Overrides       []ValueDiffEntry  `json:"overrides,omitempty" yaml:"overrides,omitempty"`
+	Mode            *ValueDiffEntry   `json:"mode,omitempty"             yaml:"mode,omitempty"`
+	Modules         []ModuleDiffEntry `json:"modules,omitempty"          yaml:"modules,omitempty"`
+	Defaults        []ValueDiffEntry  `json:"defaults,omitempty"         yaml:"defaults,omitempty"`
+	Chains          []ChainDiffEntry  `json:"chains,omitempty"           yaml:"chains,omitempty"`
+	Overrides       []ValueDiffEntry  `json:"overrides,omitempty"        yaml:"overrides,omitempty"`
 }
 
 type canonicalKV struct {
@@ -260,7 +260,10 @@ func Diff(oldSpec, newSpec *Spec) (*SpecDiff, error) {
 	if len(diff.Modules) > 0 {
 		domains["modules"] = struct{}{}
 	}
-	sort.Slice(diff.Modules, func(i, j int) bool { return diff.Modules[i].Name < diff.Modules[j].Name })
+	sort.Slice(
+		diff.Modules,
+		func(i, j int) bool { return diff.Modules[i].Name < diff.Modules[j].Name },
+	)
 
 	oldDefaults := canonicalKVMap(oldCanonical.Defaults)
 	newDefaults := canonicalKVMap(newCanonical.Defaults)
@@ -366,7 +369,10 @@ func toCanonicalSpec(spec *Spec) canonicalSpec {
 		Warnings:  append([]Warning(nil), spec.Warnings...),
 		Conflicts: append([]Conflict(nil), spec.Conflicts...),
 	}
-	sort.Slice(out.Modules, func(i, j int) bool { return out.Modules[i].Name < out.Modules[j].Name })
+	sort.Slice(
+		out.Modules,
+		func(i, j int) bool { return out.Modules[i].Name < out.Modules[j].Name },
+	)
 	sort.Slice(out.Decisions, func(i, j int) bool {
 		if out.Decisions[i].Kind != out.Decisions[j].Kind {
 			return out.Decisions[i].Kind < out.Decisions[j].Kind
@@ -394,7 +400,10 @@ func toCanonicalSpec(spec *Spec) canonicalSpec {
 	for key, value := range spec.Defaults {
 		out.Defaults = append(out.Defaults, canonicalKV{Key: key, Value: value})
 	}
-	sort.Slice(out.Defaults, func(i, j int) bool { return out.Defaults[i].Key < out.Defaults[j].Key })
+	sort.Slice(
+		out.Defaults,
+		func(i, j int) bool { return out.Defaults[i].Key < out.Defaults[j].Key },
+	)
 	for key, value := range spec.Chains {
 		out.Chains = append(out.Chains, canonicalChain{
 			Key:      key,
@@ -481,9 +490,7 @@ func cloneDefaultCandidateMap(in map[string][]DefaultCandidate) map[string][]Def
 	out := make(map[string][]DefaultCandidate, len(in))
 	for key, items := range in {
 		next := make([]DefaultCandidate, 0, len(items))
-		for _, item := range items {
-			next = append(next, item)
-		}
+		next = append(next, items...)
 		out[key] = next
 	}
 	return out

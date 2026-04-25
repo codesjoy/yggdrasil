@@ -37,28 +37,38 @@ func TestReloadWithInstalledBusinessMarksRestartRequired(t *testing.T) {
 		WithModules(testTransportModule{recorder: recorder}),
 	)
 	require.NoError(t, err)
-	require.NoError(t, app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
-		return &BusinessBundle{
-			RPCBindings: []RPCBinding{
-				{
-					ServiceName: testAssemblyServiceName,
-					Desc:        &testAssemblyRPCServiceDesc,
-					Impl:        &testAssemblyServiceImpl{},
+	require.NoError(
+		t,
+		app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
+			return &BusinessBundle{
+				RPCBindings: []RPCBinding{
+					{
+						ServiceName: testAssemblyServiceName,
+						Desc:        &testAssemblyRPCServiceDesc,
+						Impl:        &testAssemblyServiceImpl{},
+					},
 				},
-			},
-		}, nil
-	}))
+			}, nil
+		}),
+	)
 	require.NoError(t, app.Start(context.Background()))
 	waitForChannel(t, recorder.started, 2*time.Second, "reload server did not start")
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })
 
-	require.NoError(t, manager.LoadLayer("override", config.PriorityOverride, memory.NewSource("override", map[string]any{
-		"yggdrasil": map[string]any{
-			"logging": map[string]any{
-				"remote_level": "warn",
-			},
-		},
-	})))
+	require.NoError(
+		t,
+		manager.LoadLayer(
+			"override",
+			config.PriorityOverride,
+			memory.NewSource("override", map[string]any{
+				"yggdrasil": map[string]any{
+					"logging": map[string]any{
+						"remote_level": "warn",
+					},
+				},
+			}),
+		),
+	)
 	err = app.Reload(context.Background())
 	requireAssemblyErrorCode(t, err, yassembly.ErrReloadRequiresRestart)
 	require.True(t, app.hub.ReloadState().RestartRequired)
@@ -78,13 +88,20 @@ func TestReloadRuntimeOnlyChangeHotReloadsWithoutBusinessBundle(t *testing.T) {
 	waitForChannel(t, recorder.started, 2*time.Second, "runtime-only reload server did not start")
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })
 
-	require.NoError(t, manager.LoadLayer("override", config.PriorityOverride, memory.NewSource("override", map[string]any{
-		"yggdrasil": map[string]any{
-			"logging": map[string]any{
-				"remote_level": "warn",
-			},
-		},
-	})))
+	require.NoError(
+		t,
+		manager.LoadLayer(
+			"override",
+			config.PriorityOverride,
+			memory.NewSource("override", map[string]any{
+				"yggdrasil": map[string]any{
+					"logging": map[string]any{
+						"remote_level": "warn",
+					},
+				},
+			}),
+		),
+	)
 	require.NoError(t, app.Reload(context.Background()))
 	require.Nil(t, app.assemblyErrors.reload.err)
 	require.Equal(t, module.ReloadPhaseIdle, app.hub.ReloadState().Phase)
@@ -115,11 +132,14 @@ func TestReloadUpdatesPlanHashesAndDiffDiagnostics(t *testing.T) {
 	require.NotEmpty(t, initialHash)
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })
 
-	require.NoError(t, manager.LoadLayer("mode", config.PriorityOverride, memory.NewSource("mode", map[string]any{
-		"yggdrasil": map[string]any{
-			"mode": "prod-grpc",
-		},
-	})))
+	require.NoError(
+		t,
+		manager.LoadLayer("mode", config.PriorityOverride, memory.NewSource("mode", map[string]any{
+			"yggdrasil": map[string]any{
+				"mode": "prod-grpc",
+			},
+		})),
+	)
 	err = app.Reload(context.Background())
 	requireAssemblyErrorCode(t, err, yassembly.ErrReloadRequiresRestart)
 	require.True(t, app.hub.ReloadState().RestartRequired)

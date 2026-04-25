@@ -25,18 +25,15 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/codesjoy/yggdrasil/v3/config"
-	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
-	"github.com/codesjoy/yggdrasil/v3/observability/logger"
 	"github.com/codesjoy/yggdrasil/v3/module"
-	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
-	"github.com/codesjoy/yggdrasil/v3/remote/credentials/insecure"
-	"github.com/codesjoy/yggdrasil/v3/remote/credentials/local"
-	ytls "github.com/codesjoy/yggdrasil/v3/remote/credentials/tls"
-	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
-	restmiddleware "github.com/codesjoy/yggdrasil/v3/server/rest/middleware"
+	"github.com/codesjoy/yggdrasil/v3/observability/logger"
 	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 	statsotel "github.com/codesjoy/yggdrasil/v3/observability/stats/otel"
+	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
+	"github.com/codesjoy/yggdrasil/v3/transport/gateway/rest"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
 )
 
 func resolveNamedCapabilityMap[T any](
@@ -196,40 +193,23 @@ func bindStatsHandlerBuilders(
 	return out
 }
 
-func bindCredentialsBuilders(
+func compileSecurityProfiles(
 	resolved settings.Resolved,
-	builders map[string]credentials.Builder,
-) map[string]credentials.Builder {
-	out := cloneMap(builders)
-	if _, ok := out["insecure"]; ok {
-		out["insecure"] = insecure.BuiltinBuilder()
-	}
-	if _, ok := out["local"]; ok {
-		out["local"] = local.BuiltinBuilder()
-	}
-	if _, ok := out["tls"]; ok {
-		global, services := resolveTLSBuilderConfig(resolved)
-		out["tls"] = ytls.BuiltinBuilderWithConfig(global, services)
-	}
-	return out
-}
-
-func resolveTLSBuilderConfig(resolved settings.Resolved) (ytls.BuilderConfig, map[string]ytls.BuilderConfig) {
-	var global ytls.BuilderConfig
-	if raw, ok := resolved.Transports.GRPCCredentials["tls"]; ok {
-		_ = settings.DecodePayload(&global, raw)
-	}
-	services := map[string]ytls.BuilderConfig{}
-	for serviceName, specs := range resolved.Transports.GRPCServiceCredentials {
-		raw, ok := specs["tls"]
-		if !ok {
-			continue
+	providers map[string]security.Provider,
+) (map[string]security.Profile, error) {
+	out := make(map[string]security.Profile, len(resolved.Transports.SecurityProfiles))
+	for name, spec := range resolved.Transports.SecurityProfiles {
+		provider := providers[spec.Type]
+		if provider == nil {
+			return nil, fmt.Errorf("security provider for type %q not found", spec.Type)
 		}
-		cfg := ytls.BuilderConfig{}
-		_ = settings.DecodePayload(&cfg, raw)
-		services[serviceName] = cfg
+		profile, err := provider.Compile(name, spec.Config)
+		if err != nil {
+			return nil, fmt.Errorf("compile security profile %q: %w", name, err)
+		}
+		out[name] = profile
 	}
-	return global, services
+	return out, nil
 }
 
 func loggingInterceptorSource(resolved settings.Resolved) any {
@@ -242,12 +222,14 @@ func loggingInterceptorSource(resolved settings.Resolved) any {
 	return nil
 }
 
-func newRuntimeMarshalerProvider(snapshot *Snapshot) restmiddleware.Provider {
+func newRuntimeMarshalerProvider(snapshot *Snapshot) rest.Provider {
 	supported := []string{marshaler.SchemeJSONPb}
 	var jsonpbCfg *marshaler.JSONPbConfig
 	if snapshot != nil && snapshot.Resolved.Transports.Rest != nil {
 		if len(snapshot.Resolved.Transports.Rest.Marshaler.Support) > 0 {
-			supported = append([]string(nil), snapshot.Resolved.Transports.Rest.Marshaler.Support...)
+			supported = append(
+				[]string(nil),
+				snapshot.Resolved.Transports.Rest.Marshaler.Support...)
 		}
 		jsonpbCfg = snapshot.Resolved.Transports.Rest.Marshaler.Config.JSONPB
 	}
@@ -256,10 +238,10 @@ func newRuntimeMarshalerProvider(snapshot *Snapshot) restmiddleware.Provider {
 		jsonpbCfg,
 		supported...,
 	)
-	return restmiddleware.NewProvider(
+	return rest.NewProvider(
 		"marshaler",
 		func() func(http.Handler) http.Handler {
-			return restmiddleware.NewMarshalerMiddleware(registry)
+			return rest.NewMarshalerMiddleware(registry)
 		},
 	)
 }

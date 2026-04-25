@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package module
 
 import (
@@ -41,10 +55,12 @@ func (m *testModule) Start(context.Context) error {
 	m.started.Store(true)
 	return nil
 }
+
 func (m *testModule) Stop(context.Context) error {
 	m.stopped.Add(1)
 	return nil
 }
+
 func (m *testModule) PrepareReload(context.Context, config.View) (ReloadCommitter, error) {
 	if m.prepareErr != nil {
 		return nil, m.prepareErr
@@ -63,6 +79,7 @@ func (c reloadCommitter) Commit(context.Context) error {
 	}
 	return nil
 }
+
 func (c reloadCommitter) Rollback(context.Context) error {
 	if c.m != nil {
 		c.m.rollbacks.Add(1)
@@ -256,7 +273,7 @@ func TestDiagnosticsIncludesRequestedCapabilityBindings(t *testing.T) {
 	require.NoError(t, h.Use(capProvider{name: "cap-a"}))
 	require.NoError(t, h.Seal())
 	h.SetCapabilityBindings(map[string][]string{
-		"test.cap": []string{"cap-a", "missing"},
+		"test.cap": {"cap-a", "missing"},
 	})
 
 	diag := h.Diagnostics()
@@ -291,4 +308,47 @@ func TestResolveHelperRejectsWrongCardinality(t *testing.T) {
 	}, "cap-a")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "requires named_one cardinality")
+}
+
+func TestHubUseAfterSeal(t *testing.T) {
+	h := NewHub()
+	require.NoError(t, h.Use(&testModule{name: "a"}))
+	require.NoError(t, h.Seal())
+	err := h.Use(&testModule{name: "b"})
+	require.Error(t, err)
+}
+
+func TestHubUseDuplicate(t *testing.T) {
+	h := NewHub()
+	require.NoError(t, h.Use(&testModule{name: "a"}))
+	err := h.Use(&testModule{name: "a"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "already exists")
+}
+
+func TestHubUseNilModule(t *testing.T) {
+	h := NewHub()
+	err := h.Use(nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "module is nil")
+}
+
+func TestHubUseEmptyName(t *testing.T) {
+	h := NewHub()
+	err := h.Use(&testModule{name: ""})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "module name is empty")
+}
+
+func TestHubStop(t *testing.T) {
+	a := &testModule{name: "a"}
+	b := &testModule{name: "b", deps: []string{"a"}}
+	h := NewHub()
+	require.NoError(t, h.Use(a, b))
+	require.NoError(t, h.Seal())
+	require.NoError(t, h.Init(context.Background(), config.NewSnapshot(map[string]any{})))
+	require.NoError(t, h.Start(context.Background()))
+	require.NoError(t, h.Stop(context.Background()))
+	require.Equal(t, int32(1), b.stopped.Load())
+	require.Equal(t, int32(1), a.stopped.Load())
 }

@@ -26,7 +26,6 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/internal/configtest"
-	_ "github.com/codesjoy/yggdrasil/v3/remote/credentials/tls"
 )
 
 func TestResolveConfigPath(t *testing.T) {
@@ -57,7 +56,9 @@ func TestInitLoadsConfigAndOptionSources(t *testing.T) {
 	chdir(t, dir)
 	require.NoError(t, os.WriteFile(
 		filepath.Join(dir, "config.yaml"),
-		[]byte("app:\n  startup_order: bootstrap\nyggdrasil:\n  config:\n    sources:\n      - kind: file\n        config:\n          path: ./config.override.yaml\n"),
+		[]byte(
+			"app:\n  startup_order: bootstrap\nyggdrasil:\n  config:\n    sources:\n      - kind: file\n        config:\n          path: ./config.override.yaml\n",
+		),
 		0o600,
 	))
 	require.NoError(t, os.WriteFile(
@@ -99,7 +100,11 @@ func TestStopClosesManagedConfigSourcesOnce(t *testing.T) {
 		closeCount: &closeCount,
 	}
 
-	app := newTestApp(t, "close-sources", WithConfigSource("programmatic", config.PriorityOverride, programmatic))
+	app := newTestApp(
+		t,
+		"close-sources",
+		WithConfigSource("programmatic", config.PriorityOverride, programmatic),
+	)
 	require.NoError(t, app.initializeLocked(context.Background()))
 	require.NoError(t, app.Stop(context.Background()))
 	assert.Equal(t, int32(1), atomic.LoadInt32(&closeCount))
@@ -145,7 +150,11 @@ func TestValidateStartup_DoesNotFailForRuntimeResolvedBindings(t *testing.T) {
 			configure: func(t *testing.T) {
 				configtest.Set(t, "yggdrasil.admin.validation.strict", true)
 				configtest.Set(t, "yggdrasil.transports.http.rest.port", 0)
-				configtest.Set(t, "yggdrasil.transports.http.rest.marshaler.support", []string{"nope"})
+				configtest.Set(
+					t,
+					"yggdrasil.transports.http.rest.marshaler.support",
+					[]string{"nope"},
+				)
 			},
 		},
 		{
@@ -159,14 +168,19 @@ func TestValidateStartup_DoesNotFailForRuntimeResolvedBindings(t *testing.T) {
 			name: "strict missing client interceptor by service",
 			configure: func(t *testing.T) {
 				configtest.Set(t, "yggdrasil.admin.validation.strict", true)
-				configtest.Set(t, "yggdrasil.clients.services.user.interceptors.unary", []string{"nope"})
+				configtest.Set(
+					t,
+					"yggdrasil.clients.services.user.interceptors.unary",
+					[]string{"nope"},
+				)
 			},
 		},
 		{
-			name: "strict missing remote credentials builder",
+			name: "strict missing transport security provider",
 			configure: func(t *testing.T) {
 				configtest.Set(t, "yggdrasil.admin.validation.strict", true)
-				configtest.Set(t, "yggdrasil.transports.grpc.server.creds_proto", "missing")
+				configtest.Set(t, "yggdrasil.transports.grpc.server.security_profile", "custom")
+				configtest.Set(t, "yggdrasil.transports.security.profiles.custom.type", "missing")
 			},
 		},
 	}
@@ -179,11 +193,20 @@ func TestValidateStartup_DoesNotFailForRuntimeResolvedBindings(t *testing.T) {
 	}
 }
 
-func TestValidateStartup_Strict_FailsOnInvalidTLSCredentialsConfig(t *testing.T) {
+func TestValidateStartup_Strict_FailsOnInvalidTLSSecurityProfileConfig(t *testing.T) {
 	configtest.Set(t, "yggdrasil.admin.validation.strict", true)
-	configtest.Set(t, "yggdrasil.transports.grpc.server.creds_proto", "tls")
-	configtest.Set(t, "yggdrasil.transports.grpc.credentials.tls.server.cert_file", "/tmp/missing-cert.pem")
-	configtest.Set(t, "yggdrasil.transports.grpc.credentials.tls.server.key_file", "/tmp/missing-key.pem")
+	configtest.Set(t, "yggdrasil.transports.grpc.server.security_profile", "tls-server")
+	configtest.Set(t, "yggdrasil.transports.security.profiles.tls-server.type", "tls")
+	configtest.Set(
+		t,
+		"yggdrasil.transports.security.profiles.tls-server.config.server.cert_file",
+		"/tmp/missing-cert.pem",
+	)
+	configtest.Set(
+		t,
+		"yggdrasil.transports.security.profiles.tls-server.config.server.key_file",
+		"/tmp/missing-key.pem",
+	)
 
 	require.Error(t, validateStartup(nil))
 }

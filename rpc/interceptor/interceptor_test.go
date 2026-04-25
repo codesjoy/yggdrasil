@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	"github.com/codesjoy/yggdrasil/v3/rpc/stream"
@@ -815,4 +816,190 @@ func (m *mockServerStream) SendHeader(metadata.MD) error {
 }
 
 func (m *mockServerStream) SetTrailer(metadata.MD) {
+}
+
+// TestConfigureProvidersErrors tests error paths in Configure*Providers
+func TestConfigureProvidersErrors(t *testing.T) {
+	t.Run("nil items are skipped", func(t *testing.T) {
+		err := ConfigureUnaryClientProviders([]UnaryClientInterceptorProvider{nil})
+		assert.NoError(t, err)
+		err = ConfigureUnaryServerProviders([]UnaryServerInterceptorProvider{nil})
+		assert.NoError(t, err)
+		err = ConfigureStreamClientProviders([]StreamClientInterceptorProvider{nil})
+		assert.NoError(t, err)
+		err = ConfigureStreamServerProviders([]StreamServerInterceptorProvider{nil})
+		assert.NoError(t, err)
+	})
+
+	t.Run("empty name returns error", func(t *testing.T) {
+		emptyUC := NewUnaryClientInterceptorProvider(
+			"",
+			func(string) UnaryClientInterceptor { return nil },
+		)
+		err := ConfigureUnaryClientProviders([]UnaryClientInterceptorProvider{emptyUC})
+		assert.Error(t, err)
+
+		emptyUS := NewUnaryServerInterceptorProvider(
+			"",
+			func() UnaryServerInterceptor { return nil },
+		)
+		err = ConfigureUnaryServerProviders([]UnaryServerInterceptorProvider{emptyUS})
+		assert.Error(t, err)
+
+		emptySC := NewStreamClientInterceptorProvider(
+			"",
+			func(string) StreamClientInterceptor { return nil },
+		)
+		err = ConfigureStreamClientProviders([]StreamClientInterceptorProvider{emptySC})
+		assert.Error(t, err)
+
+		emptySS := NewStreamServerInterceptorProvider(
+			"",
+			func() StreamServerInterceptor { return nil },
+		)
+		err = ConfigureStreamServerProviders([]StreamServerInterceptorProvider{emptySS})
+		assert.Error(t, err)
+	})
+
+	t.Run("duplicate name returns error", func(t *testing.T) {
+		dupUC := NewUnaryClientInterceptorProvider(
+			"dup-uc",
+			func(string) UnaryClientInterceptor { return nil },
+		)
+		err := ConfigureUnaryClientProviders([]UnaryClientInterceptorProvider{dupUC, dupUC})
+		assert.Error(t, err)
+
+		dupUS := NewUnaryServerInterceptorProvider(
+			"dup-us",
+			func() UnaryServerInterceptor { return nil },
+		)
+		err = ConfigureUnaryServerProviders([]UnaryServerInterceptorProvider{dupUS, dupUS})
+		assert.Error(t, err)
+
+		dupSC := NewStreamClientInterceptorProvider(
+			"dup-sc",
+			func(string) StreamClientInterceptor { return nil },
+		)
+		err = ConfigureStreamClientProviders([]StreamClientInterceptorProvider{dupSC, dupSC})
+		assert.Error(t, err)
+
+		dupSS := NewStreamServerInterceptorProvider(
+			"dup-ss",
+			func() StreamServerInterceptor { return nil },
+		)
+		err = ConfigureStreamServerProviders([]StreamServerInterceptorProvider{dupSS, dupSS})
+		assert.Error(t, err)
+	})
+}
+
+func TestGetProvider(t *testing.T) {
+	t.Run("found and not found", func(t *testing.T) {
+		p := NewUnaryClientInterceptorProvider(
+			"get-test-uc",
+			func(string) UnaryClientInterceptor { return nil },
+		)
+		_ = ConfigureUnaryClientProviders([]UnaryClientInterceptorProvider{p})
+		assert.NotNil(t, GetUnaryClientProvider("get-test-uc"))
+		assert.Nil(t, GetUnaryClientProvider("nonexistent-uc"))
+
+		ps := NewUnaryServerInterceptorProvider(
+			"get-test-us",
+			func() UnaryServerInterceptor { return nil },
+		)
+		_ = ConfigureUnaryServerProviders([]UnaryServerInterceptorProvider{ps})
+		assert.NotNil(t, GetUnaryServerProvider("get-test-us"))
+		assert.Nil(t, GetUnaryServerProvider("nonexistent-us"))
+
+		psc := NewStreamClientInterceptorProvider(
+			"get-test-sc",
+			func(string) StreamClientInterceptor { return nil },
+		)
+		_ = ConfigureStreamClientProviders([]StreamClientInterceptorProvider{psc})
+		assert.NotNil(t, GetStreamClientProvider("get-test-sc"))
+		assert.Nil(t, GetStreamClientProvider("nonexistent-sc"))
+
+		pss := NewStreamServerInterceptorProvider(
+			"get-test-ss",
+			func() StreamServerInterceptor { return nil },
+		)
+		_ = ConfigureStreamServerProviders([]StreamServerInterceptorProvider{pss})
+		assert.NotNil(t, GetStreamServerProvider("get-test-ss"))
+		assert.Nil(t, GetStreamServerProvider("nonexistent-ss"))
+	})
+}
+
+func TestNewInterceptorProvider(t *testing.T) {
+	t.Run("unary client", func(t *testing.T) {
+		p := NewUnaryClientInterceptorProvider(
+			"test",
+			func(string) UnaryClientInterceptor { return nil },
+		)
+		assert.Equal(t, "test", p.Name())
+	})
+	t.Run("stream client", func(t *testing.T) {
+		p := NewStreamClientInterceptorProvider(
+			"test",
+			func(string) StreamClientInterceptor { return nil },
+		)
+		assert.Equal(t, "test", p.Name())
+	})
+	t.Run("unary server", func(t *testing.T) {
+		p := NewUnaryServerInterceptorProvider("test", func() UnaryServerInterceptor { return nil })
+		assert.Equal(t, "test", p.Name())
+	})
+	t.Run("stream server", func(t *testing.T) {
+		p := NewStreamServerInterceptorProvider(
+			"test",
+			func() StreamServerInterceptor { return nil },
+		)
+		assert.Equal(t, "test", p.Name())
+	})
+}
+
+func TestChainWithProviders_MissingProvider(t *testing.T) {
+	t.Run("unary client missing provider warns", func(t *testing.T) {
+		chain := ChainUnaryClientInterceptorsWithProviders("svc", []string{"nonexistent"}, nil)
+		require.NotNil(t, chain)
+		err := chain(
+			context.Background(),
+			"/test/method",
+			"req",
+			"reply",
+			func(context.Context, string, any, any) error { return nil },
+		)
+		assert.NoError(t, err)
+	})
+	t.Run("stream client missing provider warns", func(t *testing.T) {
+		chain := ChainStreamClientInterceptorsWithProviders("svc", []string{"nonexistent"}, nil)
+		require.NotNil(t, chain)
+		_, err := chain(
+			context.Background(),
+			&stream.Desc{},
+			"/test/method",
+			func(ctx context.Context, _ *stream.Desc, _ string) (stream.ClientStream, error) { return nil, nil },
+		)
+		assert.NoError(t, err)
+	})
+	t.Run("unary server missing provider warns", func(t *testing.T) {
+		chain := ChainUnaryServerInterceptorsWithProviders([]string{"nonexistent"}, nil)
+		require.NotNil(t, chain)
+		_, err := chain(
+			context.Background(),
+			"req",
+			&UnaryServerInfo{},
+			func(context.Context, any) (any, error) { return "resp", nil },
+		)
+		assert.NoError(t, err)
+	})
+	t.Run("stream server missing provider warns", func(t *testing.T) {
+		chain := ChainStreamServerInterceptorsWithProviders([]string{"nonexistent"}, nil)
+		require.NotNil(t, chain)
+		err := chain(
+			&struct{}{},
+			&mockServerStream{},
+			&StreamServerInfo{},
+			func(any, stream.ServerStream) error { return nil },
+		)
+		assert.NoError(t, err)
+	})
 }

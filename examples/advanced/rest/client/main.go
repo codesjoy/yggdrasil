@@ -141,7 +141,7 @@ func testCreateShelf() error {
 		return err
 	}
 
-	httpReq, err := http.NewRequest(
+	httpReq, err := http.NewRequest( //nolint:noctx
 		"POST",
 		"http://localhost:55887/v1/shelves",
 		bytes.NewBuffer(body),
@@ -156,7 +156,7 @@ func testCreateShelf() error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
@@ -172,11 +172,11 @@ func testCreateShelf() error {
 }
 
 func testGetShelf(name string) error {
-	resp, err := http.Get(fmt.Sprintf("http://localhost:55887/v1/%s", name))
+	resp, err := http.Get(fmt.Sprintf("http://localhost:55887/v1/%s", name)) //nolint:noctx
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
@@ -192,11 +192,11 @@ func testGetShelf(name string) error {
 }
 
 func testListShelves() error {
-	resp, err := http.Get("http://localhost:55887/v1/shelves")
+	resp, err := http.Get("http://localhost:55887/v1/shelves") //nolint:noctx
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
@@ -230,7 +230,7 @@ func testCreateBook(parent string) error {
 		return err
 	}
 
-	httpReq, err := http.NewRequest(
+	httpReq, err := http.NewRequest( //nolint:noctx
 		"POST",
 		fmt.Sprintf("http://localhost:55887/v1/%s/books", parent),
 		bytes.NewBuffer(body),
@@ -245,7 +245,7 @@ func testCreateBook(parent string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
@@ -261,11 +261,11 @@ func testCreateBook(parent string) error {
 }
 
 func testGetBook(name string) error {
-	resp, err := http.Get(fmt.Sprintf("http://localhost:55887/v1/%s", name))
+	resp, err := http.Get(fmt.Sprintf("http://localhost:55887/v1/%s", name)) //nolint:noctx
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
@@ -281,11 +281,11 @@ func testGetBook(name string) error {
 }
 
 func testListBooks(parent string) error {
-	resp, err := http.Get(fmt.Sprintf("http://localhost:55887/v1/%s/books", parent))
+	resp, err := http.Get(fmt.Sprintf("http://localhost:55887/v1/%s/books", parent)) //nolint:noctx
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
@@ -319,7 +319,7 @@ func testUpdateBook(name string) error {
 		return err
 	}
 
-	httpReq, err := http.NewRequest(
+	httpReq, err := http.NewRequest( //nolint:noctx
 		"PATCH",
 		fmt.Sprintf("http://localhost:55887/v1/%s", name),
 		bytes.NewBuffer(body),
@@ -334,7 +334,7 @@ func testUpdateBook(name string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
@@ -350,7 +350,7 @@ func testUpdateBook(name string) error {
 }
 
 func testDeleteBook(name string) error {
-	httpReq, err := http.NewRequest(
+	httpReq, err := http.NewRequest( //nolint:noctx
 		"DELETE",
 		fmt.Sprintf("http://localhost:55887/v1/%s", name),
 		nil,
@@ -364,7 +364,7 @@ func testDeleteBook(name string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
@@ -375,7 +375,7 @@ func testDeleteBook(name string) error {
 }
 
 func testDeleteShelf(name string) error {
-	httpReq, err := http.NewRequest(
+	httpReq, err := http.NewRequest( //nolint:noctx
 		"DELETE",
 		fmt.Sprintf("http://localhost:55887/v1/%s", name),
 		nil,
@@ -389,7 +389,7 @@ func testDeleteShelf(name string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)

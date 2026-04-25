@@ -53,3 +53,33 @@ func TestInit(t *testing.T) {
 		assert.Implements(t, (*stats.Handler)(nil), handler)
 	})
 }
+
+func TestBuiltinHandlerBuilderWithConfig(t *testing.T) {
+	cfg := Config{
+		ReceivedEvent: true,
+		SentEvent:     true,
+		EnableMetrics: true,
+	}
+	builder := BuiltinHandlerBuilderWithConfig(cfg)
+
+	t.Run("creates server handler", func(t *testing.T) {
+		handler := builder(true)
+		assert.NotNil(t, handler)
+		assert.Implements(t, (*stats.Handler)(nil), handler)
+	})
+
+	t.Run("creates client handler", func(t *testing.T) {
+		handler := builder(false)
+		assert.NotNil(t, handler)
+		assert.Implements(t, (*stats.Handler)(nil), handler)
+	})
+}
+
+func TestBuiltinHandlerBuilder(t *testing.T) {
+	builder := BuiltinHandlerBuilder()
+	assert.NotNil(t, builder)
+
+	handler := builder(true)
+	assert.NotNil(t, handler)
+	assert.Implements(t, (*stats.Handler)(nil), handler)
+}

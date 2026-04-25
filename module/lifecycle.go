@@ -102,7 +102,10 @@ func (h *Hub) stopSequence(ctx context.Context, startedSeq []Module) error {
 			continue
 		}
 		if err := item.Stop(ctx); err != nil {
-			multiErr = errors.Join(multiErr, fmt.Errorf("module %q stop failed: %w", mod.Name(), err))
+			multiErr = errors.Join(
+				multiErr,
+				fmt.Errorf("module %q stop failed: %w", mod.Name(), err),
+			)
 		}
 	}
 	return multiErr
@@ -178,7 +181,7 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 		}
 		committer, err := item.PrepareReload(ctx, moduleView(mod, snap))
 		if err != nil {
-			rollbackErr, rollbackModule := rollbackPrepared(ctx, prepared)
+			rollbackModule, rollbackErr := rollbackPrepared(ctx, prepared)
 			state := ReloadState{
 				Phase:           ReloadPhaseRollback,
 				FailedModule:    mod.Name(),
@@ -198,7 +201,6 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 			h.mu.Lock()
 			if state.RestartRequired {
 				h.restartRequired = true
-				restartRequired = true
 			}
 			h.restartFlag[mod.Name()] = true
 			h.reloadState = state
@@ -218,7 +220,7 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 	for i := range prepared {
 		item := prepared[i]
 		if err := item.committer.Commit(ctx); err != nil {
-			rollbackErr, rollbackModule := rollbackPrepared(ctx, prepared[i+1:])
+			rollbackModule, rollbackErr := rollbackPrepared(ctx, prepared[i+1:])
 			state := ReloadState{
 				Phase:           ReloadPhaseRollback,
 				RestartRequired: true,
@@ -236,7 +238,6 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 			}
 			h.mu.Lock()
 			h.restartRequired = true
-			restartRequired = true
 			h.reloadState = state
 			h.restartFlag[item.module.Name()] = true
 			h.mu.Unlock()
@@ -254,7 +255,7 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 	return nil
 }
 
-func rollbackPrepared(ctx context.Context, prepared []preparedReload) (error, string) {
+func rollbackPrepared(ctx context.Context, prepared []preparedReload) (string, error) {
 	var multiErr error
 	var failedModule string
 	for i := len(prepared) - 1; i >= 0; i-- {
@@ -268,7 +269,7 @@ func rollbackPrepared(ctx context.Context, prepared []preparedReload) (error, st
 			)
 		}
 	}
-	return multiErr, failedModule
+	return failedModule, multiErr
 }
 
 func cloneRequestedBindings(in map[string][]string) map[string][]string {

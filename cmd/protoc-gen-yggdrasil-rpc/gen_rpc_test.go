@@ -83,7 +83,9 @@ func TestGenerateFiles_NoServices(t *testing.T) {
 				Name:    proto.String("test.proto"),
 				Package: proto.String("test"),
 				Options: &descriptorpb.FileOptions{
-					GoPackage: proto.String("github.com/codesjoy/yggdrasil/v3/cmd/protoc-gen-yggdrasil-rpc;main"),
+					GoPackage: proto.String(
+						"github.com/codesjoy/yggdrasil/v3/cmd/protoc-gen-yggdrasil-rpc;main",
+					),
 				},
 			},
 		},
@@ -111,7 +113,11 @@ func TestGenerateFiles_StreamingOnly_NoInterceptorImport(t *testing.T) {
 		newMethod("Watch", "WatchRequest", "WatchResponse", false, true),
 	))
 
-	assert.NotContains(t, content, "interceptor \"github.com/codesjoy/yggdrasil/v3/rpc/interceptor\"")
+	assert.NotContains(
+		t,
+		content,
+		"interceptor \"github.com/codesjoy/yggdrasil/v3/rpc/interceptor\"",
+	)
 	assert.NotContains(t, content, "UnaryServerInterceptor")
 }
 
@@ -124,7 +130,11 @@ func TestGenerateFiles_ClientStreamOnly_HasCloseAndRecv(t *testing.T) {
 	assert.Contains(t, content, "type GreeterUploadClient interface {")
 	assert.Contains(t, content, "Send(*UploadRequest) error")
 	assert.Contains(t, content, "CloseAndRecv() (*UploadResponse, error)")
-	assert.Contains(t, content, "func (x *greeterUploadClient) CloseAndRecv() (*UploadResponse, error)")
+	assert.Contains(
+		t,
+		content,
+		"func (x *greeterUploadClient) CloseAndRecv() (*UploadResponse, error)",
+	)
 	assert.NotContains(t, content, "func (x *greeterUploadClient) Recv() (*UploadResponse, error)")
 }
 
@@ -186,7 +196,10 @@ func generateRPCContent(t *testing.T, services ...*descriptorpb.ServiceDescripto
 	return ""
 }
 
-func newTestPlugin(t *testing.T, services ...*descriptorpb.ServiceDescriptorProto) *protogen.Plugin {
+func newTestPlugin(
+	t *testing.T,
+	services ...*descriptorpb.ServiceDescriptorProto,
+) *protogen.Plugin {
 	t.Helper()
 
 	gen, err := protogen.Options{}.New(&pluginpb.CodeGeneratorRequest{
@@ -197,7 +210,9 @@ func newTestPlugin(t *testing.T, services ...*descriptorpb.ServiceDescriptorProt
 				Package:     proto.String("test"),
 				MessageType: collectMessageTypes(services...),
 				Options: &descriptorpb.FileOptions{
-					GoPackage: proto.String("github.com/codesjoy/yggdrasil/v3/cmd/protoc-gen-yggdrasil-rpc;main"),
+					GoPackage: proto.String(
+						"github.com/codesjoy/yggdrasil/v3/cmd/protoc-gen-yggdrasil-rpc;main",
+					),
 				},
 				Service: services,
 			},
@@ -207,7 +222,9 @@ func newTestPlugin(t *testing.T, services ...*descriptorpb.ServiceDescriptorProt
 	return gen
 }
 
-func collectMessageTypes(services ...*descriptorpb.ServiceDescriptorProto) []*descriptorpb.DescriptorProto {
+func collectMessageTypes(
+	services ...*descriptorpb.ServiceDescriptorProto,
+) []*descriptorpb.DescriptorProto {
 	names := make(map[string]struct{})
 	for _, service := range services {
 		for _, method := range service.Method {
@@ -246,7 +263,10 @@ func protoTypeName(full string) string {
 	return full[lastDot+1:]
 }
 
-func newService(name string, methods ...*descriptorpb.MethodDescriptorProto) *descriptorpb.ServiceDescriptorProto {
+func newService(
+	name string,
+	methods ...*descriptorpb.MethodDescriptorProto,
+) *descriptorpb.ServiceDescriptorProto {
 	return &descriptorpb.ServiceDescriptorProto{
 		Name:    proto.String(name),
 		Options: &descriptorpb.ServiceOptions{},
@@ -273,4 +293,73 @@ func newMethod(
 		method.ServerStreaming = proto.Bool(true)
 	}
 	return method
+}
+
+func TestToLowerFirstCamelCase(t *testing.T) {
+	tests := []struct {
+		input  string
+		expect string
+	}{
+		{"", ""},
+		{"A", "a"},
+		{"Hello", "hello"},
+		{"HelloWorld", "helloworld"},
+		{"ABC", "abc"},
+		{"hello_world", "helloWorld"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			assert.Equal(t, tt.expect, toLowerFirstCamelCase(tt.input))
+		})
+	}
+}
+
+func TestStrToCamelCase(t *testing.T) {
+	tests := []struct {
+		input  string
+		expect string
+	}{
+		{"", ""},
+		{"hello", "Hello"},
+		{"hello_world", "HelloWorld"},
+		{"HELLO", "Hello"},
+		{"a_b_c", "ABC"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			assert.Equal(t, tt.expect, strToCamelCase(tt.input))
+		})
+	}
+}
+
+func TestGenerateFiles_DeprecatedService(t *testing.T) {
+	svc := newService("OldService",
+		newMethod("DoThing", "ThingRequest", "ThingResponse", false, false),
+	)
+	svc.Options.Deprecated = proto.Bool(true)
+
+	content := generateRPCContent(t, svc)
+	assert.Contains(t, content, "Deprecated: Do not use.")
+}
+
+func TestGenerateFiles_MultipleServices(t *testing.T) {
+	svcA := newService("ServiceA",
+		newMethod("MethodA", "ARequest", "AResponse", false, false),
+	)
+	svcB := newService("ServiceB",
+		newMethod("MethodB", "BRequest", "BResponse", false, false),
+	)
+
+	content := generateRPCContent(t, svcA, svcB)
+	assert.Contains(t, content, "ServiceAClient")
+	assert.Contains(t, content, "ServiceBClient")
+	assert.Contains(t, content, "MethodA(context.Context, *ARequest) (*AResponse, error)")
+	assert.Contains(t, content, "MethodB(context.Context, *BRequest) (*BResponse, error)")
+}
+
+func TestGenerateFiles_ServiceWithZeroMethods(t *testing.T) {
+	svc := newService("EmptyService")
+	content := generateRPCContent(t, svc)
+	assert.NotContains(t, content, "EmptyServiceClient")
+	assert.NotContains(t, content, "EmptyServiceServer")
 }

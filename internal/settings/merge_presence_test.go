@@ -106,7 +106,11 @@ func TestCompile_ServiceOverridesHonorExplicitZeroAndEmptyValues(t *testing.T) {
 	require.Empty(t, svc.Remote.Attributes)
 	require.Empty(t, svc.Interceptors.Unary)
 
-	require.Equal(t, time.Duration(0), resolved.Transports.GRPC.ClientServices["svc"].ConnectTimeout)
+	require.Equal(
+		t,
+		time.Duration(0),
+		resolved.Transports.GRPC.ClientServices["svc"].ConnectTimeout,
+	)
 	require.Equal(t, "", resolved.Transports.GRPC.ClientServices["svc"].Transport.UserAgent)
 	require.Equal(t, time.Duration(0), resolved.Transports.HTTP.ClientServices["svc"].Timeout)
 }

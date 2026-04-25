@@ -230,3 +230,108 @@ func TestClientHandler_Context(t *testing.T) {
 		assert.Equal(t, expectedValue, value)
 	})
 }
+
+func TestClientHandler_HandleRPC_WithMetricsConfig(t *testing.T) {
+	cfg := &Config{EnableMetrics: true}
+	h := newCliHandlerWithConfig(cfg)
+	ch := h.(*clientHandler)
+
+	// Create a span and rpc context
+	ctx, span := ch.tracer.Start(context.Background(), "test")
+	defer span.End()
+	ctx = context.WithValue(ctx, rpcContextKey{}, &rpcContext{})
+
+	rs := &stats.RPCOutPayloadBase{
+		Client:        true,
+		Data:          []byte("test"),
+		TransportSize: 10,
+		Protocol:      "grpc",
+	}
+	// Should not panic with metrics enabled
+	ch.HandleRPC(ctx, rs)
+}
+
+func TestClientHandler_HandleRPC_RPCOutHeader(t *testing.T) {
+	h := newCliHandler()
+	ch := h.(*clientHandler)
+
+	ctx, span := ch.tracer.Start(context.Background(), "test")
+	defer span.End()
+
+	rs := &stats.OutHeaderBase{
+		Client:         true,
+		Protocol:       "grpc",
+		RemoteEndpoint: "server:8080",
+	}
+	ch.HandleRPC(ctx, rs)
+}
+
+func TestClientHandler_HandleRPC_RPCOutTrailer(t *testing.T) {
+	h := newCliHandler()
+	ch := h.(*clientHandler)
+
+	ctx, span := ch.tracer.Start(context.Background(), "test")
+	defer span.End()
+
+	rs := &stats.OutTrailerBase{Client: true}
+	ch.HandleRPC(ctx, rs)
+}
+
+func TestClientHandler_FullLifecycle(t *testing.T) {
+	h := newCliHandler()
+	ch := h.(*clientHandler)
+
+	reqSize := &spyInt64Histogram{}
+	respSize := &spyInt64Histogram{}
+	reqPerRPC := &spyInt64Histogram{}
+	respPerRPC := &spyInt64Histogram{}
+	dur := &spyFloat64Histogram{}
+	ch.cfg = &Config{EnableMetrics: true}
+	ch.rpcRequestSize = reqSize
+	ch.rpcResponseSize = respSize
+	ch.rpcRequestsPerRPC = reqPerRPC
+	ch.rpcResponsesPerRPC = respPerRPC
+	ch.rpcDuration = dur
+	ch.handleRPC = ch.handleWithMetrics
+
+	ctx := context.Background()
+	ctx = ch.TagRPC(ctx, &stats.RPCTagInfoBase{FullMethod: "/test.service/Method"})
+
+	// OutPayload (client request)
+	ch.HandleRPC(ctx, &stats.RPCOutPayloadBase{
+		Client:        true,
+		Data:          []byte("request"),
+		TransportSize: 50,
+		Protocol:      "grpc",
+	})
+
+	// InPayload (client response)
+	ch.HandleRPC(ctx, &stats.RPCInPayloadBase{
+		Client:        true,
+		Data:          []byte("response"),
+		TransportSize: 100,
+		Protocol:      "grpc",
+	})
+
+	// OutHeader
+	ch.HandleRPC(ctx, &stats.OutHeaderBase{
+		Client:         true,
+		Protocol:       "grpc",
+		RemoteEndpoint: "server:8080",
+	})
+
+	// End
+	begin := time.Now()
+	ch.HandleRPC(ctx, &stats.RPCEndBase{
+		Client:    true,
+		BeginTime: begin,
+		EndTime:   begin.Add(25 * time.Millisecond),
+		Protocol:  "grpc",
+	})
+
+	assert.Equal(t, []int64{50}, reqSize.values)
+	assert.Equal(t, []int64{100}, respSize.values)
+	assert.Equal(t, []int64{1}, reqPerRPC.values)
+	assert.Equal(t, []int64{1}, respPerRPC.values)
+	assert.Len(t, dur.values, 1)
+}

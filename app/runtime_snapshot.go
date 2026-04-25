@@ -22,21 +22,20 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/codesjoy/yggdrasil/v3/balancer"
-	"github.com/codesjoy/yggdrasil/v3/client"
-	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
+	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
+	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 	"github.com/codesjoy/yggdrasil/v3/observability/logger"
 	xotel "github.com/codesjoy/yggdrasil/v3/observability/otel"
-	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
-	"github.com/codesjoy/yggdrasil/v3/remote"
-	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
-	"github.com/codesjoy/yggdrasil/v3/remote/marshaler"
-	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
-	"github.com/codesjoy/yggdrasil/v3/server"
-	"github.com/codesjoy/yggdrasil/v3/server/rest"
-	restmiddleware "github.com/codesjoy/yggdrasil/v3/server/rest/middleware"
 	"github.com/codesjoy/yggdrasil/v3/observability/stats"
+	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
+	remote "github.com/codesjoy/yggdrasil/v3/transport"
+	"github.com/codesjoy/yggdrasil/v3/transport/gateway/rest"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/client"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/client/balancer"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
 )
 
 // Snapshot is the immutable App-scoped runtime assembly result.
@@ -53,8 +52,9 @@ type Snapshot struct {
 	ServerStats          stats.Handler
 	ClientStats          stats.Handler
 
-	CredentialsBuilders map[string]credentials.Builder
-	MarshalerBuilderMap map[string]marshaler.MarshallerBuilder
+	SecurityProviders   map[string]security.Provider
+	SecurityProfiles    map[string]security.Profile
+	MarshalerBuilderMap map[string]marshaler.MarshalerBuilder
 
 	TransportServerProviders map[string]remote.TransportServerProvider
 	TransportClientProviders map[string]remote.TransportClientProvider
@@ -64,7 +64,7 @@ type Snapshot struct {
 	UnaryClientInterceptorProviders  map[string]interceptor.UnaryClientInterceptorProvider
 	StreamClientInterceptorProviders map[string]interceptor.StreamClientInterceptorProvider
 
-	RESTMiddlewareProviderMap map[string]restmiddleware.Provider
+	RESTMiddlewareProviderMap map[string]rest.Provider
 
 	RegistryProviders map[string]registry.Provider
 	ResolverProviders map[string]resolver.Provider
@@ -96,7 +96,8 @@ func (s *Snapshot) Copy() *Snapshot {
 		StatsHandlerBuilders:            cloneMap(s.StatsHandlerBuilders),
 		ServerStats:                     s.ServerStats,
 		ClientStats:                     s.ClientStats,
-		CredentialsBuilders:             cloneMap(s.CredentialsBuilders),
+		SecurityProviders:               cloneMap(s.SecurityProviders),
+		SecurityProfiles:                cloneMap(s.SecurityProfiles),
 		MarshalerBuilderMap:             cloneMap(s.MarshalerBuilderMap),
 		TransportServerProviders:        cloneMap(s.TransportServerProviders),
 		TransportClientProviders:        cloneMap(s.TransportClientProviders),
@@ -156,17 +157,17 @@ func (s *Snapshot) RESTConfig() *rest.Config {
 }
 
 // RESTMiddlewareProviders returns the App-scoped REST middleware providers.
-func (s *Snapshot) RESTMiddlewareProviders() map[string]restmiddleware.Provider {
+func (s *Snapshot) RESTMiddlewareProviders() map[string]rest.Provider {
 	if s == nil {
-		return map[string]restmiddleware.Provider{}
+		return map[string]rest.Provider{}
 	}
 	return cloneMap(s.RESTMiddlewareProviderMap)
 }
 
 // MarshalerBuilders returns the App-scoped marshaler builders.
-func (s *Snapshot) MarshalerBuilders() map[string]marshaler.MarshallerBuilder {
+func (s *Snapshot) MarshalerBuilders() map[string]marshaler.MarshalerBuilder {
 	if s == nil {
-		return map[string]marshaler.MarshallerBuilder{}
+		return map[string]marshaler.MarshalerBuilder{}
 	}
 	return cloneMap(s.MarshalerBuilderMap)
 }
@@ -189,12 +190,20 @@ func (s *Snapshot) TransportClientProvider(protocol string) remote.TransportClie
 
 // BuildUnaryServerInterceptor builds one unary server interceptor chain from the explicit provider map.
 func (s *Snapshot) BuildUnaryServerInterceptor(names []string) interceptor.UnaryServerInterceptor {
-	return interceptor.ChainUnaryServerInterceptorsWithProviders(names, s.UnaryServerInterceptorProviders)
+	return interceptor.ChainUnaryServerInterceptorsWithProviders(
+		names,
+		s.UnaryServerInterceptorProviders,
+	)
 }
 
 // BuildStreamServerInterceptor builds one stream server interceptor chain from the explicit provider map.
-func (s *Snapshot) BuildStreamServerInterceptor(names []string) interceptor.StreamServerInterceptor {
-	return interceptor.ChainStreamServerInterceptorsWithProviders(names, s.StreamServerInterceptorProviders)
+func (s *Snapshot) BuildStreamServerInterceptor(
+	names []string,
+) interceptor.StreamServerInterceptor {
+	return interceptor.ChainStreamServerInterceptorsWithProviders(
+		names,
+		s.StreamServerInterceptorProviders,
+	)
 }
 
 // BuildUnaryClientInterceptor builds one unary client interceptor chain from the explicit provider map.
@@ -223,7 +232,7 @@ func (s *Snapshot) BuildStreamClientInterceptor(
 
 // BuildRESTMiddlewares builds one REST middleware chain from the explicit provider map.
 func (s *Snapshot) BuildRESTMiddlewares(names ...string) chi.Middlewares {
-	return restmiddleware.BuildWithProviders(s.RESTMiddlewareProviderMap, names...)
+	return rest.BuildWithProviders(s.RESTMiddlewareProviderMap, names...)
 }
 
 // NewRegistry builds the configured default registry.
@@ -239,7 +248,10 @@ func (s *Snapshot) NewRegistry() (registry.Registry, error) {
 }
 
 // NewRegistryByType builds one registry from the explicit provider map.
-func (s *Snapshot) NewRegistryByType(typeName string, cfg map[string]any) (registry.Registry, error) {
+func (s *Snapshot) NewRegistryByType(
+	typeName string,
+	cfg map[string]any,
+) (registry.Registry, error) {
 	if s == nil {
 		return nil, fmt.Errorf("runtime snapshot is nil")
 	}
