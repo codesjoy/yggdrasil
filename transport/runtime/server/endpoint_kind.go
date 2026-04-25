@@ -12,5 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package constant provides constants for yggdrasil.
-package constant
+package server
+
+// EndpointKind identifies one advertised server endpoint kind.
+type EndpointKind string
+
+const (
+	// EndpointKindRPC represents the RPC server.
+	EndpointKindRPC EndpointKind = "rpc"
+	// EndpointKindGovernor represents the governor server.
+	EndpointKindGovernor EndpointKind = "governor"
+	// EndpointKindRest represents the REST server.
+	EndpointKindRest EndpointKind = "rest"
+)

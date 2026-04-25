@@ -32,9 +32,9 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/protobuf/proto"
 
-	internalutils "github.com/codesjoy/yggdrasil/v3/internal/utils"
 	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	"github.com/codesjoy/yggdrasil/v3/rpc/status"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/listenaddr"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/peer"
 )
@@ -124,7 +124,7 @@ func NewServer(cfg *Config, opts ...Option) (Server, error) {
 		cfg = &Config{}
 	}
 
-	host, err := internalutils.NormalizeListenHost(cfg.Host)
+	host, err := listenaddr.NormalizeListenHost(cfg.Host)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func NewServer(cfg *Config, opts ...Option) (Server, error) {
 	}
 
 	r := chi.NewMux()
-	allMiddlewares := internalutils.DedupStableStrings(cfg.Middleware.All)
+	allMiddlewares := dedupStableStrings(cfg.Middleware.All)
 	if s.middlewareMap != nil {
 		r.Use(BuildWithProviders(s.middlewareMap, allMiddlewares...)...)
 	} else {
@@ -160,7 +160,7 @@ func NewServer(cfg *Config, opts ...Option) (Server, error) {
 		} else {
 			rpcMiddlewaresRaw = append([]string{"marshaler"}, rpcMiddlewaresRaw...)
 		}
-		rpcMiddlewares := internalutils.DedupStableStrings(rpcMiddlewaresRaw)
+		rpcMiddlewares := dedupStableStrings(rpcMiddlewaresRaw)
 		if s.middlewareMap != nil {
 			r.Use(BuildWithProviders(s.middlewareMap, rpcMiddlewares...)...)
 		} else {
@@ -168,7 +168,7 @@ func NewServer(cfg *Config, opts ...Option) (Server, error) {
 		}
 	})
 
-	webMiddlewares := internalutils.DedupStableStrings(cfg.Middleware.Web)
+	webMiddlewares := dedupStableStrings(cfg.Middleware.Web)
 	webRouter := r.Group(func(r chi.Router) {
 		if s.middlewareMap != nil {
 			r.Use(BuildWithProviders(s.middlewareMap, webMiddlewares...)...)
@@ -236,6 +236,23 @@ func (s *ServeMux) Start() error {
 	}
 	s.started = true
 	return nil
+}
+
+func dedupStableStrings(values []string) []string {
+	if len(values) < 2 {
+		return values
+	}
+	seen := make(map[string]struct{}, len(values))
+	i := 0
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		values[i] = value
+		i++
+	}
+	return values[:i]
 }
 
 // Serve serves the server.

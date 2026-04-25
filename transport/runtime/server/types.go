@@ -16,8 +16,6 @@ package server
 
 import (
 	"context"
-
-	"github.com/codesjoy/yggdrasil/v3/internal/constant"
 )
 
 // Endpoint is the interface that wraps the Endpoint method.
@@ -25,7 +23,7 @@ type Endpoint interface {
 	Protocol() string
 	Address() string
 	Metadata() map[string]string
-	Kind() constant.ServerKind
+	Kind() EndpointKind
 }
 
 // Server is the interface that wraps the Serve method.

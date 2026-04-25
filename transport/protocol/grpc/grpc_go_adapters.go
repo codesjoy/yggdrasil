@@ -38,13 +38,12 @@ import (
 
 	"github.com/codesjoy/pkg/basic/xerror"
 
-	istatus "github.com/codesjoy/yggdrasil/v3/internal/status"
-	internalutils "github.com/codesjoy/yggdrasil/v3/internal/utils"
 	ystats "github.com/codesjoy/yggdrasil/v3/observability/stats"
 	ymetadata "github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	ystatus "github.com/codesjoy/yggdrasil/v3/rpc/status"
 	remote "github.com/codesjoy/yggdrasil/v3/transport"
 	stats2 "github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc/stats"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/listenaddr"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/peer"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
 )
@@ -116,9 +115,9 @@ func toRPCErr(err error) error {
 	case errors.Is(err, io.EOF):
 		return err
 	case errors.Is(err, context.DeadlineExceeded):
-		return istatus.WithCode(code.Code_DEADLINE_EXCEEDED, err)
+		return ystatus.WithCode(code.Code_DEADLINE_EXCEEDED, err)
 	case errors.Is(err, context.Canceled):
-		return istatus.WithCode(code.Code_CANCELLED, err)
+		return ystatus.WithCode(code.Code_CANCELLED, err)
 	case errors.Is(err, io.ErrUnexpectedEOF):
 		return xerror.New(code.Code_INTERNAL, io.ErrUnexpectedEOF.Error())
 	}
@@ -128,7 +127,7 @@ func toRPCErr(err error) error {
 	if _, ok := ystatus.CoverError(err); ok {
 		return err
 	}
-	return istatus.WithCode(code.Code_UNKNOWN, err)
+	return ystatus.WithCode(code.Code_UNKNOWN, err)
 }
 
 func grpcTargetForEndpoint(address string) string {
@@ -496,7 +495,7 @@ func normalizeListenAddress(network, address string) (string, error) {
 		}
 		_ = network
 	}
-	host, err := internalutils.NormalizeListenHost(host)
+	host, err := listenaddr.NormalizeListenHost(host)
 	if err != nil {
 		return "", err
 	}

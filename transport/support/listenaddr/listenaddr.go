@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+// Package listenaddr provides transport listen-address normalization helpers.
+package listenaddr
 
 import (
 	"context"
@@ -21,7 +22,7 @@ import (
 	"github.com/codesjoy/pkg/utils/xnet"
 )
 
-// NormalizeListenHost normalizes listen host for empty/wildcard values.
+// NormalizeListenHost normalizes listen host for empty or wildcard values.
 func NormalizeListenHost(host string) (string, error) {
 	host = strings.TrimSpace(host)
 	if !isWildcardHost(host) {

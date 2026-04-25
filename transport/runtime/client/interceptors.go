@@ -16,21 +16,36 @@ package client
 
 import (
 	"slices"
-
-	internalutils "github.com/codesjoy/yggdrasil/v3/internal/utils"
 )
 
 func (c *client) initInterceptor() {
 	cfg := c.runtime.ClientSettings(c.appName)
 	unaryNames := append([]string(nil), cfg.Interceptors.Unary...)
-	unaryNames = internalutils.DedupStableStrings(
+	unaryNames = dedupStableStrings(
 		slices.DeleteFunc(unaryNames, func(s string) bool { return s == "" }),
 	)
 	c.unaryInterceptor = c.runtime.BuildUnaryClientInterceptor(c.appName, unaryNames)
 
 	streamNames := append([]string(nil), cfg.Interceptors.Stream...)
-	streamNames = internalutils.DedupStableStrings(
+	streamNames = dedupStableStrings(
 		slices.DeleteFunc(streamNames, func(s string) bool { return s == "" }),
 	)
 	c.streamInterceptor = c.runtime.BuildStreamClientInterceptor(c.appName, streamNames)
+}
+
+func dedupStableStrings(values []string) []string {
+	if len(values) < 2 {
+		return values
+	}
+	seen := make(map[string]struct{}, len(values))
+	i := 0
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		values[i] = value
+		i++
+	}
+	return values[:i]
 }

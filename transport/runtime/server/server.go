@@ -19,7 +19,6 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/codesjoy/yggdrasil/v3/internal/constant"
 	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
 	remote "github.com/codesjoy/yggdrasil/v3/transport"
@@ -36,7 +35,7 @@ const (
 type serverInfo struct {
 	protocol string
 	address  string
-	svrKind  constant.ServerKind
+	svrKind  EndpointKind
 	metadata map[string]string
 }
 

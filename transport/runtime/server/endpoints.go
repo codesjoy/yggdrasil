@@ -14,8 +14,6 @@
 
 package server
 
-import "github.com/codesjoy/yggdrasil/v3/internal/constant"
-
 func (si *serverInfo) Address() string {
 	return si.address
 }
@@ -24,7 +22,7 @@ func (si *serverInfo) Metadata() map[string]string {
 	return si.metadata
 }
 
-func (si *serverInfo) Kind() constant.ServerKind {
+func (si *serverInfo) Kind() EndpointKind {
 	return si.svrKind
 }
 
@@ -40,7 +38,7 @@ func (s *server) Endpoints() []Endpoint {
 			protocol: e.Protocol,
 			address:  e.Address,
 			metadata: e.Attributes,
-			svrKind:  constant.ServerKindRPC,
+			svrKind:  EndpointKindRPC,
 		}
 	}
 	if s.restEnable {
@@ -48,7 +46,7 @@ func (s *server) Endpoints() []Endpoint {
 			protocol: "http",
 			address:  s.restSvr.Info().GetAddress(),
 			metadata: s.restSvr.Info().GetAttributes(),
-			svrKind:  constant.ServerKindRest,
+			svrKind:  EndpointKindRest,
 		})
 	}
 	return endpoints

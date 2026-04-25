@@ -19,13 +19,11 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-
-	internalutils "github.com/codesjoy/yggdrasil/v3/internal/utils"
 )
 
 // BuildMarshalerRegistry builds a marshaler registry from a list of scheme names.
 func BuildMarshalerRegistry(scheme ...string) Registry {
-	scheme = internalutils.DedupStableStrings(scheme)
+	scheme = dedupStableStrings(scheme)
 	mr := NewRegistry()
 	for _, item := range scheme {
 		marshaler, err := BuildMarshaler(item)
@@ -48,7 +46,7 @@ func BuildMarshalerRegistryWithBuilders(
 	jsonpbCfg *JSONPbConfig,
 	scheme ...string,
 ) Registry {
-	scheme = internalutils.DedupStableStrings(scheme)
+	scheme = dedupStableStrings(scheme)
 	mr := NewRegistry()
 	for _, item := range scheme {
 		m, err := BuildMarshalerWithBuilders(builders, item, jsonpbCfg)
@@ -154,4 +152,21 @@ func headerValues(values []string) []string {
 		}
 	}
 	return out
+}
+
+func dedupStableStrings(values []string) []string {
+	if len(values) < 2 {
+		return values
+	}
+	seen := make(map[string]struct{}, len(values))
+	i := 0
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		values[i] = value
+		i++
+	}
+	return values[:i]
 }

@@ -22,7 +22,6 @@ import (
 	"github.com/codesjoy/pkg/basic/xerror"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
-	istatus "github.com/codesjoy/yggdrasil/v3/internal/status"
 	"github.com/codesjoy/yggdrasil/v3/rpc/status"
 	remote "github.com/codesjoy/yggdrasil/v3/transport"
 	"github.com/codesjoy/yggdrasil/v3/transport/runtime/client/balancer"
@@ -104,7 +103,7 @@ func (c *client) pick(failFast bool, info *balancer.RPCInfo) (balancer.PickResul
 				continue
 			}
 			if st, ok := status.CoverError(err); ok {
-				if istatus.IsRestrictedControlPlaneCode(st) {
+				if isRestrictedControlPlaneCode(st) {
 					err = xerror.New(
 						code.Code_INTERNAL,
 						fmt.Sprintf("received picker error with illegal status: %v", err),
@@ -128,4 +127,18 @@ func (c *client) pick(failFast bool, info *balancer.RPCInfo) (balancer.PickResul
 		}
 		return pickResult, nil
 	}
+}
+
+func isRestrictedControlPlaneCode(st *status.Status) bool {
+	switch st.Code() {
+	case code.Code_INVALID_ARGUMENT,
+		code.Code_NOT_FOUND,
+		code.Code_ALREADY_EXISTS,
+		code.Code_FAILED_PRECONDITION,
+		code.Code_ABORTED,
+		code.Code_OUT_OF_RANGE,
+		code.Code_DATA_LOSS:
+		return true
+	}
+	return false
 }

@@ -28,7 +28,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
-	"github.com/codesjoy/yggdrasil/v3/internal/constant"
 	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 	"github.com/codesjoy/yggdrasil/v3/rpc/status"
 )
@@ -74,14 +73,14 @@ func newHandlerWithConfig(cfg *Config, isSvr bool) handler {
 	}
 	tracer := otel.Tracer(
 		"github.com/codesjoy/yggdrasil/v3",
-		trace.WithInstrumentationVersion("semver:"+constant.Version),
+		trace.WithInstrumentationVersion("yggdrasil"),
 	)
 	h := handler{
 		cfg:    cfg,
 		tracer: tracer,
 	}
 	meter := otel.Meter("github.com/codesjoy/yggdrasil/v3",
-		metric.WithInstrumentationVersion("semver:"+constant.Version),
+		metric.WithInstrumentationVersion("yggdrasil"),
 		metric.WithSchemaURL(semconv.SchemaURL),
 	)
 

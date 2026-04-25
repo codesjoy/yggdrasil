@@ -26,8 +26,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	statuspb "google.golang.org/genproto/googleapis/rpc/status"
-
-	istatus "github.com/codesjoy/yggdrasil/v3/internal/status"
 )
 
 type testReason struct {
@@ -64,7 +62,7 @@ func TestCoverError(t *testing.T) {
 	})
 
 	t.Run("status passthrough", func(t *testing.T) {
-		src := istatus.WithCode(code.Code_NOT_FOUND, errors.New("missing"))
+		src := WithCode(code.Code_NOT_FOUND, errors.New("missing"))
 		st, ok := CoverError(fmt.Errorf("wrapped: %w", src))
 		assert.True(t, ok)
 		assert.Equal(t, code.Code_NOT_FOUND, st.Code())
@@ -150,4 +148,18 @@ func TestFromProto(t *testing.T) {
 	require.NotNil(t, st)
 	assert.Equal(t, code.Code_NOT_FOUND, st.Code())
 	assert.Equal(t, "not found", st.Message())
+}
+
+func TestNewAndWithCode(t *testing.T) {
+	assert.Equal(t, "missing", New(code.Code_NOT_FOUND, "missing").Message())
+	assert.Equal(
+		t,
+		code.Code_PERMISSION_DENIED,
+		WithCode(code.Code_PERMISSION_DENIED, errors.New("denied")).Code(),
+	)
+}
+
+func TestHTTPCodeToStuCode(t *testing.T) {
+	assert.Equal(t, code.Code_CANCELLED, HTTPCodeToStuCode(HTTPStatusClientClosed))
+	assert.Equal(t, code.Code_INTERNAL, HTTPCodeToStuCode(http.StatusInternalServerError))
 }

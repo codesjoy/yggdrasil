@@ -72,6 +72,10 @@ func (externalServerRuntime) TransportServerProvider(string) remote.TransportSer
 
 type externalRemoteServer struct{ info remote.ServerInfo }
 
+func endpointKindOf(e server.Endpoint) server.EndpointKind {
+	return e.Kind()
+}
+
 func (s *externalRemoteServer) Start() error               { return nil }
 func (s *externalRemoteServer) Handle() error              { return nil }
 func (s *externalRemoteServer) Stop(context.Context) error { return nil }
@@ -91,5 +95,6 @@ func TestNewServerUsesExplicitRuntime(t *testing.T) {
 	started := make(chan struct{}, 1)
 	require.NoError(t, svr.Serve(started))
 	require.NotEmpty(t, svr.Endpoints())
+	require.Equal(t, server.EndpointKindRPC, endpointKindOf(svr.Endpoints()[0]))
 	require.NoError(t, svr.Stop(context.Background()))
 }

@@ -21,7 +21,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/codesjoy/yggdrasil/v3/internal/constant"
 	remote "github.com/codesjoy/yggdrasil/v3/transport"
 )
 
@@ -29,12 +28,12 @@ func TestServerInfoAndEndpoints(t *testing.T) {
 	info := &serverInfo{
 		protocol: "grpc",
 		address:  "localhost:8080",
-		svrKind:  constant.ServerKindRPC,
+		svrKind:  EndpointKindRPC,
 		metadata: map[string]string{"version": "1.0"},
 	}
 	require.Equal(t, "grpc", info.Protocol())
 	require.Equal(t, "localhost:8080", info.Address())
-	require.Equal(t, constant.ServerKindRPC, info.Kind())
+	require.Equal(t, EndpointKindRPC, info.Kind())
 	require.Equal(t, "1.0", info.Metadata()["version"])
 
 	s := newTestServer()
@@ -58,11 +57,11 @@ func TestServerInfoAndEndpoints(t *testing.T) {
 	require.Equal(t, "grpc", endpoints[0].Protocol())
 	require.Equal(t, "127.0.0.1:9000", endpoints[0].Address())
 	require.Equal(t, "v", endpoints[0].Metadata()["k"])
-	require.Equal(t, constant.ServerKindRPC, endpoints[0].Kind())
+	require.Equal(t, EndpointKindRPC, endpoints[0].Kind())
 	require.Equal(t, "http", endpoints[1].Protocol())
 	require.Equal(t, "127.0.0.1:8080", endpoints[1].Address())
 	require.Equal(t, "rest", endpoints[1].Metadata()["kind"])
-	require.Equal(t, constant.ServerKindRest, endpoints[1].Kind())
+	require.Equal(t, EndpointKindRest, endpoints[1].Kind())
 }
 
 func TestStateNameAndRuntimeErrorReporting(t *testing.T) {

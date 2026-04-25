@@ -34,9 +34,9 @@ import (
 	gstats "google.golang.org/grpc/stats"
 	gstatus "google.golang.org/grpc/status"
 
-	istatus "github.com/codesjoy/yggdrasil/v3/internal/status"
 	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 	ymetadata "github.com/codesjoy/yggdrasil/v3/rpc/metadata"
+	ystatus "github.com/codesjoy/yggdrasil/v3/rpc/status"
 	remote "github.com/codesjoy/yggdrasil/v3/transport"
 	stats2 "github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc/stats"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/peer"
@@ -791,7 +791,7 @@ func TestFromGRPCPeer_NonTCPAddr(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestToGRPCError_CoverError(t *testing.T) {
-	st := istatus.New(code.Code_NOT_FOUND, "item not found")
+	st := ystatus.New(code.Code_NOT_FOUND, "item not found")
 	err := toGRPCError(st.Err())
 	require.Error(t, err)
 	grpcSt, ok := gstatus.FromError(err)
@@ -801,7 +801,7 @@ func TestToGRPCError_CoverError(t *testing.T) {
 
 func TestToRPCErr_CoverError(t *testing.T) {
 	// Create a ystatus-compatible error
-	st := istatus.New(code.Code_NOT_FOUND, "not found")
+	st := ystatus.New(code.Code_NOT_FOUND, "not found")
 	err := toRPCErr(st.Err())
 	require.Error(t, err)
 }

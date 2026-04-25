@@ -17,7 +17,6 @@ package server
 import (
 	"fmt"
 
-	internalutils "github.com/codesjoy/yggdrasil/v3/internal/utils"
 	"github.com/codesjoy/yggdrasil/v3/transport/gateway/rest"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
 )
@@ -66,10 +65,10 @@ func newServer(runtimeSnapshot Runtime) (Server, error) {
 func (s *server) initInterceptor() {
 	cfg := s.runtime.ServerSettings()
 	unaryNames := append([]string(nil), cfg.Interceptors.Unary...)
-	unaryNames = internalutils.DedupStableStrings(unaryNames)
+	unaryNames = dedupStableStrings(unaryNames)
 	s.unaryInterceptor = s.runtime.BuildUnaryServerInterceptor(unaryNames)
 	streamNames := append([]string(nil), cfg.Interceptors.Stream...)
-	streamNames = internalutils.DedupStableStrings(streamNames)
+	streamNames = dedupStableStrings(streamNames)
 	s.streamInterceptor = s.runtime.BuildStreamServerInterceptor(streamNames)
 }
 
@@ -90,4 +89,21 @@ func (s *server) initRemoteServer() error {
 		s.servers = append(s.servers, svr)
 	}
 	return nil
+}
+
+func dedupStableStrings(values []string) []string {
+	if len(values) < 2 {
+		return values
+	}
+	seen := make(map[string]struct{}, len(values))
+	i := 0
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		values[i] = value
+		i++
+	}
+	return values[:i]
 }

@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/codesjoy/yggdrasil/v3/internal/constant"
 	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
 )
 
@@ -30,7 +29,7 @@ type mockEndpoint struct {
 	protocol string
 	address  string
 	metadata map[string]string
-	kind     constant.ServerKind
+	kind     EndpointKind
 }
 
 func (m *mockEndpoint) Protocol() string {
@@ -45,7 +44,7 @@ func (m *mockEndpoint) Metadata() map[string]string {
 	return m.metadata
 }
 
-func (m *mockEndpoint) Kind() constant.ServerKind {
+func (m *mockEndpoint) Kind() EndpointKind {
 	return m.kind
 }
 
@@ -98,12 +97,12 @@ func TestEndpointAndServerInterfaces(t *testing.T) {
 		protocol: "grpc",
 		address:  "localhost:8080",
 		metadata: map[string]string{"version": "1.0"},
-		kind:     constant.ServerKindRPC,
+		kind:     EndpointKindRPC,
 	}
 	require.Equal(t, "grpc", endpoint.Protocol())
 	require.Equal(t, "localhost:8080", endpoint.Address())
 	require.Equal(t, "1.0", endpoint.Metadata()["version"])
-	require.Equal(t, constant.ServerKindRPC, endpoint.Kind())
+	require.Equal(t, EndpointKindRPC, endpoint.Kind())
 
 	server := &mockServer{}
 	server.RegisterService(
@@ -183,7 +182,7 @@ func TestPublicDescriptorZeroValues(t *testing.T) {
 	info := &serverInfo{
 		protocol: "grpc",
 		address:  "localhost:8080",
-		svrKind:  constant.ServerKindRPC,
+		svrKind:  EndpointKindRPC,
 		metadata: nil,
 	}
 	assert.Nil(t, info.Metadata())
