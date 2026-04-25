@@ -12,13 +12,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !windows
-
-package app
-
-import (
-	"os"
-	"syscall"
-)
-
-var shutdownSignals = []os.Signal{syscall.SIGQUIT, os.Interrupt, syscall.SIGTERM}
+// Package assembly contains internal app assembly error-state helpers.
+package assembly

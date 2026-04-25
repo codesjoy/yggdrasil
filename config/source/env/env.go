@@ -23,7 +23,6 @@ import (
 
 	"github.com/codesjoy/pkg/utils/xmap"
 
-	"github.com/codesjoy/yggdrasil/v3/config/internal"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
 )
 
@@ -96,11 +95,21 @@ func (e *env) Read() (source.Data, error) {
 
 func (e *env) matchPrefix(pre []string, s string) (string, bool) {
 	for _, p := range pre {
-		if internal.HasPrefix(s, p, e.delimiter) {
+		if hasPrefix(s, p, e.delimiter) {
 			return p, true
 		}
 	}
 	return "", false
+}
+
+func hasPrefix(key, pre, delimiter string) bool {
+	if !strings.HasPrefix(key, pre) {
+		return false
+	}
+	if len(key) != len(pre) && !strings.HasPrefix(key[len(pre):], delimiter) {
+		return false
+	}
+	return true
 }
 
 func (e *env) Name() string {

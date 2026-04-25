@@ -20,6 +20,7 @@ import (
 	"errors"
 	"net/http"
 
+	internalassembly "github.com/codesjoy/yggdrasil/v3/app/internal/assembly"
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 	"github.com/codesjoy/yggdrasil/v3/module"
@@ -109,54 +110,31 @@ func cloneCapabilityBindings(in map[string][]string) map[string][]string {
 	return out
 }
 
-type assemblyStage string
+type assemblyStage = internalassembly.Stage
 
 const (
-	assemblyStagePrepare assemblyStage = "prepare"
-	assemblyStageCompose assemblyStage = "compose"
-	assemblyStageInstall assemblyStage = "install"
-	assemblyStageReload  assemblyStage = "reload"
+	assemblyStagePrepare assemblyStage = internalassembly.StagePrepare
+	assemblyStageCompose assemblyStage = internalassembly.StageCompose
+	assemblyStageInstall assemblyStage = internalassembly.StageInstall
+	assemblyStageReload  assemblyStage = internalassembly.StageReload
 )
 
-type assemblyErrorRecord struct {
-	err *yassembly.Error
-	seq uint64
-}
-
-type assemblyStageErrors struct {
-	Prepare *yassembly.Error `json:"prepare"`
-	Compose *yassembly.Error `json:"compose"`
-	Install *yassembly.Error `json:"install"`
-	Reload  *yassembly.Error `json:"reload"`
-}
-
-type assemblyErrorSnapshot struct {
-	lastError      *yassembly.Error
-	lastErrorStage string
-	errors         assemblyStageErrors
-}
-
-type assemblyErrorState struct {
-	prepare assemblyErrorRecord
-	compose assemblyErrorRecord
-	install assemblyErrorRecord
-	reload  assemblyErrorRecord
-
-	latest      *yassembly.Error
-	latestStage assemblyStage
-	nextSeq     uint64
-}
+type (
+	assemblyStageErrors   = internalassembly.StageErrors
+	assemblyErrorSnapshot = internalassembly.ErrorSnapshot
+	assemblyErrorState    = internalassembly.ErrorState
+)
 
 func (a *App) recordAssemblyErrorLocked(stage assemblyStage, err error) {
-	a.assemblyErrors.record(stage, normalizeAssemblyError(stage, err))
+	a.assemblyErrors.Record(stage, normalizeAssemblyError(stage, err))
 }
 
 func (a *App) clearAssemblyErrorLocked(stage assemblyStage) {
-	a.assemblyErrors.clear(stage)
+	a.assemblyErrors.Clear(stage)
 }
 
 func (a *App) assemblyErrorDiagnosticsLocked() assemblyErrorSnapshot {
-	return a.assemblyErrors.snapshot()
+	return a.assemblyErrors.Snapshot()
 }
 
 func (a *App) failBeforeStart(err error, stage string, code yassembly.ErrorCode) error {
@@ -176,150 +154,11 @@ func (a *App) failBeforeStart(err error, stage string, code yassembly.ErrorCode)
 }
 
 func wrapAssemblyStageError(stage string, err error) error {
-	if err == nil {
-		return nil
-	}
-	if structured, ok := err.(*yassembly.Error); ok {
-		if structured.Stage == "" {
-			structured.Stage = stage
-		}
-		return structured
-	}
-	code := yassembly.ErrRuntimeSurfaceUnavailable
-	switch stage {
-	case "prepare":
-		code = yassembly.ErrRuntimeSurfaceUnavailable
-	case "compose":
-		code = yassembly.ErrComposeFailed
-	case "install":
-		code = yassembly.ErrInstallValidationFailed
-	case "reload":
-		code = yassembly.ErrRuntimeReconcileFailed
-	}
-	return yassembly.NewError(code, stage, err.Error(), err, nil)
+	return internalassembly.WrapStageError(stage, err)
 }
 
 func normalizeAssemblyError(stage assemblyStage, err error) *yassembly.Error {
-	if err == nil {
-		return nil
-	}
-
-	var structured *yassembly.Error
-	if errors.As(err, &structured) {
-		clone := cloneAssemblyError(structured)
-		clone.Stage = string(stage)
-		return clone
-	}
-
-	return yassembly.NewError(defaultAssemblyErrorCode(stage), string(stage), err.Error(), err, nil)
-}
-
-func defaultAssemblyErrorCode(stage assemblyStage) yassembly.ErrorCode {
-	switch stage {
-	case assemblyStageCompose:
-		return yassembly.ErrComposeFailed
-	case assemblyStageInstall:
-		return yassembly.ErrInstallValidationFailed
-	case assemblyStageReload:
-		return yassembly.ErrRuntimeReconcileFailed
-	default:
-		return yassembly.ErrRuntimeSurfaceUnavailable
-	}
-}
-
-func cloneAssemblyError(err *yassembly.Error) *yassembly.Error {
-	if err == nil {
-		return nil
-	}
-
-	clone := *err
-	if err.Context != nil {
-		clone.Context = make(map[string]string, len(err.Context))
-		for key, value := range err.Context {
-			clone.Context[key] = value
-		}
-	}
-	return &clone
-}
-
-func (s *assemblyErrorState) record(stage assemblyStage, err *yassembly.Error) {
-	if err == nil {
-		s.clear(stage)
-		return
-	}
-
-	s.nextSeq++
-	record := assemblyErrorRecord{err: err, seq: s.nextSeq}
-	switch stage {
-	case assemblyStagePrepare:
-		s.prepare = record
-	case assemblyStageCompose:
-		s.compose = record
-	case assemblyStageInstall:
-		s.install = record
-	case assemblyStageReload:
-		s.reload = record
-	default:
-		return
-	}
-	s.recalculateLatest()
-}
-
-func (s *assemblyErrorState) clear(stage assemblyStage) {
-	switch stage {
-	case assemblyStagePrepare:
-		s.prepare = assemblyErrorRecord{}
-	case assemblyStageCompose:
-		s.compose = assemblyErrorRecord{}
-	case assemblyStageInstall:
-		s.install = assemblyErrorRecord{}
-	case assemblyStageReload:
-		s.reload = assemblyErrorRecord{}
-	default:
-		return
-	}
-	s.recalculateLatest()
-}
-
-func (s *assemblyErrorState) snapshot() assemblyErrorSnapshot {
-	return assemblyErrorSnapshot{
-		lastError:      cloneAssemblyError(s.latest),
-		lastErrorStage: string(s.latestStage),
-		errors: assemblyStageErrors{
-			Prepare: cloneAssemblyError(s.prepare.err),
-			Compose: cloneAssemblyError(s.compose.err),
-			Install: cloneAssemblyError(s.install.err),
-			Reload:  cloneAssemblyError(s.reload.err),
-		},
-	}
-}
-
-func (s *assemblyErrorState) recalculateLatest() {
-	s.latest = nil
-	s.latestStage = ""
-
-	bestStage := assemblyStage("")
-	bestSeq := uint64(0)
-	bestErr := (*yassembly.Error)(nil)
-	for _, item := range []struct {
-		stage  assemblyStage
-		record assemblyErrorRecord
-	}{
-		{stage: assemblyStagePrepare, record: s.prepare},
-		{stage: assemblyStageCompose, record: s.compose},
-		{stage: assemblyStageInstall, record: s.install},
-		{stage: assemblyStageReload, record: s.reload},
-	} {
-		if item.record.err == nil || item.record.seq < bestSeq {
-			continue
-		}
-		bestSeq = item.record.seq
-		bestStage = item.stage
-		bestErr = item.record.err
-	}
-
-	s.latest = bestErr
-	s.latestStage = bestStage
+	return internalassembly.NormalizeError(stage, err)
 }
 
 type defaultSelectionDiag struct {
@@ -357,9 +196,9 @@ func (a *App) assemblyDiagnostics() assemblyDiagnostics {
 		CurrentSpecHash:       a.lastPlanHash,
 		LastStableSpecHash:    a.lastStablePlanHash,
 		LastSpecDiff:          a.lastSpecDiff,
-		LastError:             errorDiag.lastError,
-		LastErrorStage:        errorDiag.lastErrorStage,
-		Errors:                errorDiag.errors,
+		LastError:             errorDiag.LastError,
+		LastErrorStage:        errorDiag.LastErrorStage,
+		Errors:                errorDiag.Errors,
 		SelectedDefaults:      map[string]defaultSelectionDiag{},
 		DefaultCandidates:     map[string][]yassembly.DefaultCandidate{},
 		Templates:             map[string]yassembly.Chain{},

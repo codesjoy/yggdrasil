@@ -21,17 +21,29 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/codesjoy/yggdrasil/v3/admin/governor"
+	internallifecycle "github.com/codesjoy/yggdrasil/v3/app/internal/lifecycle"
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/config"
+	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/internal/instance"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 	"github.com/codesjoy/yggdrasil/v3/module"
 	"github.com/codesjoy/yggdrasil/v3/transport/runtime/client"
+	"github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
 
 type lifecycleState uint32
+
+// InternalServer is managed by the App lifecycle alongside the main server.
+type InternalServer = internallifecycle.InternalServer
+
+type (
+	lifecycleRunner = internallifecycle.Runner
+	lifecycleOption = internallifecycle.Option
+)
 
 const (
 	lifecycleStateNew lifecycleState = iota
@@ -43,6 +55,48 @@ const (
 	lifecycleStateRunning
 	lifecycleStateStopped
 )
+
+func withLifecycleBeforeStartHooks(hooks ...func(context.Context) error) lifecycleOption {
+	return internallifecycle.WithBeforeStartHooks(hooks...)
+}
+
+func withLifecycleBeforeStopHooks(hooks ...func(context.Context) error) lifecycleOption {
+	return internallifecycle.WithBeforeStopHooks(hooks...)
+}
+
+func withLifecycleAfterStopHooks(hooks ...func(context.Context) error) lifecycleOption {
+	return internallifecycle.WithAfterStopHooks(hooks...)
+}
+
+func withLifecycleCleanup(name string, fn func(context.Context) error) lifecycleOption {
+	return internallifecycle.WithCleanup(name, fn)
+}
+
+func newLifecycleRunner(opts ...lifecycleOption) (*lifecycleRunner, error) {
+	return internallifecycle.New(opts...)
+}
+
+func withLifecycleInternalServers(servers ...InternalServer) lifecycleOption {
+	converted := make([]internallifecycle.InternalServer, 0, len(servers))
+	converted = append(converted, servers...)
+	return internallifecycle.WithInternalServers(converted...)
+}
+
+func withLifecycleRegistry(reg registry.Registry) lifecycleOption {
+	return internallifecycle.WithRegistry(reg)
+}
+
+func withLifecycleShutdownTimeout(timeout time.Duration) lifecycleOption {
+	return internallifecycle.WithShutdownTimeout(timeout)
+}
+
+func withLifecycleServer(srv server.Server) lifecycleOption {
+	return internallifecycle.WithServer(srv)
+}
+
+func withLifecycleGovernor(srv *governor.Server) lifecycleOption {
+	return internallifecycle.WithGovernor(srv)
+}
 
 var (
 	errApplicationAlreadyRunning = errors.New("application is already running")

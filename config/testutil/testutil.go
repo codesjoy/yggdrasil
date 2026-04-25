@@ -12,77 +12,64 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package configtest serializes tests that mutate the package-level config snapshot.
-package configtest
+// Package testutil provides isolated config helpers for tests.
+// Each T instance owns an independent *config.Manager so tests can run in parallel.
+package testutil
 
 import (
 	"fmt"
-	"sync"
 	"testing"
 
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
 )
 
-var (
-	serialMu sync.Mutex
-	stateMu  sync.Mutex
-	states   = map[string]*state{}
-)
-
-type state struct {
-	layerName string
-	data      map[string]any
+// T wraps an independent config.Manager for use in a single test.
+type T struct {
+	tb   testing.TB
+	mgr  *config.Manager
+	data map[string]any
 }
 
-// Set updates a dotted configuration key within an isolated test layer.
-func Set(t testing.TB, key string, val any) {
+// New creates a *T with its own *config.Manager.
+// The manager is closed automatically via t.Cleanup.
+func New(t testing.TB) *T {
 	t.Helper()
-	st := ensureState(t)
-	applySet(st.data, key, val)
-	loadState(t, st)
-}
-
-func ensureState(t testing.TB) *state {
-	t.Helper()
-
-	name := t.Name()
-	stateMu.Lock()
-	if st, ok := states[name]; ok {
-		stateMu.Unlock()
-		return st
+	ct := &T{
+		tb:   t,
+		mgr:  config.NewManager(),
+		data: map[string]any{},
 	}
-	stateMu.Unlock()
-
-	serialMu.Lock()
-	st := &state{
-		layerName: "__configtest__/" + name,
-		data:      map[string]any{},
-	}
-	stateMu.Lock()
-	states[name] = st
-	stateMu.Unlock()
-	loadState(t, st)
 	t.Cleanup(func() {
-		clearState(st.layerName)
-		stateMu.Lock()
-		delete(states, name)
-		stateMu.Unlock()
-		serialMu.Unlock()
+		_ = ct.mgr.Close()
 	})
-	return st
+	return ct
 }
 
-func loadState(t testing.TB, st *state) {
-	t.Helper()
-	if err := config.Default().LoadLayer(st.layerName, config.PriorityOverride, memory.NewSource(st.layerName, st.data)); err != nil {
-		t.Fatalf("load test config layer %q: %v", st.layerName, err)
+// Set sets a dotted configuration key (with brace support) and returns the
+// receiver for chaining. The value is flushed to the underlying Manager on
+// every call.
+func (ct *T) Set(key string, val any) *T {
+	ct.tb.Helper()
+	applySet(ct.data, key, val)
+	ct.flush()
+	return ct
+}
+
+// Manager returns the underlying *config.Manager.
+func (ct *T) Manager() *config.Manager {
+	return ct.mgr
+}
+
+func (ct *T) flush() {
+	ct.tb.Helper()
+	if err := ct.mgr.LoadLayer(
+		"__testutil__",
+		config.PriorityOverride,
+		memory.NewSource("__testutil__", ct.data),
+	); err != nil {
+		ct.tb.Fatalf("testutil: load config layer: %v", err)
 	}
-}
-
-func clearState(layerName string) {
-	_ = config.Default().
-		LoadLayer(layerName, config.PriorityOverride, memory.NewSource(layerName, nil))
 }
 
 func applySet(dst map[string]any, key string, val any) {

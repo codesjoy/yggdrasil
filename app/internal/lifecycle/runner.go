@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package app
+package lifecycle
 
 import (
 	"context"
@@ -33,21 +33,23 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
 
-// InternalServer is managed by the App lifecycle alongside the main server.
+// InternalServer is managed by the lifecycle runner alongside the main server.
 type InternalServer interface {
 	Serve() error
 	Stop(context.Context) error
 }
 
-type lifecycleStage uint32
+// Stage identifies one lifecycle hook stage.
+type Stage uint32
 
+// Lifecycle hook stages.
 const (
-	_ lifecycleStage = iota
-	lifecycleStageBeforeStart
-	lifecycleStageBeforeStop
-	lifecycleStageCleanup
-	lifecycleStageAfterStop
-	lifecycleStageMax
+	_ Stage = iota
+	StageBeforeStart
+	StageBeforeStop
+	StageCleanup
+	StageAfterStop
+	StageMax
 )
 
 const defaultShutdownTimeout = 30 * time.Second
@@ -59,30 +61,32 @@ const (
 	registryStateCancel
 )
 
-type lifecycleEndpoint struct {
+type endpoint struct {
 	address  string
 	scheme   string
 	metadata map[string]string
 }
 
-func (e lifecycleEndpoint) Scheme() string {
+func (e endpoint) Scheme() string {
 	return e.scheme
 }
 
-func (e lifecycleEndpoint) Address() string {
+func (e endpoint) Address() string {
 	return e.address
 }
 
-func (e lifecycleEndpoint) Metadata() map[string]string {
+func (e endpoint) Metadata() map[string]string {
 	return e.metadata
 }
 
 var errGovernorRequired = errors.New("application governor is required")
 
-type lifecycleOption func(*lifecycleRunner) error
+// Option mutates one runner before startup.
+type Option func(*Runner) error
 
-func withLifecycleHook(stage lifecycleStage, hooks ...func(context.Context) error) lifecycleOption {
-	return func(runner *lifecycleRunner) error {
+// WithHook registers hook functions for one stage.
+func WithHook(stage Stage, hooks ...func(context.Context) error) Option {
+	return func(runner *Runner) error {
 		stageHooks, ok := runner.hooks[stage]
 		if !ok {
 			return fmt.Errorf("hook stage not found")
@@ -92,55 +96,64 @@ func withLifecycleHook(stage lifecycleStage, hooks ...func(context.Context) erro
 	}
 }
 
-func withLifecycleBeforeStartHooks(hooks ...func(context.Context) error) lifecycleOption {
-	return withLifecycleHook(lifecycleStageBeforeStart, hooks...)
+// WithBeforeStartHooks registers before-start hooks.
+func WithBeforeStartHooks(hooks ...func(context.Context) error) Option {
+	return WithHook(StageBeforeStart, hooks...)
 }
 
-func withLifecycleBeforeStopHooks(hooks ...func(context.Context) error) lifecycleOption {
-	return withLifecycleHook(lifecycleStageBeforeStop, hooks...)
+// WithBeforeStopHooks registers before-stop hooks.
+func WithBeforeStopHooks(hooks ...func(context.Context) error) Option {
+	return WithHook(StageBeforeStop, hooks...)
 }
 
-func withLifecycleAfterStopHooks(hooks ...func(context.Context) error) lifecycleOption {
-	return withLifecycleHook(lifecycleStageAfterStop, hooks...)
+// WithAfterStopHooks registers after-stop hooks.
+func WithAfterStopHooks(hooks ...func(context.Context) error) Option {
+	return WithHook(StageAfterStop, hooks...)
 }
 
-func withLifecycleRegistry(reg registry.Registry) lifecycleOption {
-	return func(runner *lifecycleRunner) error {
+// WithRegistry configures the service registry.
+func WithRegistry(reg registry.Registry) Option {
+	return func(runner *Runner) error {
 		runner.registry = reg
 		return nil
 	}
 }
 
-func withLifecycleShutdownTimeout(timeout time.Duration) lifecycleOption {
-	return func(runner *lifecycleRunner) error {
+// WithShutdownTimeout configures the shutdown timeout.
+func WithShutdownTimeout(timeout time.Duration) Option {
+	return func(runner *Runner) error {
 		runner.shutdownTimeout = timeout
 		return nil
 	}
 }
 
-func withLifecycleServer(srv server.Server) lifecycleOption {
-	return func(runner *lifecycleRunner) error {
+// WithServer configures the main application server.
+func WithServer(srv server.Server) Option {
+	return func(runner *Runner) error {
 		runner.server = srv
 		return nil
 	}
 }
 
-func withLifecycleGovernor(srv *governor.Server) lifecycleOption {
-	return func(runner *lifecycleRunner) error {
+// WithGovernor configures the governor server.
+func WithGovernor(srv *governor.Server) Option {
+	return func(runner *Runner) error {
 		runner.governor = srv
 		return nil
 	}
 }
 
-func withLifecycleInternalServers(servers ...InternalServer) lifecycleOption {
-	return func(runner *lifecycleRunner) error {
+// WithInternalServers registers internal servers managed by the lifecycle.
+func WithInternalServers(servers ...InternalServer) Option {
+	return func(runner *Runner) error {
 		runner.internalServers = append(runner.internalServers, servers...)
 		return nil
 	}
 }
 
-func withLifecycleCleanup(name string, fn func(context.Context) error) lifecycleOption {
-	return withLifecycleHook(lifecycleStageCleanup, func(ctx context.Context) error {
+// WithCleanup registers one named cleanup hook.
+func WithCleanup(name string, fn func(context.Context) error) Option {
+	return WithHook(StageCleanup, func(ctx context.Context) error {
 		err := fn(ctx)
 		if err == nil || name == "" {
 			return err
@@ -149,7 +162,8 @@ func withLifecycleCleanup(name string, fn func(context.Context) error) lifecycle
 	})
 }
 
-type lifecycleRunner struct {
+// Runner orchestrates startup, registration, and shutdown sequencing.
+type Runner struct {
 	runOnce  sync.Once
 	stopOnce sync.Once
 
@@ -169,20 +183,21 @@ type lifecycleRunner struct {
 
 	shutdownTimeout time.Duration
 
-	hooks map[lifecycleStage]*defers.Defer
+	hooks map[Stage]*defers.Defer
 }
 
-func (runner *lifecycleRunner) setRunning(running bool) {
+func (runner *Runner) setRunning(running bool) {
 	runner.optionsMu.Lock()
 	defer runner.optionsMu.Unlock()
 	runner.running = running
 }
 
-func newLifecycleRunner(opts ...lifecycleOption) (*lifecycleRunner, error) {
-	runner := &lifecycleRunner{
-		hooks: map[lifecycleStage]*defers.Defer{},
+// New creates one lifecycle runner.
+func New(opts ...Option) (*Runner, error) {
+	runner := &Runner{
+		hooks: map[Stage]*defers.Defer{},
 	}
-	for stage := lifecycleStage(1); stage < lifecycleStageMax; stage++ {
+	for stage := Stage(1); stage < StageMax; stage++ {
 		runner.hooks[stage] = defers.NewDefer()
 	}
 	for _, opt := range opts {
@@ -193,7 +208,8 @@ func newLifecycleRunner(opts ...lifecycleOption) (*lifecycleRunner, error) {
 	return runner, nil
 }
 
-func (runner *lifecycleRunner) Init(opts ...lifecycleOption) error {
+// Init applies lifecycle options before startup.
+func (runner *Runner) Init(opts ...Option) error {
 	runner.optionsMu.Lock()
 	defer runner.optionsMu.Unlock()
 	if runner.running {
@@ -208,7 +224,8 @@ func (runner *lifecycleRunner) Init(opts ...lifecycleOption) error {
 	return nil
 }
 
-func (runner *lifecycleRunner) Stop() error {
+// Stop stops the lifecycle exactly once.
+func (runner *Runner) Stop() error {
 	var err error
 	runner.stopOnce.Do(func() {
 		runner.setRunning(false)
@@ -221,17 +238,18 @@ func (runner *lifecycleRunner) Stop() error {
 	return err
 }
 
-func (runner *lifecycleRunner) runStopSequence(ctx context.Context) error {
+func (runner *Runner) runStopSequence(ctx context.Context) error {
 	var err error
-	err = errors.Join(err, runner.runHooks(ctx, lifecycleStageBeforeStop))
+	err = errors.Join(err, runner.runHooks(ctx, StageBeforeStop))
 	err = errors.Join(err, runner.deregister(ctx))
 	err = errors.Join(err, runner.stopServers(ctx))
-	err = errors.Join(err, runner.runHooks(ctx, lifecycleStageCleanup))
-	err = errors.Join(err, runner.runHooks(ctx, lifecycleStageAfterStop))
+	err = errors.Join(err, runner.runHooks(ctx, StageCleanup))
+	err = errors.Join(err, runner.runHooks(ctx, StageAfterStop))
 	return err
 }
 
-func (runner *lifecycleRunner) Run() error {
+// Run starts the configured lifecycle.
+func (runner *Runner) Run() error {
 	if runner.governor == nil {
 		return errGovernorRequired
 	}
@@ -252,7 +270,7 @@ func (runner *lifecycleRunner) Run() error {
 	return err
 }
 
-func (runner *lifecycleRunner) runHooks(ctx context.Context, stage lifecycleStage) error {
+func (runner *Runner) runHooks(ctx context.Context, stage Stage) error {
 	hooks, ok := runner.hooks[stage]
 	if !ok {
 		return nil
@@ -260,7 +278,7 @@ func (runner *lifecycleRunner) runHooks(ctx context.Context, stage lifecycleStag
 	return hooks.Done(ctx)
 }
 
-func (runner *lifecycleRunner) newStopAsyncOnFailure() func() {
+func (runner *Runner) newStopAsyncOnFailure() func() {
 	var stopOnce sync.Once
 	return func() {
 		stopOnce.Do(func() {
@@ -276,7 +294,7 @@ func (runner *lifecycleRunner) newStopAsyncOnFailure() func() {
 	}
 }
 
-func (runner *lifecycleRunner) startManagedServer(
+func (runner *Runner) startManagedServer(
 	group *errgroup.Group,
 	stopAsync func(),
 	name string,
@@ -291,7 +309,7 @@ func (runner *lifecycleRunner) startManagedServer(
 	})
 }
 
-func (runner *lifecycleRunner) registerAfterStartup(
+func (runner *Runner) registerAfterStartup(
 	serverStartedCh <-chan struct{},
 	stopAsync func(),
 ) error {
@@ -311,11 +329,11 @@ func (runner *lifecycleRunner) registerAfterStartup(
 	return nil
 }
 
-func (runner *lifecycleRunner) startServers() error {
+func (runner *Runner) startServers() error {
 	if runner.governor == nil {
 		return errGovernorRequired
 	}
-	if err := runner.runHooks(context.Background(), lifecycleStageBeforeStart); err != nil {
+	if err := runner.runHooks(context.Background(), StageBeforeStart); err != nil {
 		return err
 	}
 
@@ -371,7 +389,7 @@ func stopManagedComponent(
 	return nil
 }
 
-func (runner *lifecycleRunner) stopServers(ctx context.Context) error {
+func (runner *Runner) stopServers(ctx context.Context) error {
 	slog.Info("stopping servers")
 
 	var group errgroup.Group
@@ -407,21 +425,21 @@ func (runner *lifecycleRunner) stopServers(ctx context.Context) error {
 	return nil
 }
 
-func (runner *lifecycleRunner) stopTimeout() time.Duration {
+func (runner *Runner) stopTimeout() time.Duration {
 	if runner.shutdownTimeout <= 0 {
 		return defaultShutdownTimeout
 	}
 	return runner.shutdownTimeout
 }
 
-func (runner *lifecycleRunner) signalShutdownTimeout() time.Duration {
+func (runner *Runner) signalShutdownTimeout() time.Duration {
 	if runner.shutdownTimeout < defaultShutdownTimeout {
 		return defaultShutdownTimeout
 	}
 	return runner.shutdownTimeout
 }
 
-func (runner *lifecycleRunner) waitSignals() func() {
+func (runner *Runner) waitSignals() func() {
 	signalsCh := make(chan os.Signal, 2)
 	done := make(chan struct{})
 	var cleanupOnce sync.Once

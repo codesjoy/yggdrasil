@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build windows
+//go:build !windows
 
-package app
+package lifecycle
 
 import (
 	"os"
 	"syscall"
 )
 
-var shutdownSignals = []os.Signal{syscall.SIGQUIT, os.Interrupt}
+var shutdownSignals = []os.Signal{syscall.SIGQUIT, os.Interrupt, syscall.SIGTERM}

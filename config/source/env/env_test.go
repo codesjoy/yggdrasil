@@ -74,3 +74,10 @@ func TestOptionFallbacks(t *testing.T) {
 	require.Equal(t, ";", e.arraySep)
 	require.Equal(t, "_", e.delimiter)
 }
+
+func TestHasPrefix(t *testing.T) {
+	require.True(t, hasPrefix("app_server_port", "app", "_"))
+	require.True(t, hasPrefix("app", "app", "_"))
+	require.False(t, hasPrefix("apple", "app", "_"))
+	require.False(t, hasPrefix("service_app_port", "app", "_"))
+}

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package app
+package runtime
 
 import (
 	"fmt"
@@ -36,7 +36,8 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
 )
 
-func resolveNamedCapabilityMap[T any](
+// ResolveNamedCapabilityMap resolves a named capability map with contextual errors.
+func ResolveNamedCapabilityMap[T any](
 	names []string,
 	spec module.CapabilitySpec,
 	resolve func(name string) (T, error),
@@ -52,13 +53,14 @@ func resolveNamedCapabilityMap[T any](
 	return out, nil
 }
 
-func resolveNamedRuntimeCapabilities[T any](
+// ResolveNamedRuntimeCapabilities resolves named module capabilities from the hub.
+func ResolveNamedRuntimeCapabilities[T any](
 	hub *module.Hub,
 	bindings map[string][]string,
 	key string,
 	spec module.CapabilitySpec,
 ) (map[string]T, error) {
-	return resolveNamedCapabilityMap(
+	return ResolveNamedCapabilityMap(
 		bindings[key],
 		spec,
 		func(name string) (T, error) {
@@ -67,22 +69,25 @@ func resolveNamedRuntimeCapabilities[T any](
 	)
 }
 
-func resolveOrderedRuntimeCapabilities[T any](
+// ResolveOrderedRuntimeCapabilities resolves ordered module capabilities from the hub.
+func ResolveOrderedRuntimeCapabilities[T any](
 	hub *module.Hub,
 	bindings map[string][]string,
 	key string,
 	spec module.CapabilitySpec,
 ) (map[string]T, error) {
-	return resolveOrderedCapabilityMap[T](hub, bindings[key], spec)
+	return ResolveOrderedCapabilityMap[T](hub, bindings[key], spec)
 }
 
-func copyIntoMap[K comparable, V any](dst map[K]V, src map[K]V) {
+// CopyIntoMap copies all entries into the destination map.
+func CopyIntoMap[K comparable, V any](dst map[K]V, src map[K]V) {
 	for key, value := range src {
 		dst[key] = value
 	}
 }
 
-func copyPreferredIntoMap[K comparable, V any](dst map[K]V, src map[K]V, preferred map[K]V) {
+// CopyPreferredIntoMap copies entries, applying preferred overrides when present.
+func CopyPreferredIntoMap[K comparable, V any](dst map[K]V, src map[K]V, preferred map[K]V) {
 	for key, value := range src {
 		if override, ok := preferred[key]; ok {
 			dst[key] = override
@@ -92,7 +97,8 @@ func copyPreferredIntoMap[K comparable, V any](dst map[K]V, src map[K]V, preferr
 	}
 }
 
-func resolveOrderedCapabilityMap[T any](
+// ResolveOrderedCapabilityMap resolves ordered capabilities into a name-keyed map.
+func ResolveOrderedCapabilityMap[T any](
 	hub *module.Hub,
 	names []string,
 	spec module.CapabilitySpec,
@@ -108,7 +114,8 @@ func resolveOrderedCapabilityMap[T any](
 	return out, nil
 }
 
-func bindLoggerWriterBuilders(
+// BindLoggerWriterBuilders applies builtin writer config bindings.
+func BindLoggerWriterBuilders(
 	resolved settings.Resolved,
 	builders map[string]logger.WriterBuilder,
 ) map[string]logger.WriterBuilder {
@@ -131,7 +138,8 @@ func bindLoggerWriterBuilders(
 	return out
 }
 
-func bindLoggerHandlerBuilders(
+// BindLoggerHandlerBuilders applies builtin handler config bindings.
+func BindLoggerHandlerBuilders(
 	resolved settings.Resolved,
 	builders map[string]logger.HandlerBuilder,
 	writerBuilders map[string]logger.WriterBuilder,
@@ -180,7 +188,8 @@ func bindLoggerHandlerBuilders(
 	return out
 }
 
-func bindStatsHandlerBuilders(
+// BindStatsHandlerBuilders applies builtin stats config bindings.
+func BindStatsHandlerBuilders(
 	resolved settings.Resolved,
 	builders map[string]stats.HandlerBuilder,
 ) map[string]stats.HandlerBuilder {
@@ -193,7 +202,8 @@ func bindStatsHandlerBuilders(
 	return out
 }
 
-func compileSecurityProfiles(
+// CompileSecurityProfiles compiles configured security profiles.
+func CompileSecurityProfiles(
 	resolved settings.Resolved,
 	providers map[string]security.Provider,
 ) (map[string]security.Profile, error) {
@@ -212,7 +222,8 @@ func compileSecurityProfiles(
 	return out, nil
 }
 
-func loggingInterceptorSource(resolved settings.Resolved) any {
+// LoggingInterceptorSource returns the preferred logging interceptor config source.
+func LoggingInterceptorSource(resolved settings.Resolved) any {
 	if cfg := resolved.Logging.Interceptors["logging"]; cfg != nil {
 		return cfg
 	}
@@ -222,19 +233,24 @@ func loggingInterceptorSource(resolved settings.Resolved) any {
 	return nil
 }
 
-func newRuntimeMarshalerProvider(snapshot *Snapshot) rest.Provider {
+// NewMarshalerProvider builds the runtime marshaler REST provider.
+func NewMarshalerProvider(
+	resolved settings.Resolved,
+	builders map[string]marshaler.MarshalerBuilder,
+) rest.Provider {
 	supported := []string{marshaler.SchemeJSONPb}
 	var jsonpbCfg *marshaler.JSONPbConfig
-	if snapshot != nil && snapshot.Resolved.Transports.Rest != nil {
-		if len(snapshot.Resolved.Transports.Rest.Marshaler.Support) > 0 {
+	if resolved.Transports.Rest != nil {
+		if len(resolved.Transports.Rest.Marshaler.Support) > 0 {
 			supported = append(
 				[]string(nil),
-				snapshot.Resolved.Transports.Rest.Marshaler.Support...)
+				resolved.Transports.Rest.Marshaler.Support...,
+			)
 		}
-		jsonpbCfg = snapshot.Resolved.Transports.Rest.Marshaler.Config.JSONPB
+		jsonpbCfg = resolved.Transports.Rest.Marshaler.Config.JSONPB
 	}
 	registry := marshaler.BuildMarshalerRegistryWithBuilders(
-		snapshot.MarshalerBuilderMap,
+		builders,
 		jsonpbCfg,
 		supported...,
 	)
@@ -250,7 +266,8 @@ type namedProvider interface {
 	Name() string
 }
 
-func mapNamedProviders[T namedProvider](items []T) map[string]T {
+// MapNamedProviders converts named items into a lookup map.
+func MapNamedProviders[T namedProvider](items []T) map[string]T {
 	out := make(map[string]T, len(items))
 	for _, item := range items {
 		out[item.Name()] = item
@@ -258,39 +275,52 @@ func mapNamedProviders[T namedProvider](items []T) map[string]T {
 	return out
 }
 
-func mapUnaryServerProviders(
+// MapUnaryServerProviders converts unary server providers into a lookup map.
+func MapUnaryServerProviders(
 	items []interceptor.UnaryServerInterceptorProvider,
 ) map[string]interceptor.UnaryServerInterceptorProvider {
-	return mapNamedProviders(items)
+	return MapNamedProviders(items)
 }
 
-func mapStreamServerProviders(
+// MapStreamServerProviders converts stream server providers into a lookup map.
+func MapStreamServerProviders(
 	items []interceptor.StreamServerInterceptorProvider,
 ) map[string]interceptor.StreamServerInterceptorProvider {
-	return mapNamedProviders(items)
+	return MapNamedProviders(items)
 }
 
-func mapUnaryClientProviders(
+// MapUnaryClientProviders converts unary client providers into a lookup map.
+func MapUnaryClientProviders(
 	items []interceptor.UnaryClientInterceptorProvider,
 ) map[string]interceptor.UnaryClientInterceptorProvider {
-	return mapNamedProviders(items)
+	return MapNamedProviders(items)
 }
 
-func mapStreamClientProviders(
+// MapStreamClientProviders converts stream client providers into a lookup map.
+func MapStreamClientProviders(
 	items []interceptor.StreamClientInterceptorProvider,
 ) map[string]interceptor.StreamClientInterceptorProvider {
-	return mapNamedProviders(items)
+	return MapNamedProviders(items)
 }
 
-func runtimeRequiresRestart(current, next *Snapshot) bool {
-	if current == nil || next == nil {
-		return false
+// ResolvedRequiresRestart reports whether changes in resolved settings require a restart.
+func ResolvedRequiresRestart(current, next settings.Resolved) bool {
+	return !reflect.DeepEqual(current.Server, next.Server) ||
+		!reflect.DeepEqual(current.Clients, next.Clients) ||
+		!reflect.DeepEqual(current.Discovery, next.Discovery) ||
+		!reflect.DeepEqual(current.Balancers, next.Balancers) ||
+		!reflect.DeepEqual(current.Transports, next.Transports) ||
+		!reflect.DeepEqual(current.Extensions, next.Extensions) ||
+		!reflect.DeepEqual(current.Telemetry.Stats, next.Telemetry.Stats)
+}
+
+func cloneMap[K comparable, V any](in map[K]V) map[K]V {
+	if len(in) == 0 {
+		return map[K]V{}
 	}
-	return !reflect.DeepEqual(current.Resolved.Server, next.Resolved.Server) ||
-		!reflect.DeepEqual(current.Resolved.Clients, next.Resolved.Clients) ||
-		!reflect.DeepEqual(current.Resolved.Discovery, next.Resolved.Discovery) ||
-		!reflect.DeepEqual(current.Resolved.Balancers, next.Resolved.Balancers) ||
-		!reflect.DeepEqual(current.Resolved.Transports, next.Resolved.Transports) ||
-		!reflect.DeepEqual(current.Resolved.Extensions, next.Resolved.Extensions) ||
-		!reflect.DeepEqual(current.Resolved.Telemetry.Stats, next.Resolved.Telemetry.Stats)
+	out := make(map[K]V, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }

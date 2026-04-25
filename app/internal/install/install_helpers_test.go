@@ -238,3 +238,112 @@ func TestWrapError(t *testing.T) {
 		assert.Contains(t, assemblyErr.Message, "plain error")
 	})
 }
+
+func TestValidateRPCBinding(t *testing.T) {
+	desc := &server.ServiceDesc{
+		ServiceName: "svc",
+		HandlerType: (*testHandler)(nil),
+	}
+
+	t.Run("valid binding", func(t *testing.T) {
+		gotDesc, serviceName, err := ValidateRPCBinding(true, "", desc, &testHandlerImpl{})
+		require.NoError(t, err)
+		assert.Equal(t, desc, gotDesc)
+		assert.Equal(t, "svc", serviceName)
+	})
+
+	t.Run("missing transport returns error", func(t *testing.T) {
+		_, _, err := ValidateRPCBinding(false, "", desc, &testHandlerImpl{})
+		require.Error(t, err)
+	})
+
+	t.Run("invalid desc returns error", func(t *testing.T) {
+		_, _, err := ValidateRPCBinding(true, "", "bad", &testHandlerImpl{})
+		require.Error(t, err)
+	})
+
+	t.Run("invalid impl returns error", func(t *testing.T) {
+		_, _, err := ValidateRPCBinding(true, "", desc, "bad")
+		require.Error(t, err)
+	})
+}
+
+func TestValidateRESTBinding(t *testing.T) {
+	desc := &server.RestServiceDesc{
+		HandlerType: (*testHandler)(nil),
+		Methods: []server.RestMethodDesc{
+			{Method: "GET", Path: "/users"},
+		},
+	}
+
+	t.Run("valid binding", func(t *testing.T) {
+		gotDesc, name, err := ValidateRESTBinding(true, "", desc, &testHandlerImpl{})
+		require.NoError(t, err)
+		assert.Equal(t, desc, gotDesc)
+		assert.NotEmpty(t, name)
+	})
+
+	t.Run("rest disabled returns error", func(t *testing.T) {
+		_, _, err := ValidateRESTBinding(false, "", desc, &testHandlerImpl{})
+		require.Error(t, err)
+	})
+
+	t.Run("invalid desc returns error", func(t *testing.T) {
+		_, _, err := ValidateRESTBinding(true, "", "bad", &testHandlerImpl{})
+		require.Error(t, err)
+	})
+
+	t.Run("invalid impl returns error", func(t *testing.T) {
+		_, _, err := ValidateRESTBinding(true, "", desc, "bad")
+		require.Error(t, err)
+	})
+}
+
+func TestValidateRawHTTPBindingStateful(t *testing.T) {
+	t.Run("rest disabled returns error", func(t *testing.T) {
+		_, err := ValidateRawHTTPBinding(
+			false,
+			nil,
+			"GET",
+			"/users",
+			func(http.ResponseWriter, *http.Request) {},
+		)
+		require.Error(t, err)
+	})
+
+	t.Run("nil handler returns error", func(t *testing.T) {
+		_, err := ValidateRawHTTPBinding(true, nil, "GET", "/users", nil)
+		require.Error(t, err)
+	})
+}
+
+func TestCheckServiceConflict(t *testing.T) {
+	t.Run("no conflict", func(t *testing.T) {
+		err := CheckServiceConflict(map[string]struct{}{}, "svc", "svc")
+		require.NoError(t, err)
+	})
+
+	t.Run("duplicate conflict", func(t *testing.T) {
+		err := CheckServiceConflict(map[string]struct{}{"svc": {}}, "svc", "svc")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "already installed")
+	})
+}
+
+func TestCheckRouteConflict(t *testing.T) {
+	t.Run("no conflict", func(t *testing.T) {
+		err := CheckRouteConflict("rest", map[string]struct{}{}, "GET", "/users")
+		require.NoError(t, err)
+	})
+
+	t.Run("duplicate conflict", func(t *testing.T) {
+		err := CheckRouteConflict(
+			"raw http",
+			map[string]struct{}{RouteKey("GET", "/users"): {}},
+			"GET",
+			"/users",
+		)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "already installed")
+	})
+}

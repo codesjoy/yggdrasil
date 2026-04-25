@@ -19,7 +19,6 @@ import (
 	"flag"
 	"net/http"
 	"os"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -32,10 +31,9 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
 	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
-	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
-	"github.com/codesjoy/yggdrasil/v3/internal/constant"
 	"github.com/codesjoy/yggdrasil/v3/module"
 	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
+	remote "github.com/codesjoy/yggdrasil/v3/transport"
 	yserver "github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
 
@@ -258,29 +256,6 @@ var testAssemblyRESTServiceDesc = yserver.RestServiceDesc{
 	},
 }
 
-type mockRegistry struct {
-	mock.Mock
-	registered   bool
-	deregistered bool
-}
-
-func (m *mockRegistry) Register(ctx context.Context, instance registry.Instance) error {
-	args := m.Called(ctx, instance)
-	m.registered = true
-	return args.Error(0)
-}
-
-func (m *mockRegistry) Deregister(ctx context.Context, instance registry.Instance) error {
-	args := m.Called(ctx, instance)
-	m.deregistered = true
-	return args.Error(0)
-}
-
-func (m *mockRegistry) Type() string {
-	args := m.Called()
-	return args.String(0)
-}
-
 type mockInternalServer struct {
 	mock.Mock
 	started bool
@@ -299,122 +274,128 @@ func (m *mockInternalServer) Stop(ctx context.Context) error {
 	return args.Error(0)
 }
 
-type blockingInternalServer struct {
-	stopCtx context.Context
+// --- Assembly shared helpers ---
+
+type transportRecorder struct {
+	startCalls  int32
+	handleCalls int32
+	stopCalls   int32
+	started     chan struct{}
+	stopCh      chan struct{}
 }
 
-func (b *blockingInternalServer) Serve() error {
-	return nil
-}
-
-func (b *blockingInternalServer) Stop(ctx context.Context) error {
-	b.stopCtx = ctx
-	<-ctx.Done()
-	return ctx.Err()
-}
-
-type blockingAppServer struct {
-	stopCtx context.Context
-	endpts  []yserver.Endpoint
-}
-
-func (b *blockingAppServer) RegisterService(*yserver.ServiceDesc, interface{})                    {}
-func (b *blockingAppServer) RegisterRestService(*yserver.RestServiceDesc, interface{}, ...string) {}
-func (b *blockingAppServer) RegisterRestRawHandlers(...*yserver.RestRawHandlerDesc)               {}
-
-func (b *blockingAppServer) Serve(
-	chan<- struct{},
-) error {
-	return nil
-}
-
-func (b *blockingAppServer) Stop(ctx context.Context) error {
-	b.stopCtx = ctx
-	<-ctx.Done()
-	return ctx.Err()
-}
-
-func (b *blockingAppServer) Endpoints() []yserver.Endpoint {
-	return b.endpts
-}
-
-type runningAppServer struct {
-	stopCtx  context.Context
-	stopCh   chan struct{}
-	stopOnce sync.Once
-}
-
-func (r *runningAppServer) RegisterService(*yserver.ServiceDesc, interface{})                    {}
-func (r *runningAppServer) RegisterRestService(*yserver.RestServiceDesc, interface{}, ...string) {}
-func (r *runningAppServer) RegisterRestRawHandlers(...*yserver.RestRawHandlerDesc)               {}
-
-func (r *runningAppServer) Serve(startFlag chan<- struct{}) error {
-	if startFlag != nil {
-		startFlag <- struct{}{}
+func newTransportRecorder() *transportRecorder {
+	return &transportRecorder{
+		started: make(chan struct{}),
+		stopCh:  make(chan struct{}),
 	}
-	if r.stopCh == nil {
-		return nil
+}
+
+func (r *transportRecorder) buildServer() remote.Server {
+	return &recordedRemoteServer{recorder: r}
+}
+
+type recordedRemoteServer struct {
+	recorder *transportRecorder
+}
+
+func (s *recordedRemoteServer) Start() error {
+	atomic.AddInt32(&s.recorder.startCalls, 1)
+	select {
+	case <-s.recorder.started:
+	default:
+		close(s.recorder.started)
 	}
-	<-r.stopCh
 	return nil
 }
 
-func (r *runningAppServer) Stop(ctx context.Context) error {
-	r.stopCtx = ctx
-	r.stopOnce.Do(func() {
-		if r.stopCh == nil {
-			r.stopCh = make(chan struct{})
+func (s *recordedRemoteServer) Handle() error {
+	atomic.AddInt32(&s.recorder.handleCalls, 1)
+	<-s.recorder.stopCh
+	return nil
+}
+
+func (s *recordedRemoteServer) Stop(context.Context) error {
+	atomic.AddInt32(&s.recorder.stopCalls, 1)
+	select {
+	case <-s.recorder.stopCh:
+	default:
+		close(s.recorder.stopCh)
+	}
+	return nil
+}
+
+func (s *recordedRemoteServer) Info() remote.ServerInfo {
+	return remote.ServerInfo{
+		Protocol: "test",
+		Address:  "127.0.0.1:0",
+	}
+}
+
+type testTransportModule struct {
+	recorder *transportRecorder
+}
+
+func (m testTransportModule) Name() string { return "test.transport.server" }
+
+func (m testTransportModule) Capabilities() []module.Capability {
+	return []module.Capability{
+		{
+			Spec: transportServerProviderCapabilitySpec,
+			Name: "test",
+			Value: remote.NewTransportServerProvider(
+				"test",
+				func(remote.MethodHandle) (remote.Server, error) {
+					return m.recorder.buildServer(), nil
+				},
+			),
+		},
+	}
+}
+
+func assemblyTestConfig(enableREST bool) map[string]any {
+	root := map[string]any{
+		"yggdrasil": map[string]any{
+			"admin": map[string]any{
+				"governor": map[string]any{
+					"port": 0,
+				},
+			},
+			"server": map[string]any{
+				"transports": []any{"test"},
+			},
+		},
+	}
+	if enableREST {
+		root["yggdrasil"].(map[string]any)["transports"] = map[string]any{
+			"http": map[string]any{
+				"rest": map[string]any{
+					"host": "127.0.0.1",
+					"port": 0,
+				},
+			},
 		}
-		close(r.stopCh)
-	})
-	return nil
+	}
+	return root
 }
 
-func (r *runningAppServer) Endpoints() []yserver.Endpoint {
-	return nil
+func waitForChannel(t *testing.T, ch <-chan struct{}, timeout time.Duration, msg string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(timeout):
+		t.Fatal(msg)
+	}
 }
 
-type failingInternalServer struct {
-	serveErr error
-	stopCtx  context.Context
-}
-
-func (f *failingInternalServer) Serve() error {
-	return f.serveErr
-}
-
-func (f *failingInternalServer) Stop(ctx context.Context) error {
-	f.stopCtx = ctx
-	return nil
-}
-
-type stubAppEndpoint struct {
-	protocol string
-	address  string
-	metadata map[string]string
-	kind     constant.ServerKind
-}
-
-func (e stubAppEndpoint) Protocol() string {
-	return e.protocol
-}
-
-func (e stubAppEndpoint) Address() string {
-	return e.address
-}
-
-func (e stubAppEndpoint) Metadata() map[string]string {
-	return e.metadata
-}
-
-func (e stubAppEndpoint) Kind() constant.ServerKind {
-	return e.kind
-}
-
-func createMockRegistry() *mockRegistry {
-	return &mockRegistry{}
-}
-
-func createMockInternalServer() *mockInternalServer {
-	return &mockInternalServer{}
+func containsPlannedModule(spec *yassembly.Spec, name string) bool {
+	if spec == nil {
+		return false
+	}
+	for _, item := range spec.Modules {
+		if item.Name == name {
+			return true
+		}
+	}
+	return false
 }

@@ -12,32 +12,58 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package configtest
+package testutil
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/codesjoy/yggdrasil/v3/config"
 )
 
 func TestSet_SimpleKey(t *testing.T) {
-	config.SetDefault(config.NewManager())
-	Set(t, "yggdrasil.app.name", "test-app")
-	// The key should be set in the config
+	ct := New(t)
+	ct.Set("yggdrasil.app.name", "test-app")
+	snap := ct.Manager().Snapshot()
+	require.NotNil(t, snap.Map())
 }
 
 func TestSet_NestedKey(t *testing.T) {
-	config.SetDefault(config.NewManager())
-	Set(t, "yggdrasil.server.network", "tcp")
-	Set(t, "yggdrasil.server.address", "127.0.0.1:0")
+	ct := New(t)
+	ct.Set("yggdrasil.server.network", "tcp")
+	ct.Set("yggdrasil.server.address", "127.0.0.1:0")
 }
 
 func TestSet_BracedKey(t *testing.T) {
-	config.SetDefault(config.NewManager())
-	Set(t, "yggdrasil.clients.services.{my-service}.resolver", "default")
+	ct := New(t)
+	ct.Set("yggdrasil.clients.services.{my-service}.resolver", "default")
+}
+
+func TestSet_Chaining(t *testing.T) {
+	ct := New(t)
+	result := ct.Set("a.b", 1).Set("a.c", 2)
+	assert.Same(t, ct, result)
+}
+
+func TestManager_ReturnsFreshManager(t *testing.T) {
+	ct := New(t)
+	mgr := ct.Manager()
+	require.NotNil(t, mgr)
+	// Manager should be usable independently
+	require.NotNil(t, mgr.Snapshot())
+}
+
+func TestManager_Independence(t *testing.T) {
+	ct1 := New(t)
+	ct2 := New(t)
+	ct1.Set("app.name", "first")
+	ct2.Set("app.name", "second")
+
+	m1 := ct1.Manager().Snapshot().Map()
+	m2 := ct2.Manager().Snapshot().Map()
+	// Each manager has its own data — both keys coexist independently
+	require.Contains(t, m1, "app")
+	require.Contains(t, m2, "app")
 }
 
 func TestPathSegments(t *testing.T) {

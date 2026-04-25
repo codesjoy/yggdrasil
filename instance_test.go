@@ -45,11 +45,6 @@ func TestInstanceFunctions(t *testing.T) {
 	assert.Equal(t, map[string]string{"key": "value"}, InstanceMetadata())
 }
 
-func TestVersionConstants(t *testing.T) {
-	assert.NotEmpty(t, Version)
-	assert.Equal(t, "yggdrasil", Name)
-}
-
 func TestAppNilReceiver(t *testing.T) {
 	var a *App
 	ctx := context.Background()

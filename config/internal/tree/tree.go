@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+// Package tree provides internal config tree normalization helpers.
+package tree
 
-import (
-	"fmt"
-)
+import "fmt"
 
 // NormalizeValue recursively normalizes nested map types and deep-clones structured values.
 func NormalizeValue(v any) any {

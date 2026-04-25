@@ -16,7 +16,7 @@
 package memory
 
 import (
-	configinternal "github.com/codesjoy/yggdrasil/v3/config/internal"
+	"github.com/codesjoy/yggdrasil/v3/config/internal/tree"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
 )
 
@@ -34,7 +34,7 @@ func (m *memory) Name() string {
 }
 
 func (m *memory) Read() (source.Data, error) {
-	return source.NewMapData(configinternal.NormalizeMap(m.data)), nil
+	return source.NewMapData(tree.NormalizeMap(m.data)), nil
 }
 
 func (m *memory) Close() error {
@@ -45,6 +45,6 @@ func (m *memory) Close() error {
 func NewSource(name string, data map[string]any) source.Source {
 	return &memory{
 		name: name,
-		data: configinternal.NormalizeMap(data),
+		data: tree.NormalizeMap(data),
 	}
 }

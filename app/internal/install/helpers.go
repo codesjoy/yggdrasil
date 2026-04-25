@@ -118,3 +118,128 @@ func WrapError(err error) error {
 	}
 	return ValidationError(fmt.Sprintf("install failed: %v", err), err)
 }
+
+// ValidateRPCBinding validates one RPC binding and returns the resolved descriptor and display name.
+func ValidateRPCBinding(
+	transportConfigured bool,
+	bindingServiceName string,
+	desc any,
+	impl any,
+) (*server.ServiceDesc, string, error) {
+	if !transportConfigured {
+		return nil, "", ValidationError(
+			"rpc bindings require at least one configured server transport",
+			nil,
+		)
+	}
+	serviceDesc, ok := desc.(*server.ServiceDesc)
+	if !ok || serviceDesc == nil {
+		return nil, "", ValidationError("rpc binding desc must be *server.ServiceDesc", nil)
+	}
+	serviceName := strings.TrimSpace(bindingServiceName)
+	if serviceName == "" {
+		serviceName = serviceDesc.ServiceName
+	}
+	if impl == nil {
+		return nil, "", ValidationError(
+			fmt.Sprintf("rpc service %q implementation is nil", serviceName),
+			nil,
+		)
+	}
+	if !ImplementsHandler(serviceDesc.HandlerType, impl) {
+		return nil, "", ValidationError(
+			fmt.Sprintf("rpc service %q handler does not satisfy interface", serviceName),
+			nil,
+		)
+	}
+	return serviceDesc, serviceName, nil
+}
+
+// ValidateRESTBinding validates one REST binding and returns the resolved descriptor and display name.
+func ValidateRESTBinding(
+	restEnabled bool,
+	bindingName string,
+	desc any,
+	impl any,
+) (*server.RestServiceDesc, string, error) {
+	if !restEnabled {
+		return nil, "", ValidationError(
+			"rest bindings require yggdrasil.transports.http.rest",
+			nil,
+		)
+	}
+	restDesc, ok := desc.(*server.RestServiceDesc)
+	if !ok || restDesc == nil {
+		return nil, "", ValidationError(
+			"rest binding desc must be *server.RestServiceDesc",
+			nil,
+		)
+	}
+	name := strings.TrimSpace(bindingName)
+	if name == "" {
+		if handlerType := reflect.TypeOf(restDesc.HandlerType); handlerType != nil {
+			name = handlerType.String()
+		} else {
+			name = "rest"
+		}
+	}
+	if impl == nil {
+		return nil, "", ValidationError(
+			fmt.Sprintf("rest binding %q implementation is nil", name),
+			nil,
+		)
+	}
+	if !ImplementsHandler(restDesc.HandlerType, impl) {
+		return nil, "", ValidationError(
+			fmt.Sprintf("rest binding %q handler does not satisfy interface", name),
+			nil,
+		)
+	}
+	return restDesc, name, nil
+}
+
+// ValidateRawHTTPBinding validates and normalizes one raw HTTP binding.
+func ValidateRawHTTPBinding(
+	restEnabled bool,
+	desc *server.RestRawHandlerDesc,
+	method string,
+	path string,
+	handler any,
+) (*server.RestRawHandlerDesc, error) {
+	if !restEnabled {
+		return nil, ValidationError(
+			"raw http bindings require yggdrasil.transports.http.rest",
+			nil,
+		)
+	}
+	normalized, err := NormalizeRawHTTPBinding(desc, method, path, handler)
+	if err != nil {
+		return nil, err
+	}
+	if normalized.Handler == nil {
+		return nil, ValidationError("raw http binding handler is nil", nil)
+	}
+	return normalized, nil
+}
+
+// CheckServiceConflict reports whether the RPC service key is already installed.
+func CheckServiceConflict(installed map[string]struct{}, key string, displayName string) error {
+	if _, exists := installed[key]; exists {
+		return ConflictError(
+			fmt.Sprintf("rpc service %q already installed", displayName),
+			nil,
+		)
+	}
+	return nil
+}
+
+// CheckRouteConflict reports whether the route is already installed.
+func CheckRouteConflict(kind string, installed map[string]struct{}, method, path string) error {
+	if _, exists := installed[RouteKey(method, path)]; exists {
+		return ConflictError(
+			fmt.Sprintf("%s route %s %s already installed", kind, method, path),
+			nil,
+		)
+	}
+	return nil
+}

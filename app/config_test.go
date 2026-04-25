@@ -24,25 +24,27 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	internalbootstrap "github.com/codesjoy/yggdrasil/v3/app/internal/bootstrap"
 	"github.com/codesjoy/yggdrasil/v3/config"
-	"github.com/codesjoy/yggdrasil/v3/internal/configtest"
+	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
+	configtest "github.com/codesjoy/yggdrasil/v3/config/testutil"
 )
 
 func TestResolveConfigPath(t *testing.T) {
 	withTestFlagSet(t)
 
-	path, explicit := resolveConfigPath("")
+	path, explicit := internalbootstrap.ResolveConfigPath("")
 	assert.Equal(t, defaultConfigPath, path)
 	assert.False(t, explicit)
 
 	configured := filepath.Join(t.TempDir(), "custom.yaml")
-	path, explicit = resolveConfigPath(configured)
+	path, explicit = internalbootstrap.ResolveConfigPath(configured)
 	assert.Equal(t, configured, path)
 	assert.True(t, explicit)
 
 	explicitPath := filepath.Join(t.TempDir(), "explicit.yaml")
 	os.Args = []string{"yggdrasil-test", "--yggdrasil-config=" + explicitPath}
-	path, explicit = resolveConfigPath(configured)
+	path, explicit = internalbootstrap.ResolveConfigPath(configured)
 	assert.Equal(t, explicitPath, path)
 	assert.True(t, explicit)
 }
@@ -113,45 +115,44 @@ func TestStopClosesManagedConfigSourcesOnce(t *testing.T) {
 func TestValidateStartup_DoesNotFailForRuntimeResolvedBindings(t *testing.T) {
 	tests := []struct {
 		name      string
-		configure func(*testing.T)
+		configure func(*configtest.T)
 	}{
 		{
 			name: "strict missing tracer builder",
-			configure: func(t *testing.T) {
-				configtest.Set(t, "yggdrasil.admin.validation.strict", true)
-				configtest.Set(t, "yggdrasil.telemetry.tracer", "missing-tracer")
+			configure: func(ct *configtest.T) {
+				ct.Set("yggdrasil.admin.validation.strict", true)
+				ct.Set("yggdrasil.telemetry.tracer", "missing-tracer")
 			},
 		},
 		{
 			name: "non-strict missing tracer builder",
-			configure: func(t *testing.T) {
-				configtest.Set(t, "yggdrasil.admin.validation.enable", true)
-				configtest.Set(t, "yggdrasil.admin.validation.strict", false)
-				configtest.Set(t, "yggdrasil.telemetry.tracer", "missing-tracer")
+			configure: func(ct *configtest.T) {
+				ct.Set("yggdrasil.admin.validation.enable", true)
+				ct.Set("yggdrasil.admin.validation.strict", false)
+				ct.Set("yggdrasil.telemetry.tracer", "missing-tracer")
 			},
 		},
 		{
 			name: "strict missing stats handler builder",
-			configure: func(t *testing.T) {
-				configtest.Set(t, "yggdrasil.admin.validation.strict", true)
-				configtest.Set(t, "yggdrasil.telemetry.stats.server", "missing-stats-handler")
+			configure: func(ct *configtest.T) {
+				ct.Set("yggdrasil.admin.validation.strict", true)
+				ct.Set("yggdrasil.telemetry.stats.server", "missing-stats-handler")
 			},
 		},
 		{
 			name: "non-strict missing stats handler builder",
-			configure: func(t *testing.T) {
-				configtest.Set(t, "yggdrasil.admin.validation.enable", true)
-				configtest.Set(t, "yggdrasil.admin.validation.strict", false)
-				configtest.Set(t, "yggdrasil.telemetry.stats.client", "missing-stats-handler")
+			configure: func(ct *configtest.T) {
+				ct.Set("yggdrasil.admin.validation.enable", true)
+				ct.Set("yggdrasil.admin.validation.strict", false)
+				ct.Set("yggdrasil.telemetry.stats.client", "missing-stats-handler")
 			},
 		},
 		{
 			name: "strict missing rest marshaler builder",
-			configure: func(t *testing.T) {
-				configtest.Set(t, "yggdrasil.admin.validation.strict", true)
-				configtest.Set(t, "yggdrasil.transports.http.rest.port", 0)
-				configtest.Set(
-					t,
+			configure: func(ct *configtest.T) {
+				ct.Set("yggdrasil.admin.validation.strict", true)
+				ct.Set("yggdrasil.transports.http.rest.port", 0)
+				ct.Set(
 					"yggdrasil.transports.http.rest.marshaler.support",
 					[]string{"nope"},
 				)
@@ -159,17 +160,16 @@ func TestValidateStartup_DoesNotFailForRuntimeResolvedBindings(t *testing.T) {
 		},
 		{
 			name: "strict missing client interceptor global",
-			configure: func(t *testing.T) {
-				configtest.Set(t, "yggdrasil.admin.validation.strict", true)
-				configtest.Set(t, "yggdrasil.clients.defaults.interceptors.unary", []string{"nope"})
+			configure: func(ct *configtest.T) {
+				ct.Set("yggdrasil.admin.validation.strict", true)
+				ct.Set("yggdrasil.clients.defaults.interceptors.unary", []string{"nope"})
 			},
 		},
 		{
 			name: "strict missing client interceptor by service",
-			configure: func(t *testing.T) {
-				configtest.Set(t, "yggdrasil.admin.validation.strict", true)
-				configtest.Set(
-					t,
+			configure: func(ct *configtest.T) {
+				ct.Set("yggdrasil.admin.validation.strict", true)
+				ct.Set(
 					"yggdrasil.clients.services.user.interceptors.unary",
 					[]string{"nope"},
 				)
@@ -177,38 +177,40 @@ func TestValidateStartup_DoesNotFailForRuntimeResolvedBindings(t *testing.T) {
 		},
 		{
 			name: "strict missing transport security provider",
-			configure: func(t *testing.T) {
-				configtest.Set(t, "yggdrasil.admin.validation.strict", true)
-				configtest.Set(t, "yggdrasil.transports.grpc.server.security_profile", "custom")
-				configtest.Set(t, "yggdrasil.transports.security.profiles.custom.type", "missing")
+			configure: func(ct *configtest.T) {
+				ct.Set("yggdrasil.admin.validation.strict", true)
+				ct.Set("yggdrasil.transports.grpc.server.security_profile", "custom")
+				ct.Set("yggdrasil.transports.security.profiles.custom.type", "missing")
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.configure(t)
-			require.NoError(t, validateStartup(nil))
+			ct := configtest.New(t)
+			tt.configure(ct)
+			opts := &options{configManager: ct.Manager()}
+			require.NoError(t, validateStartup(opts))
 		})
 	}
 }
 
 func TestValidateStartup_Strict_FailsOnInvalidTLSSecurityProfileConfig(t *testing.T) {
-	configtest.Set(t, "yggdrasil.admin.validation.strict", true)
-	configtest.Set(t, "yggdrasil.transports.grpc.server.security_profile", "tls-server")
-	configtest.Set(t, "yggdrasil.transports.security.profiles.tls-server.type", "tls")
-	configtest.Set(
-		t,
+	ct := configtest.New(t)
+	ct.Set("yggdrasil.admin.validation.strict", true)
+	ct.Set("yggdrasil.transports.grpc.server.security_profile", "tls-server")
+	ct.Set("yggdrasil.transports.security.profiles.tls-server.type", "tls")
+	ct.Set(
 		"yggdrasil.transports.security.profiles.tls-server.config.server.cert_file",
 		"/tmp/missing-cert.pem",
 	)
-	configtest.Set(
-		t,
+	ct.Set(
 		"yggdrasil.transports.security.profiles.tls-server.config.server.key_file",
 		"/tmp/missing-key.pem",
 	)
 
-	require.Error(t, validateStartup(nil))
+	opts := &options{configManager: ct.Manager()}
+	require.Error(t, validateStartup(opts))
 }
 
 func TestInitializeLocked_FailsWhenDefaultLoggerHandlerBuilderIsMissingAtRuntime(t *testing.T) {
@@ -244,4 +246,69 @@ func TestInitializeLocked_FailsWhenServerTransportProviderIsMissingAtRuntime(t *
 	})
 	app := newTestApp(t, "missing-server-provider", WithConfigManager(manager))
 	require.Error(t, app.initializeLocked(context.Background()))
+}
+
+// --- addManagedConfigSource ---
+
+func TestAddManagedConfigSource(t *testing.T) {
+	t.Run("adds source", func(t *testing.T) {
+		opts := &options{}
+		src := memory.NewSource("test", map[string]any{"k": "v"})
+		addManagedConfigSource(opts, src)
+		assert.Len(t, opts.managedConfigSources, 1)
+	})
+
+	t.Run("nil item skip", func(t *testing.T) {
+		opts := &options{}
+		addManagedConfigSource(opts, nil)
+		assert.Empty(t, opts.managedConfigSources)
+	})
+
+	t.Run("duplicate skip", func(t *testing.T) {
+		opts := &options{}
+		src := memory.NewSource("test", map[string]any{"k": "v"})
+		addManagedConfigSource(opts, src)
+		addManagedConfigSource(opts, src)
+		assert.Len(t, opts.managedConfigSources, 1)
+	})
+}
+
+// --- resolveIdentityLocked ---
+
+func TestResolveIdentityLocked(t *testing.T) {
+	t.Run("name from opts", func(t *testing.T) {
+		app := &App{opts: &options{appName: "from-opts"}}
+		err := app.resolveIdentityLocked()
+		require.NoError(t, err)
+		assert.Equal(t, "from-opts", app.name)
+	})
+
+	t.Run("name already set", func(t *testing.T) {
+		app := &App{
+			name: "already-set",
+			opts: &options{},
+		}
+		err := app.resolveIdentityLocked()
+		require.NoError(t, err)
+		assert.Equal(t, "already-set", app.name)
+	})
+
+	t.Run("nil app returns error", func(t *testing.T) {
+		var app *App
+		err := app.resolveIdentityLocked()
+		require.Error(t, err)
+	})
+
+	t.Run("nil opts returns error", func(t *testing.T) {
+		app := &App{}
+		err := app.resolveIdentityLocked()
+		require.Error(t, err)
+	})
+
+	t.Run("missing name returns error", func(t *testing.T) {
+		app := &App{opts: &options{}}
+		err := app.resolveIdentityLocked()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "app name is required")
+	})
 }

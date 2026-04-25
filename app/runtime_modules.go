@@ -42,6 +42,8 @@ import (
 	ytls "github.com/codesjoy/yggdrasil/v3/transport/support/security/tls"
 )
 
+// --- CapabilitySpec declarations ---
+
 var (
 	loggerHandlerCapabilitySpec = module.CapabilitySpec{
 		Name:        "observability.logger.handler",
@@ -129,6 +131,8 @@ var (
 		Type:        reflect.TypeOf((*balancer.Provider)(nil)).Elem(),
 	}
 )
+
+// --- Builtin capability modules ---
 
 type foundationBuiltinCapabilityModule struct{}
 
@@ -312,3 +316,106 @@ func (connectivityBuiltinCapabilityModule) Capabilities() []module.Capability {
 
 	return out
 }
+
+// --- Module structs ---
+
+type foundationRuntimeModule struct {
+	app *App
+}
+
+func (m foundationRuntimeModule) Name() string { return "foundation.runtime" }
+
+func (m foundationRuntimeModule) ConfigPath() string { return "yggdrasil" }
+
+func (m foundationRuntimeModule) Init(context.Context, config.View) error {
+	next, err := m.app.buildFoundationRuntimeSnapshot()
+	if err != nil {
+		return err
+	}
+	m.app.commitFoundationSnapshot(next)
+	return nil
+}
+
+func (m foundationRuntimeModule) PrepareReload(
+	context.Context,
+	config.View,
+) (module.ReloadCommitter, error) {
+	next, err := m.app.buildFoundationRuntimeSnapshot()
+	if err != nil {
+		return nil, err
+	}
+	m.app.stageFoundationSnapshot(next)
+	return foundationRuntimeCommitter{app: m.app, next: next}, nil
+}
+
+type foundationRuntimeCommitter struct {
+	app  *App
+	next *Snapshot
+}
+
+func (c foundationRuntimeCommitter) Commit(context.Context) error {
+	if c.app != nil {
+		c.app.commitFoundationSnapshot(c.next)
+	}
+	return nil
+}
+
+func (c foundationRuntimeCommitter) Rollback(context.Context) error {
+	if c.app != nil {
+		c.app.rollbackFoundationSnapshot(c.next)
+	}
+	return nil
+}
+
+type connectivityRuntimeModule struct {
+	app *App
+}
+
+func (m connectivityRuntimeModule) Name() string { return "connectivity.runtime" }
+
+func (m connectivityRuntimeModule) DependsOn() []string { return []string{"foundation.runtime"} }
+
+func (m connectivityRuntimeModule) ConfigPath() string { return "yggdrasil" }
+
+func (m connectivityRuntimeModule) Init(context.Context, config.View) error {
+	next, _, err := m.app.buildRuntimeSnapshot()
+	if err != nil {
+		return err
+	}
+	m.app.setRuntimeSnapshot(next)
+	return nil
+}
+
+func (m connectivityRuntimeModule) PrepareReload(
+	context.Context,
+	config.View,
+) (module.ReloadCommitter, error) {
+	next, restartRequired, err := m.app.buildRuntimeSnapshot()
+	if err != nil {
+		return nil, err
+	}
+	return connectivityRuntimeCommitter{
+		app:             m.app,
+		next:            next,
+		restartRequired: restartRequired,
+	}, nil
+}
+
+type connectivityRuntimeCommitter struct {
+	app             *App
+	next            *Snapshot
+	restartRequired bool
+}
+
+func (c connectivityRuntimeCommitter) Commit(context.Context) error {
+	if c.app == nil {
+		return nil
+	}
+	c.app.setRuntimeSnapshot(c.next)
+	if c.restartRequired && c.app.hub != nil {
+		c.app.hub.MarkRestartRequired("connectivity.runtime")
+	}
+	return c.app.applyRuntimeAdapters(c.next)
+}
+
+func (connectivityRuntimeCommitter) Rollback(context.Context) error { return nil }

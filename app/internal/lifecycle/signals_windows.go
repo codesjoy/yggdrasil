@@ -12,18 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package internal provides internal functions and types for the config package.
-package internal
+//go:build windows
 
-import "strings"
+package lifecycle
 
-// HasPrefix returns true if key has prefix pre.
-func HasPrefix(key, pre, delimiter string) bool {
-	if !strings.HasPrefix(key, pre) {
-		return false
-	}
-	if len(key) != len(pre) && !strings.HasPrefix(key[len(pre):], delimiter) {
-		return false
-	}
-	return true
-}
+import (
+	"os"
+	"syscall"
+)
+
+var shutdownSignals = []os.Signal{syscall.SIGQUIT, os.Interrupt}

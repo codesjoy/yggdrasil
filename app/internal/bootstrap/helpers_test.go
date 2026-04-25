@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package app
+package bootstrap
 
 import (
 	"errors"
@@ -22,17 +22,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codesjoy/yggdrasil/v3/config/source"
-	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 	"github.com/codesjoy/yggdrasil/v3/observability/logger"
 	"github.com/codesjoy/yggdrasil/v3/transport/gateway/rest"
 )
 
-// --- parseNamedFlagArg ---
-
 func TestParseNamedFlagArg(t *testing.T) {
 	t.Run("long form --name=value", func(t *testing.T) {
-		val, ok := parseNamedFlagArg(
+		val, ok := ParseNamedFlagArg(
 			[]string{"--yggdrasil-config=/path/to/config.yaml"},
 			"yggdrasil-config",
 		)
@@ -41,7 +38,7 @@ func TestParseNamedFlagArg(t *testing.T) {
 	})
 
 	t.Run("short form -name value", func(t *testing.T) {
-		val, ok := parseNamedFlagArg(
+		val, ok := ParseNamedFlagArg(
 			[]string{"-yggdrasil-config", "/path/to/config.yaml"},
 			"yggdrasil-config",
 		)
@@ -50,122 +47,91 @@ func TestParseNamedFlagArg(t *testing.T) {
 	})
 
 	t.Run("long form without value", func(t *testing.T) {
-		val, ok := parseNamedFlagArg([]string{"--yggdrasil-config"}, "yggdrasil-config")
+		val, ok := ParseNamedFlagArg([]string{"--yggdrasil-config"}, "yggdrasil-config")
 		assert.True(t, ok)
 		assert.Equal(t, "", val)
 	})
 
 	t.Run("short form without value", func(t *testing.T) {
-		val, ok := parseNamedFlagArg([]string{"-yggdrasil-config"}, "yggdrasil-config")
+		val, ok := ParseNamedFlagArg([]string{"-yggdrasil-config"}, "yggdrasil-config")
 		assert.True(t, ok)
 		assert.Equal(t, "", val)
 	})
 
 	t.Run("short form with equals", func(t *testing.T) {
-		val, ok := parseNamedFlagArg([]string{"-yggdrasil-config=/path"}, "yggdrasil-config")
+		val, ok := ParseNamedFlagArg([]string{"-yggdrasil-config=/path"}, "yggdrasil-config")
 		assert.True(t, ok)
 		assert.Equal(t, "/path", val)
 	})
 
 	t.Run("not found returns false", func(t *testing.T) {
-		val, ok := parseNamedFlagArg([]string{"--other-flag=value"}, "yggdrasil-config")
+		val, ok := ParseNamedFlagArg([]string{"--other-flag=value"}, "yggdrasil-config")
 		assert.False(t, ok)
 		assert.Equal(t, "", val)
 	})
 }
-
-// --- closeConfigSourcesReverse ---
 
 func TestCloseConfigSourcesReverse(t *testing.T) {
 	t.Run("closes in reverse order", func(t *testing.T) {
 		var order []string
 		s1 := &trackingConfigSource{name: "s1", onClose: func() { order = append(order, "s1") }}
 		s2 := &trackingConfigSource{name: "s2", onClose: func() { order = append(order, "s2") }}
-		err := closeConfigSourcesReverse([]source.Source{s1, s2})
+		err := CloseConfigSourcesReverse([]source.Source{s1, s2})
 		require.NoError(t, err)
 		assert.Equal(t, []string{"s2", "s1"}, order)
 	})
 
 	t.Run("nil items skipped", func(t *testing.T) {
-		err := closeConfigSourcesReverse([]source.Source{nil, nil})
+		err := CloseConfigSourcesReverse([]source.Source{nil, nil})
 		require.NoError(t, err)
 	})
 
 	t.Run("close error joined", func(t *testing.T) {
 		s1 := &errorConfigSource{name: "s1"}
 		s2 := &errorConfigSource{name: "s2"}
-		err := closeConfigSourcesReverse([]source.Source{s1, s2})
+		err := CloseConfigSourcesReverse([]source.Source{s1, s2})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "s1")
 		assert.Contains(t, err.Error(), "s2")
 	})
 
 	t.Run("empty slice returns nil", func(t *testing.T) {
-		err := closeConfigSourcesReverse(nil)
+		err := CloseConfigSourcesReverse(nil)
 		require.NoError(t, err)
 	})
 }
 
-// --- addManagedConfigSource ---
-
-func TestAddManagedConfigSource(t *testing.T) {
-	t.Run("adds source", func(t *testing.T) {
-		opts := &options{}
-		src := memory.NewSource("test", map[string]any{"k": "v"})
-		addManagedConfigSource(opts, src)
-		assert.Len(t, opts.managedConfigSources, 1)
-	})
-
-	t.Run("nil item skip", func(t *testing.T) {
-		opts := &options{}
-		addManagedConfigSource(opts, nil)
-		assert.Empty(t, opts.managedConfigSources)
-	})
-
-	t.Run("duplicate skip", func(t *testing.T) {
-		opts := &options{}
-		src := memory.NewSource("test", map[string]any{"k": "v"})
-		addManagedConfigSource(opts, src)
-		addManagedConfigSource(opts, src)
-		assert.Len(t, opts.managedConfigSources, 1)
-	})
-}
-
-// --- needsDefaultStartupSettings ---
-
 func TestNeedsDefaultStartupSettings(t *testing.T) {
 	t.Run("all empty returns true", func(t *testing.T) {
-		assert.True(t, needsDefaultStartupSettings(settings.Resolved{}))
+		assert.True(t, NeedsDefaultStartupSettings(settings.Resolved{}))
 	})
 
 	t.Run("non-empty logging handlers returns false", func(t *testing.T) {
 		resolved := settings.Resolved{}
 		resolved.Logging.Handlers = map[string]logger.HandlerSpec{"default": {}}
-		assert.False(t, needsDefaultStartupSettings(resolved))
+		assert.False(t, NeedsDefaultStartupSettings(resolved))
 	})
 
 	t.Run("non-empty registry type returns false", func(t *testing.T) {
 		resolved := settings.Resolved{}
 		resolved.Discovery.Registry.Type = "multi_registry"
-		assert.False(t, needsDefaultStartupSettings(resolved))
+		assert.False(t, NeedsDefaultStartupSettings(resolved))
 	})
 
 	t.Run("non-empty transports returns false", func(t *testing.T) {
 		resolved := settings.Resolved{}
 		resolved.Server.Transports = []string{"grpc"}
-		assert.False(t, needsDefaultStartupSettings(resolved))
+		assert.False(t, NeedsDefaultStartupSettings(resolved))
 	})
 
 	t.Run("non-nil rest returns false", func(t *testing.T) {
 		resolved := settings.Resolved{}
 		resolved.Transports.Rest = &rest.Config{}
-		assert.False(t, needsDefaultStartupSettings(resolved))
+		assert.False(t, NeedsDefaultStartupSettings(resolved))
 	})
 }
 
-// --- startupValidator.Add ---
-
-func TestStartupValidator_Add(t *testing.T) {
+func TestStartupValidatorAdd(t *testing.T) {
 	t.Run("nil err is no-op", func(t *testing.T) {
 		v := &startupValidator{strict: true}
 		v.add("msg", nil)
@@ -181,48 +147,6 @@ func TestStartupValidator_Add(t *testing.T) {
 		assert.Contains(t, v.err.Error(), "msg2")
 	})
 }
-
-// --- resolveIdentityLocked ---
-
-func TestResolveIdentityLocked(t *testing.T) {
-	t.Run("name from opts", func(t *testing.T) {
-		app := &App{opts: &options{appName: "from-opts"}}
-		err := app.resolveIdentityLocked()
-		require.NoError(t, err)
-		assert.Equal(t, "from-opts", app.name)
-	})
-
-	t.Run("name already set", func(t *testing.T) {
-		app := &App{
-			name: "already-set",
-			opts: &options{},
-		}
-		err := app.resolveIdentityLocked()
-		require.NoError(t, err)
-		assert.Equal(t, "already-set", app.name)
-	})
-
-	t.Run("nil app returns error", func(t *testing.T) {
-		var app *App
-		err := app.resolveIdentityLocked()
-		require.Error(t, err)
-	})
-
-	t.Run("nil opts returns error", func(t *testing.T) {
-		app := &App{}
-		err := app.resolveIdentityLocked()
-		require.Error(t, err)
-	})
-
-	t.Run("missing name returns error", func(t *testing.T) {
-		app := &App{opts: &options{}}
-		err := app.resolveIdentityLocked()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "app name is required")
-	})
-}
-
-// --- helpers ---
 
 type trackingConfigSource struct {
 	name    string

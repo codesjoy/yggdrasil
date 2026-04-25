@@ -23,7 +23,7 @@ import (
 	"github.com/creasty/defaults"
 	"github.com/mitchellh/mapstructure"
 
-	configinternal "github.com/codesjoy/yggdrasil/v3/config/internal"
+	"github.com/codesjoy/yggdrasil/v3/config/internal/tree"
 )
 
 // Snapshot is an immutable configuration snapshot or subsection.
@@ -33,7 +33,7 @@ type Snapshot struct {
 
 // NewSnapshot creates a snapshot backed by a deep-cloned value.
 func NewSnapshot(value any) Snapshot {
-	return Snapshot{value: configinternal.NormalizeValue(value)}
+	return Snapshot{value: tree.NormalizeValue(value)}
 }
 
 // Section returns a nested immutable snapshot.
@@ -52,7 +52,7 @@ func (s Snapshot) Decode(target any) error {
 // Map returns the underlying value when it is a map.
 func (s Snapshot) Map() map[string]any {
 	if out, ok := s.value.(map[string]any); ok {
-		return configinternal.NormalizeMap(out)
+		return tree.NormalizeMap(out)
 	}
 	return map[string]any{}
 }
@@ -70,7 +70,7 @@ func (s Snapshot) Empty() bool {
 
 // Value returns a normalized clone of the underlying value.
 func (s Snapshot) Value() any {
-	return configinternal.NormalizeValue(s.value)
+	return tree.NormalizeValue(s.value)
 }
 
 func decodeInto(src, target any) error {

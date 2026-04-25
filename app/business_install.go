@@ -17,8 +17,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"reflect"
-	"strings"
 
 	internalinstall "github.com/codesjoy/yggdrasil/v3/app/internal/install"
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
@@ -241,37 +239,21 @@ func (a *App) installRPCBinding(binding RPCBinding) error {
 	if err != nil {
 		return err
 	}
-	if len(opts.resolvedSettings.Server.Transports) == 0 {
-		return internalinstall.ValidationError(
-			"rpc bindings require at least one configured server transport",
-			nil,
-		)
+	desc, serviceName, err := internalinstall.ValidateRPCBinding(
+		len(opts.resolvedSettings.Server.Transports) > 0,
+		binding.ServiceName,
+		binding.Desc,
+		binding.Impl,
+	)
+	if err != nil {
+		return err
 	}
-	desc, ok := binding.Desc.(*server.ServiceDesc)
-	if !ok || desc == nil {
-		return internalinstall.ValidationError("rpc binding desc must be *server.ServiceDesc", nil)
-	}
-	serviceName := strings.TrimSpace(binding.ServiceName)
-	if serviceName == "" {
-		serviceName = desc.ServiceName
-	}
-	if binding.Impl == nil {
-		return internalinstall.ValidationError(
-			fmt.Sprintf("rpc service %q implementation is nil", serviceName),
-			nil,
-		)
-	}
-	if !internalinstall.ImplementsHandler(desc.HandlerType, binding.Impl) {
-		return internalinstall.ValidationError(
-			fmt.Sprintf("rpc service %q handler does not satisfy interface", serviceName),
-			nil,
-		)
-	}
-	if _, exists := a.installedRPCServices[desc.ServiceName]; exists {
-		return internalinstall.ConflictError(
-			fmt.Sprintf("rpc service %q already installed", serviceName),
-			nil,
-		)
+	if err := internalinstall.CheckServiceConflict(
+		a.installedRPCServices,
+		desc.ServiceName,
+		serviceName,
+	); err != nil {
+		return err
 	}
 	svr, err := a.installServer("rpc")
 	if err != nil {
@@ -287,51 +269,24 @@ func (a *App) installRESTBinding(binding RESTBinding) error {
 	if err != nil {
 		return err
 	}
-	if !opts.resolvedSettings.Server.RestEnabled {
-		return internalinstall.ValidationError(
-			"rest bindings require yggdrasil.transports.http.rest",
-			nil,
-		)
-	}
-	desc, ok := binding.Desc.(*server.RestServiceDesc)
-	if !ok || desc == nil {
-		return internalinstall.ValidationError(
-			"rest binding desc must be *server.RestServiceDesc",
-			nil,
-		)
-	}
-	name := strings.TrimSpace(binding.Name)
-	if name == "" {
-		if handlerType := reflect.TypeOf(desc.HandlerType); handlerType != nil {
-			name = handlerType.String()
-		} else {
-			name = "rest"
-		}
-	}
-	if binding.Impl == nil {
-		return internalinstall.ValidationError(
-			fmt.Sprintf("rest binding %q implementation is nil", name),
-			nil,
-		)
-	}
-	if !internalinstall.ImplementsHandler(desc.HandlerType, binding.Impl) {
-		return internalinstall.ValidationError(
-			fmt.Sprintf("rest binding %q handler does not satisfy interface", name),
-			nil,
-		)
+	desc, _, err := internalinstall.ValidateRESTBinding(
+		opts.resolvedSettings.Server.RestEnabled,
+		binding.Name,
+		binding.Desc,
+		binding.Impl,
+	)
+	if err != nil {
+		return err
 	}
 	prefix := internalinstall.BuildRESTRoutePrefix(binding.Prefixes)
 	for _, method := range desc.Methods {
-		key := internalinstall.RouteKey(method.Method, prefix+method.Path)
-		if _, exists := a.installedHTTPRoutes[key]; exists {
-			return internalinstall.ConflictError(
-				fmt.Sprintf(
-					"rest route %s %s already installed",
-					method.Method,
-					prefix+method.Path,
-				),
-				nil,
-			)
+		if err := internalinstall.CheckRouteConflict(
+			"rest",
+			a.installedHTTPRoutes,
+			method.Method,
+			prefix+method.Path,
+		); err != nil {
+			return err
 		}
 	}
 	svr, err := a.installServer("rest")
@@ -350,13 +305,8 @@ func (a *App) installRawHTTPBinding(binding RawHTTPBinding) error {
 	if err != nil {
 		return err
 	}
-	if !opts.resolvedSettings.Server.RestEnabled {
-		return internalinstall.ValidationError(
-			"raw http bindings require yggdrasil.transports.http.rest",
-			nil,
-		)
-	}
-	desc, err := internalinstall.NormalizeRawHTTPBinding(
+	desc, err := internalinstall.ValidateRawHTTPBinding(
+		opts.resolvedSettings.Server.RestEnabled,
 		binding.Desc,
 		binding.Method,
 		binding.Path,
@@ -365,22 +315,20 @@ func (a *App) installRawHTTPBinding(binding RawHTTPBinding) error {
 	if err != nil {
 		return err
 	}
-	if desc.Handler == nil {
-		return internalinstall.ValidationError("raw http binding handler is nil", nil)
-	}
-	key := internalinstall.RouteKey(desc.Method, desc.Path)
-	if _, exists := a.installedHTTPRoutes[key]; exists {
-		return internalinstall.ConflictError(
-			fmt.Sprintf("raw http route %s %s already installed", desc.Method, desc.Path),
-			nil,
-		)
+	if err := internalinstall.CheckRouteConflict(
+		"raw http",
+		a.installedHTTPRoutes,
+		desc.Method,
+		desc.Path,
+	); err != nil {
+		return err
 	}
 	svr, err := a.installServer("raw http")
 	if err != nil {
 		return err
 	}
 	svr.RegisterRestRawHandlers(desc)
-	a.installedHTTPRoutes[key] = struct{}{}
+	a.installedHTTPRoutes[internalinstall.RouteKey(desc.Method, desc.Path)] = struct{}{}
 	return nil
 }
 

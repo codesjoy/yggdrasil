@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package tree
 
 import (
 	"testing"
@@ -31,7 +31,6 @@ func TestNormalizeValueDeepCloneAndMapAnyAny(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "one", out["nested"].(map[string]any)["list"].([]any)[0].(map[string]any)["1"])
 
-	// mutate result and ensure original structure is unaffected
 	out["nested"].(map[string]any)["list"].([]any)[0].(map[string]any)["1"] = "changed"
 	require.Equal(t, "one", src["nested"].(map[string]any)["list"].([]any)[0].(map[any]any)[1])
 }
@@ -57,11 +56,4 @@ func TestMergeMapsMergesAndReplacesOnTypeMismatch(t *testing.T) {
 		"a": map[string]any{"x": 2, "y": 3, "keep": true},
 		"b": map[string]any{"nested": "v"},
 	}, merged)
-}
-
-func TestHasPrefix(t *testing.T) {
-	require.True(t, HasPrefix("app_server_port", "app", "_"))
-	require.True(t, HasPrefix("app", "app", "_"))
-	require.False(t, HasPrefix("apple", "app", "_"))
-	require.False(t, HasPrefix("service_app_port", "app", "_"))
 }

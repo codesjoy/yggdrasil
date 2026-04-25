@@ -21,7 +21,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	configinternal "github.com/codesjoy/yggdrasil/v3/config/internal"
+	"github.com/codesjoy/yggdrasil/v3/config/internal/tree"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
 )
 
@@ -304,7 +304,7 @@ func (m *Manager) mergeLocked() map[string]any {
 
 	merged := map[string]any{}
 	for _, item := range layers {
-		merged = configinternal.MergeMaps(merged, item.data)
+		merged = tree.MergeMaps(merged, item.data)
 	}
 	return merged
 }
@@ -340,5 +340,5 @@ func decodeSourceData(data source.Data) (map[string]any, error) {
 	if err := data.Unmarshal(&out); err != nil {
 		return nil, err
 	}
-	return configinternal.NormalizeMap(out), nil
+	return tree.NormalizeMap(out), nil
 }

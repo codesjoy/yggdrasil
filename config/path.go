@@ -14,12 +14,12 @@
 
 package config
 
-import configinternal "github.com/codesjoy/yggdrasil/v3/config/internal"
+import "github.com/codesjoy/yggdrasil/v3/config/internal/tree"
 
 // Lookup returns a deep-cloned value from the given path.
 func Lookup(value any, path ...string) any {
 	if len(path) == 0 {
-		return configinternal.NormalizeValue(value)
+		return tree.NormalizeValue(value)
 	}
 	current := value
 	for i, segment := range path {
@@ -32,7 +32,7 @@ func Lookup(value any, path ...string) any {
 			return nil
 		}
 		if i == len(path)-1 {
-			return configinternal.NormalizeValue(next)
+			return tree.NormalizeValue(next)
 		}
 		current = next
 	}
@@ -53,5 +53,5 @@ func SetPath(dst map[string]any, value any, path ...string) {
 		}
 		current = next
 	}
-	current[path[len(path)-1]] = configinternal.NormalizeValue(value)
+	current[path[len(path)-1]] = tree.NormalizeValue(value)
 }

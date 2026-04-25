@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package app
+package lifecycle
 
 import (
 	"context"
@@ -21,11 +21,11 @@ import (
 	"time"
 
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
-	"github.com/codesjoy/yggdrasil/v3/internal/constant"
 	"github.com/codesjoy/yggdrasil/v3/internal/instance"
+	yserver "github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
 
-func (runner *lifecycleRunner) register() error {
+func (runner *Runner) register() error {
 	if runner.registry == nil {
 		return nil
 	}
@@ -59,7 +59,7 @@ func (runner *lifecycleRunner) register() error {
 	return nil
 }
 
-func (runner *lifecycleRunner) deregister(ctx context.Context) error {
+func (runner *Runner) deregister(ctx context.Context) error {
 	if runner.registry == nil {
 		return nil
 	}
@@ -75,7 +75,7 @@ func (runner *lifecycleRunner) deregister(ctx context.Context) error {
 	return nil
 }
 
-func (runner *lifecycleRunner) beginRegister() bool {
+func (runner *Runner) beginRegister() bool {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 
@@ -88,7 +88,7 @@ func (runner *lifecycleRunner) beginRegister() bool {
 	}
 }
 
-func (runner *lifecycleRunner) resetRegistering() {
+func (runner *Runner) resetRegistering() {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 
@@ -97,7 +97,7 @@ func (runner *lifecycleRunner) resetRegistering() {
 	}
 }
 
-func (runner *lifecycleRunner) finishRegister() int {
+func (runner *Runner) finishRegister() int {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 
@@ -108,7 +108,7 @@ func (runner *lifecycleRunner) finishRegister() int {
 	return state
 }
 
-func (runner *lifecycleRunner) beginDeregister() bool {
+func (runner *Runner) beginDeregister() bool {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 
@@ -124,41 +124,49 @@ func (runner *lifecycleRunner) beginDeregister() bool {
 	}
 }
 
-func (runner *lifecycleRunner) Region() string {
+// Region returns the instance region.
+func (runner *Runner) Region() string {
 	return instance.Region()
 }
 
-func (runner *lifecycleRunner) Zone() string {
+// Zone returns the instance zone.
+func (runner *Runner) Zone() string {
 	return instance.Zone()
 }
 
-func (runner *lifecycleRunner) Campus() string {
+// Campus returns the instance campus.
+func (runner *Runner) Campus() string {
 	return instance.Campus()
 }
 
-func (runner *lifecycleRunner) Namespace() string {
+// Namespace returns the instance namespace.
+func (runner *Runner) Namespace() string {
 	return instance.Namespace()
 }
 
-func (runner *lifecycleRunner) Name() string {
+// Name returns the instance name.
+func (runner *Runner) Name() string {
 	return instance.Name()
 }
 
-func (runner *lifecycleRunner) Version() string {
+// Version returns the instance version.
+func (runner *Runner) Version() string {
 	return instance.Version()
 }
 
-func (runner *lifecycleRunner) Metadata() map[string]string {
+// Metadata returns the instance metadata.
+func (runner *Runner) Metadata() map[string]string {
 	return instance.Metadata()
 }
 
-func (runner *lifecycleRunner) Endpoints() []registry.Endpoint {
+// Endpoints returns the advertised service endpoints.
+func (runner *Runner) Endpoints() []registry.Endpoint {
 	endpoints := make([]registry.Endpoint, 0)
 	if runner.server != nil {
 		for _, item := range runner.server.Endpoints() {
 			metadata := cloneEndpointMetadata(item.Metadata())
 			metadata[registry.MDServerKind] = string(item.Kind())
-			endpoints = append(endpoints, lifecycleEndpoint{
+			endpoints = append(endpoints, endpoint{
 				address:  item.Address(),
 				scheme:   item.Protocol(),
 				metadata: metadata,
@@ -168,8 +176,8 @@ func (runner *lifecycleRunner) Endpoints() []registry.Endpoint {
 	if runner.governor != nil && runner.governor.ShouldAdvertise() {
 		info := runner.governor.Info()
 		metadata := cloneEndpointMetadata(info.Attr)
-		metadata[registry.MDServerKind] = string(constant.ServerKindGovernor)
-		endpoints = append(endpoints, lifecycleEndpoint{
+		metadata[registry.MDServerKind] = string(yserver.EndpointKindGovernor)
+		endpoints = append(endpoints, endpoint{
 			address:  info.Address,
 			scheme:   info.Scheme,
 			metadata: metadata,
