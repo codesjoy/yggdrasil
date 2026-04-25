@@ -131,7 +131,7 @@ func (s *Server) Serve() error {
 	s.cfg.Bind = host
 	s.cfg.Host = host
 	s.cfg.Port = port
-	s.Server.Addr = s.cfg.Address()
+	s.Addr = s.cfg.Address()
 	s.mu.Unlock()
 	s.setInfo(ServerInfo{
 		Address: fmt.Sprintf("%s:%d", host, port),

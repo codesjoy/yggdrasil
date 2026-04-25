@@ -34,13 +34,18 @@ func setCompatServer(server *Server) {
 }
 
 // HandleFunc registers a new route with the default compatibility server.
+//
 // Deprecated: use (*Server).HandleFunc instead.
 func HandleFunc(pattern string, handler http.HandlerFunc) {
 	compatMu.RLock()
 	server := compatServer
 	compatMu.RUnlock()
 	if server == nil {
-		slog.Warn("governor compatibility HandleFunc ignored because no default server exists", "pattern", pattern)
+		slog.Warn(
+			"governor compatibility HandleFunc ignored because no default server exists",
+			"pattern",
+			pattern,
+		)
 		return
 	}
 	server.HandleFunc(pattern, handler)

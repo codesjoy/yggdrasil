@@ -12,37 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tls
+package module
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoadBuilderConfigMergesServiceOverrides(t *testing.T) {
-	minVersion := "1.3"
-	Configure(
-		BuilderConfig{
-			MinVersion: &minVersion,
-			Client:     sideCfg{ServerName: "global"},
-		},
-		map[string]BuilderConfig{
-			"demo": {
-				Client: sideCfg{ServerName: "svc"},
-			},
-		},
-	)
-
-	cfg := loadBuilderConfig("demo")
-	require.NotNil(t, cfg.MinVersion)
-	require.Equal(t, "1.3", *cfg.MinVersion)
-	require.Equal(t, "svc", cfg.Client.ServerName)
+func TestReloadState_WithNilError(t *testing.T) {
+	s := ReloadState{}.withError(nil)
+	require.Equal(t, "", s.LastErrorText)
+	require.Nil(t, s.LastError)
 }
 
-func TestNewCredentialsUsesConfiguredServerName(t *testing.T) {
-	Configure(BuilderConfig{Client: sideCfg{ServerName: "demo.internal"}}, nil)
-
-	creds := newCredentials("", true)
-	require.NotNil(t, creds)
+func TestReloadState_WithNonNilError(t *testing.T) {
+	err := errors.New("something broke")
+	s := ReloadState{}.withError(err)
+	require.Equal(t, "something broke", s.LastErrorText)
+	require.Equal(t, err, s.LastError)
 }

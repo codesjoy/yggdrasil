@@ -20,7 +20,7 @@ import (
 	"context"
 	"net"
 
-	"github.com/codesjoy/yggdrasil/v3/remote/credentials"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
 )
 
 // Peer contains the information of the peer for an RPC, such as the address
@@ -31,7 +31,7 @@ type Peer struct {
 	// LocalAddr is the local address.
 	LocalAddr net.Addr
 	// AuthInfo is the authentication information of the transport security.
-	AuthInfo credentials.AuthInfo
+	AuthInfo security.AuthInfo
 	// Protocol is the protocol used for the RPC.
 	Protocol string
 	// RemoteIP is the remote ip.

@@ -235,7 +235,8 @@ func (s *Server) authorize(r *http.Request) bool {
 	if !ok {
 		return false
 	}
-	return secureEqual(strings.TrimSpace(u), username) && secureEqual(strings.TrimSpace(p), password)
+	return secureEqual(strings.TrimSpace(u), username) &&
+		secureEqual(strings.TrimSpace(p), password)
 }
 
 func secureEqual(a, b string) bool {

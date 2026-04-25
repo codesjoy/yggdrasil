@@ -97,7 +97,14 @@ func TestSecurityBaseline_DefaultRoutes(t *testing.T) {
 
 func TestConfigHandle_MethodNotAllowed(t *testing.T) {
 	s := startGovernor(t, Config{}, config.NewManager())
-	assertStatus(t, "DELETE", "http://"+s.Info().Address+"/configs", "", nil, http.StatusMethodNotAllowed)
+	assertStatus(
+		t,
+		"DELETE",
+		"http://"+s.Info().Address+"/configs",
+		"",
+		nil,
+		http.StatusMethodNotAllowed,
+	)
 }
 
 func TestConfigPatchValidation(t *testing.T) {
@@ -206,7 +213,9 @@ func TestAuthBasic(t *testing.T) {
 func TestWarnOnExposedRoutesWithoutAuth(t *testing.T) {
 	var logBuf bytes.Buffer
 	oldLogger := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	slog.SetDefault(
+		slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})),
+	)
 	t.Cleanup(func() {
 		slog.SetDefault(oldLogger)
 	})

@@ -141,5 +141,6 @@ func normalizeGovernorBind(bind, host string) string {
 }
 
 // Configure is deprecated and no longer used by framework runtime.
+//
 // Deprecated: use NewServerWithConfig instead.
 func Configure(_ Config, _ *config.Manager) {}
