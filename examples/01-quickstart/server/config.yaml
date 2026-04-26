@@ -1,0 +1,21 @@
+yggdrasil:
+  app:
+    name: "github.com.codesjoy.yggdrasil.example.01-quickstart"
+  mode: dev
+
+  server:
+    transports:
+      - "grpc"
+
+  transports:
+    grpc:
+      server:
+        address: "127.0.0.1:56001"
+
+  admin:
+    governor:
+      port: 56011
+
+app:
+  quickstart:
+    greeting: "hello from quickstart"

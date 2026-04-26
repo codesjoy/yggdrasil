@@ -1,0 +1,396 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"time"
+)
+
+type Book struct {
+	Name   string `json:"name"`
+	Author string `json:"author"`
+	Title  string `json:"title"`
+	Read   bool   `json:"read"`
+}
+
+type Shelf struct {
+	Name  string `json:"name"`
+	Theme string `json:"theme"`
+}
+
+type CreateShelfRequest struct {
+	Shelf Shelf `json:"shelf"`
+}
+
+func main() {
+	slog.Info("wait for REST server", "endpoint", "http://localhost:55887")
+	if err := waitForServer("http://localhost:55887", 10, 1*time.Second); err != nil {
+		slog.Error("server not ready", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	slog.Info("=== Testing REST API ===")
+
+	slog.Info("=== 1. Testing Create Shelf ===")
+	shelfName, err := testCreateShelf()
+	if err != nil {
+		slog.Error("create shelf test failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	slog.Info("=== 2. Testing Get Shelf ===")
+	if err := testGetShelf(shelfName); err != nil {
+		slog.Error("get shelf test failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	slog.Info("=== 3. Testing List Shelves ===")
+	if err := testListShelves(); err != nil {
+		slog.Error("list shelves test failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	slog.Info("=== 4. Testing Create Book ===")
+	bookName, err := testCreateBook(shelfName)
+	if err != nil {
+		slog.Error("create book test failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	slog.Info("=== 5. Testing Get Book ===")
+	if err := testGetBook(bookName); err != nil {
+		slog.Error("get book test failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	slog.Info("=== 6. Testing List Books ===")
+	if err := testListBooks(shelfName); err != nil {
+		slog.Error("list books test failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	slog.Info("=== 7. Testing Update Book ===")
+	if err := testUpdateBook(bookName); err != nil {
+		slog.Error("update book test failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	slog.Info("=== 8. Testing Delete Book ===")
+	if err := testDeleteBook(bookName); err != nil {
+		slog.Error("delete book test failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	slog.Info("=== 9. Testing Delete Shelf ===")
+	if err := testDeleteShelf(shelfName); err != nil {
+		slog.Error("delete shelf test failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	slog.Info("All REST API tests completed successfully!")
+}
+
+// waitForServer waits for the REST server to be ready by polling the health endpoint
+func waitForServer(url string, maxAttempts int, interval time.Duration) error {
+	client := &http.Client{Timeout: 1 * time.Second}
+	for i := 0; i < maxAttempts; i++ {
+		resp, err := client.Get(url + "/v1/shelves") // nolint
+		if err == nil {
+			_ = resp.Body.Close()
+			slog.Info("Server is ready")
+			return nil
+		}
+		slog.Info("Waiting for server to be ready...", "attempt", i+1, "max", maxAttempts)
+		time.Sleep(interval)
+	}
+	return fmt.Errorf("server not ready after %d attempts", maxAttempts)
+}
+
+func testCreateShelf() (string, error) {
+	req := CreateShelfRequest{
+		Shelf: Shelf{
+			Name:  "shelves/test-1",
+			Theme: "Fiction",
+		},
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return "", err
+	}
+
+	httpReq, err := http.NewRequest( //nolint:noctx
+		"POST",
+		"http://localhost:55887/v1/shelves",
+		bytes.NewBuffer(body),
+	)
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var shelf Shelf
+	if err := json.NewDecoder(resp.Body).Decode(&shelf); err != nil {
+		return "", err
+	}
+
+	slog.Info("Created shelf", "shelf", shelf)
+	return shelf.Name, nil
+}
+
+func testGetShelf(name string) error {
+	resp, err := http.Get(fmt.Sprintf("http://localhost:55887/v1/%s", name)) //nolint:noctx
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var shelf Shelf
+	if err := json.NewDecoder(resp.Body).Decode(&shelf); err != nil {
+		return err
+	}
+
+	slog.Info("Got shelf", "shelf", shelf)
+	return nil
+}
+
+func testListShelves() error {
+	resp, err := http.Get("http://localhost:55887/v1/shelves") //nolint:noctx
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Shelves []Shelf `json:"shelves"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return err
+	}
+
+	slog.Info("Listed shelves", "count", len(result.Shelves))
+	return nil
+}
+
+func testCreateBook(parent string) (string, error) {
+	req := struct {
+		Book Book `json:"book"`
+	}{
+		Book: Book{
+			Name:   "books/test-1",
+			Author: "Test Author",
+			Title:  "Test Book",
+			Read:   true,
+		},
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return "", err
+	}
+
+	httpReq, err := http.NewRequest( //nolint:noctx
+		"POST",
+		fmt.Sprintf("http://localhost:55887/v1/%s/books", parent),
+		bytes.NewBuffer(body),
+	)
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var book Book
+	if err := json.NewDecoder(resp.Body).Decode(&book); err != nil {
+		return "", err
+	}
+
+	slog.Info("Created book", "book", book)
+	return book.Name, nil
+}
+
+func testGetBook(name string) error {
+	resp, err := http.Get(fmt.Sprintf("http://localhost:55887/v1/%s", name)) //nolint:noctx
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var book Book
+	if err := json.NewDecoder(resp.Body).Decode(&book); err != nil {
+		return err
+	}
+
+	slog.Info("Got book", "book", book)
+	return nil
+}
+
+func testListBooks(parent string) error {
+	resp, err := http.Get(fmt.Sprintf("http://localhost:55887/v1/%s/books", parent)) //nolint:noctx
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Books []Book `json:"books"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return err
+	}
+
+	slog.Info("Listed books", "count", len(result.Books))
+	return nil
+}
+
+func testUpdateBook(name string) error {
+	req := struct {
+		Book Book `json:"book"`
+	}{
+		Book: Book{
+			Name:   name,
+			Author: "Updated Author",
+			Title:  "Updated Title",
+			Read:   false,
+		},
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	httpReq, err := http.NewRequest( //nolint:noctx
+		"PATCH",
+		fmt.Sprintf("http://localhost:55887/v1/%s", name),
+		bytes.NewBuffer(body),
+	)
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var book Book
+	if err := json.NewDecoder(resp.Body).Decode(&book); err != nil {
+		return err
+	}
+
+	slog.Info("Updated book", "book", book)
+	return nil
+}
+
+func testDeleteBook(name string) error {
+	httpReq, err := http.NewRequest( //nolint:noctx
+		"DELETE",
+		fmt.Sprintf("http://localhost:55887/v1/%s", name),
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	slog.Info("Deleted book", "name", name)
+	return nil
+}
+
+func testDeleteShelf(name string) error {
+	httpReq, err := http.NewRequest( //nolint:noctx
+		"DELETE",
+		fmt.Sprintf("http://localhost:55887/v1/%s", name),
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	slog.Info("Deleted shelf", "name", name)
+	return nil
+}

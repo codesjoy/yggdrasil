@@ -1,0 +1,21 @@
+yggdrasil:
+  app:
+    name: "github.com.codesjoy.yggdrasil.example.03-diagnostics-reload"
+  mode: dev
+
+  server:
+    transports:
+      - "grpc"
+
+  transports:
+    grpc:
+      server:
+        address: "127.0.0.1:56003"
+
+  admin:
+    governor:
+      port: 56032
+
+app:
+  diagnostics_reload:
+    greeting: "hello from diagnostics reload"

@@ -1,0 +1,27 @@
+yggdrasil:
+  app:
+    name: "github.com.codesjoy.yggdrasil.example.02-runtime-bundle"
+  mode: dev
+
+  server:
+    transports:
+      - "grpc"
+
+  transports:
+    grpc:
+      server:
+        address: "127.0.0.1:56002"
+    http:
+      rest:
+        host: "127.0.0.1"
+        port: 56021
+
+  admin:
+    governor:
+      port: 56022
+
+app:
+  runtime_bundle:
+    shelf_theme: "Reference"
+    raw_message: "runtime bundle ready"
+    task_label: "bundle-heartbeat"

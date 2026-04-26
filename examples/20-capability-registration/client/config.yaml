@@ -1,0 +1,18 @@
+yggdrasil:
+  app:
+    name: "github.com.codesjoy.yggdrasil.example.20-capability-registration.client"
+  clients:
+    services:
+      github.com.codesjoy.yggdrasil.example.20-capability-registration:
+        remote:
+          endpoints:
+            - address: "127.0.0.1:55901"
+              protocol: "grpcx"
+
+  observability:
+    logging:
+      handlers:
+        default:
+          type: "text"
+          config:
+            level: "debug"

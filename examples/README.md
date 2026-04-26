@@ -1,62 +1,40 @@
 # Examples
 
-This directory contains the runnable examples for the cleaned-up Yggdrasil v3 layout.
+Yggdrasil examples follow a learning path instead of `sample/advanced` buckets.
 
-## Structure
+`01-03` are the root-facade onboarding path. Service-side examples default to `yggdrasil.Run(...)`; `app` is kept for standalone client bootstrap or capability-heavy scenarios that need lower-level control.
 
-```text
-examples/
-├── proto/       # protobuf source files
-├── protogen/    # generated Go code used by the examples
-├── sample/      # smallest end-to-end sample
-└── advanced/    # focused feature examples
-```
+## Start Here
 
-## Recommended Path
+1. [01-quickstart](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/01-quickstart): the shortest end-to-end path using root `yggdrasil.Run(...)` plus a standalone `app.New(...)->NewClient(...)` client.
+2. [02-runtime-bundle](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/02-runtime-bundle): the `Runtime` + `BusinessBundle` installation surface behind the root facade.
+3. [03-diagnostics-reload](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/03-diagnostics-reload): watchable config, diagnostics, spec hash/diff, and restart-required reload behavior.
 
-1. Start with [`sample/`](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/sample).
-2. Move to [`advanced/streaming/`](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/advanced/streaming).
-3. Read [`advanced/rest/`](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/advanced/rest) if you need generated REST bindings.
-4. Explore `config`, `metadata`, `error-handling`, and `load-balancing` next.
+## Feature Examples
 
-## Common Commands
+- [10-rest-gateway](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/10-rest-gateway): generated `RESTBinding` installation via the root facade, plus an external HTTP caller that validates the exposed REST surface.
+- [11-rpc-streaming](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/11-rpc-streaming): unary and streaming RPC shapes with a root-facade server and a standalone client bootstrap.
+- [12-transport-metadata](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/12-transport-metadata): transport metadata propagation, header/trailer observation, and stream metadata handling.
+- [13-error-reason](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/13-error-reason): structured reason/status mapping and client-side parsing.
+- [14-client-load-balancing](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/14-client-load-balancing): client-side endpoint selection and request distribution over split server/client config.
 
-```bash
-cd examples/sample/server
-go run main.go
-```
+## Extension Example
 
-```bash
-cd examples/sample/client
-go run main.go
-```
+- [20-capability-registration](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/20-capability-registration): `WithCapabilityRegistrations(...)` on the root server path plus the same registration on a standalone client bootstrap.
 
-## Notes
+## Recipes
 
-- `examples/go.mod` is the example module root.
-- `examples/protogen` is a separate generated-code module used by imports such as `github.com/codesjoy/yggdrasil/v3/examples/protogen/...`.
-- Advanced examples are intentionally small and focused on one capability at a time.
-- **协议**: gRPC、HTTP/REST
-- **配置**: YAML、环境变量、命令行
-- **日志**: slog (Go 1.21+)
-- **代码生成**: protoc、buf
+- [90-recipes/config-layers.md](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/90-recipes/config-layers.md)
+- [90-recipes/raw-grpc.md](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/90-recipes/raw-grpc.md)
+- [90-recipes/jsonraw-grpc.md](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/90-recipes/jsonraw-grpc.md)
 
-## 扩展阅读
+## Shared Assets
 
-- [Yggdrasil 主文档](../../README.md)
-- [Yggdrasil 中文文档](../../README_CN.md)
-- [Protocol Buffers 文档](https://protobuf.dev/)
-- [gRPC 文档](https://grpc.io/docs/)
-- [REST API 设计指南](https://cloud.google.com/apis/design)
+- `examples/proto`: shared protobuf sources.
+- `examples/protogen`: generated Go code imported by the runnable examples.
+- `examples/go.mod`: the standalone module used to compile and run all examples.
 
-## 反馈与贡献
+## Related Docs
 
-如果你在使用示例过程中遇到问题或有改进建议，欢迎：
-
-1. 提交 [Issue](https://github.com/codesjoy/yggdrasil/issues)
-2. 提交 [Pull Request](https://github.com/codesjoy/yggdrasil/pulls)
-3. 在社区讨论
-
-## 许可证
-
-本示例遵循 Yggdrasil 项目的 [Apache License 2.0](../../LICENSE)。
+- [README.md](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/README.md)
+- [README_zh_CN.md](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/README_zh_CN.md)

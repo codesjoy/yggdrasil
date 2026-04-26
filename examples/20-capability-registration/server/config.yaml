@@ -1,0 +1,19 @@
+yggdrasil:
+  app:
+    name: "github.com.codesjoy.yggdrasil.example.20-capability-registration"
+  server:
+    transports:
+      - "grpcx"
+
+  transports:
+    grpcx:
+      server:
+        address: "127.0.0.1:55901"
+
+  observability:
+    logging:
+      handlers:
+        default:
+          type: "text"
+          config:
+            level: "debug"

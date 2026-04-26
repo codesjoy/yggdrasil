@@ -1,0 +1,34 @@
+yggdrasil:
+  app:
+    name: "github.com.codesjoy.yggdrasil.example.14-client-load-balancing.client"
+  admin:
+    application:
+      namespace: "dev"
+  clients:
+    defaults:
+      interceptors:
+        unary:
+          - "logging"
+        stream:
+          - "logging"
+    services:
+      github.com.codesjoy.yggdrasil.example.14-client-load-balancing:
+        balancer: "round_robin"
+        remote:
+          endpoints:
+            - address: "127.0.0.1:55884"
+              protocol: "grpc"
+            - address: "127.0.0.1:55885"
+              protocol: "grpc"
+            - address: "127.0.0.1:55886"
+              protocol: "grpc"
+  balancers:
+    defaults:
+      round_robin:
+        type: "round_robin"
+  observability:
+    logging:
+      remote_level: debug
+      interceptors:
+        logging:
+          print_req_and_res: true

@@ -1,0 +1,11 @@
+yggdrasil:
+  app:
+    name: "github.com.codesjoy.yggdrasil.example.01-quickstart.client"
+  mode: dev
+  clients:
+    services:
+      github.com.codesjoy.yggdrasil.example.01-quickstart:
+        remote:
+          endpoints:
+            - address: "127.0.0.1:56001"
+              protocol: "grpc"

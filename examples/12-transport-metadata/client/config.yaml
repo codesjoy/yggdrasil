@@ -1,0 +1,25 @@
+yggdrasil:
+  app:
+    name: "github.com.codesjoy.yggdrasil.example.12-transport-metadata.client"
+  admin:
+    application:
+      namespace: "dev"
+  clients:
+    defaults:
+      interceptors:
+        unary:
+          - "logging"
+        stream:
+          - "logging"
+    services:
+      github.com.codesjoy.yggdrasil.example.12-transport-metadata:
+        remote:
+          endpoints:
+            - address: "127.0.0.1:55883"
+              protocol: "grpc"
+  observability:
+    logging:
+      remote_level: debug
+      interceptors:
+        logging:
+          print_req_and_res: true
