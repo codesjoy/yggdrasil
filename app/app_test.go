@@ -39,6 +39,30 @@ func TestNewOptionError(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestBuildLifecycleOptionsIncludesAppCleanup(t *testing.T) {
+	app := newTestApp(t, "runtime-cleanup")
+	tracerShutdowns := 0
+	meterShutdowns := 0
+	watchStops := 0
+	app.swapTracerShutdown(func(context.Context) error {
+		tracerShutdowns++
+		return nil
+	})
+	app.swapMeterShutdown(func(context.Context) error {
+		meterShutdowns++
+		return nil
+	})
+	app.stopWatch = func() { watchStops++ }
+
+	require.NoError(t, app.lifecycle.Init(app.buildLifecycleOptions()...))
+	require.NoError(t, app.lifecycle.Stop())
+	require.NoError(t, app.shutdownRuntimeAdapters(context.Background()))
+	assert.Equal(t, 1, tracerShutdowns)
+	assert.Equal(t, 1, meterShutdowns)
+	assert.Equal(t, 1, watchStops)
+	assert.Nil(t, app.stopWatch)
+}
+
 func TestNewClientTriggersInitialization(t *testing.T) {
 	app := newTestApp(t, "client-init")
 

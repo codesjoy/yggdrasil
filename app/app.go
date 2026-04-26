@@ -167,6 +167,21 @@ func New(appName string, ops ...Option) (*App, error) {
 	}, nil
 }
 
+func (a *App) buildLifecycleOptions() []lifecycleOption {
+	out := a.opts.buildLifecycleOptions()
+	out = append(
+		out,
+		withLifecycleCleanup("runtime_adapters", a.shutdownRuntimeAdapters),
+		withLifecycleCleanup("config_watch", func(context.Context) error {
+			a.mu.Lock()
+			a.stopConfigWatchLocked()
+			a.mu.Unlock()
+			return nil
+		}),
+	)
+	return out
+}
+
 func (a *App) prepareStartLocked(ctx context.Context) error {
 	switch a.state {
 	case lifecycleStateServing, lifecycleStateRunning:
@@ -177,7 +192,7 @@ func (a *App) prepareStartLocked(ctx context.Context) error {
 	if err := a.initializeLocked(ctx); err != nil {
 		return err
 	}
-	if err := a.lifecycle.Init(a.opts.buildLifecycleOptions()...); err != nil {
+	if err := a.lifecycle.Init(a.buildLifecycleOptions()...); err != nil {
 		return err
 	}
 	a.state = lifecycleStateServing
@@ -274,9 +289,7 @@ func (a *App) Wait() error {
 }
 
 // Stop stops the application.
-func (a *App) Stop(ctx context.Context) error {
-	_ = ctx
-
+func (a *App) Stop(_ context.Context) error {
 	a.mu.Lock()
 	a.stopConfigWatchLocked()
 	a.setStoppedLocked()
