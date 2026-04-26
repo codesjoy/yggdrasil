@@ -79,11 +79,6 @@ func (opts *options) buildLifecycleOptions() []lifecycleOption {
 // Option define the framework options
 type Option func(*options) error
 
-// Open creates one App prepared for the high-level startup flow.
-func Open(opts ...Option) (*App, error) {
-	return New("", opts...)
-}
-
 // WithInternalServer registers internal servers managed by the App lifecycle.
 func WithInternalServer(servers ...InternalServer) Option {
 	return func(opts *options) error {
@@ -132,7 +127,7 @@ func WithConfigManager(manager *config.Manager) Option {
 	}
 }
 
-// WithAppName overrides the app name resolved by Open.
+// WithAppName overrides the app name resolved by New.
 func WithAppName(name string) Option {
 	return func(opts *options) error {
 		opts.appName = name
@@ -140,7 +135,7 @@ func WithAppName(name string) Option {
 	}
 }
 
-// WithMode overrides the mode resolved by Open.
+// WithMode overrides the mode resolved by New.
 func WithMode(mode string) Option {
 	return func(opts *options) error {
 		opts.mode = mode
@@ -148,7 +143,7 @@ func WithMode(mode string) Option {
 	}
 }
 
-// WithPlanOverrides registers assembly overrides for Open/Prepare.
+// WithPlanOverrides registers assembly overrides for New/Prepare.
 func WithPlanOverrides(overrides ...yassembly.Override) Option {
 	return func(opts *options) error {
 		for _, item := range overrides {

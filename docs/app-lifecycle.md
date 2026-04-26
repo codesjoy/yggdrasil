@@ -7,7 +7,7 @@
 Yggdrasil provides two ways to start an application:
 
 1. **`yggdrasil.Run()`** — A convenience function that creates an `App`, runs `Prepare` + `ComposeAndInstall` + `Start` in sequence.
-2. **`app.Open()`** — The advanced API that gives fine-grained control over each lifecycle stage: `New` → `Prepare` → `Compose` → `InstallBusiness` → `Start` → `Wait` → `Stop`.
+2. **`yggdrasil.New()`** — The advanced API that gives fine-grained control over each lifecycle stage: `New` → `Prepare` → `Compose` → `InstallBusiness` → `Start` → `Wait` → `Stop`.
 
 Users declare what the application should serve via a `ComposeFunc` that returns a `BusinessBundle` containing RPC services, REST handlers, HTTP routes, background tasks, and lifecycle hooks. The App layer validates and installs each binding.
 

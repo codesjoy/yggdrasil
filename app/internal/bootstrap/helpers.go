@@ -97,6 +97,9 @@ func LoadConfigFile(
 		}
 		path = DefaultConfigPath
 	}
+	if manager == nil {
+		return nil, false, errors.New("config manager is nil")
+	}
 
 	if _, err := os.Stat(path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -114,10 +117,6 @@ func LoadConfigFile(
 			return nil, false, nil
 		}
 		return nil, false, fmt.Errorf("stat config file %q: %w", path, err)
-	}
-
-	if manager == nil {
-		manager = config.Default()
 	}
 	loader := configchain.NewLoader(nil)
 	sources, loaded, err := loader.LoadFile(manager, path, explicit)
@@ -140,7 +139,7 @@ func LoadConfigLayer(
 		return nil
 	}
 	if manager == nil {
-		manager = config.Default()
+		return errors.New("config manager is nil")
 	}
 	if strings.TrimSpace(name) == "" {
 		name = fmt.Sprintf("%s:%d", scope, index)
@@ -177,7 +176,7 @@ func CloseConfigSourcesReverse(sources []source.Source) error {
 // RefreshResolvedSettings compiles the current manager snapshot into resolved settings.
 func RefreshResolvedSettings(manager *config.Manager) (settings.Resolved, error) {
 	if manager == nil {
-		manager = config.Default()
+		return settings.Resolved{}, errors.New("config manager is nil")
 	}
 	if err := settings.ValidateV3RootShape(manager.Snapshot().Map()); err != nil {
 		return settings.Resolved{}, err
@@ -190,8 +189,7 @@ func RefreshResolvedSettings(manager *config.Manager) (settings.Resolved, error)
 	return settings.Compile(root)
 }
 
-// ResolveStartupSettings returns the resolved startup settings with default fallback.
-// If mgr is nil it falls back to config.Default().
+// ResolveStartupSettings returns the resolved startup settings using the provided manager when needed.
 func ResolveStartupSettings(
 	resolved settings.Resolved,
 	mgr *config.Manager,
@@ -200,7 +198,7 @@ func ResolveStartupSettings(
 		return resolved, nil
 	}
 	if mgr == nil {
-		mgr = config.Default()
+		return settings.Resolved{}, errors.New("config manager is nil")
 	}
 	root, err := settings.NewCatalog(mgr).Root().Current()
 	if err != nil {
@@ -209,7 +207,7 @@ func ResolveStartupSettings(
 	return settings.Compile(root)
 }
 
-// NeedsDefaultStartupSettings reports whether defaults should be resolved from the default config.
+// NeedsDefaultStartupSettings reports whether startup defaults still need to be resolved from config.
 func NeedsDefaultStartupSettings(resolved settings.Resolved) bool {
 	return resolved.Logging.Handlers == nil &&
 		resolved.Discovery.Registry.Type == "" &&

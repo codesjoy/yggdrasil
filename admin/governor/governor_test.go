@@ -68,6 +68,29 @@ func TestNewServerDoesNotListenUntilServe(t *testing.T) {
 	_ = probe.Close()
 }
 
+func TestNewServerUsesDefaultManager(t *testing.T) {
+	prev := config.Default()
+	defaultManager := config.NewManager()
+	config.SetDefault(defaultManager)
+	t.Cleanup(func() { config.SetDefault(prev) })
+
+	s, err := NewServer()
+	require.NoError(t, err)
+	require.Same(t, defaultManager, s.manager)
+}
+
+func TestNewServerWithConfigNilManagerDoesNotUseDefault(t *testing.T) {
+	prev := config.Default()
+	defaultManager := config.NewManager()
+	config.SetDefault(defaultManager)
+	t.Cleanup(func() { config.SetDefault(prev) })
+
+	s, err := NewServerWithConfig(Config{}, nil)
+	require.NoError(t, err)
+	require.Nil(t, s.manager)
+	require.NotSame(t, defaultManager, s.manager)
+}
+
 func TestServerServeAndStop(t *testing.T) {
 	s := startGovernor(t, Config{}, config.NewManager())
 

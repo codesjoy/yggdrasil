@@ -40,7 +40,7 @@ func TestOpenPrepareExposesRuntimeWithoutServing(t *testing.T) {
 	recorder := newTransportRecorder()
 	manager := newTestManager(t, assemblyTestConfig(false))
 
-	app, err := Open(
+	app, err := New("",
 		WithConfigManager(manager),
 		WithAppName("prepare-runtime"),
 		WithModules(testTransportModule{recorder: recorder}),
@@ -63,7 +63,7 @@ func TestOpenPrepareExposesRuntimeWithoutServing(t *testing.T) {
 func TestComposeAndInstallRegistersBindingsAndRejectsConflicts(t *testing.T) {
 	manager := newTestManager(t, assemblyTestConfig(true))
 
-	app, err := Open(
+	app, err := New("",
 		WithConfigManager(manager),
 		WithAppName("compose-install"),
 		WithModules(testTransportModule{recorder: newTransportRecorder()}),
@@ -107,7 +107,7 @@ func TestComposeAndInstallRegistersBindingsAndRejectsConflicts(t *testing.T) {
 		internalinstall.RouteKey(http.MethodGet, "/healthz"),
 	)
 
-	conflictApp, err := Open(
+	conflictApp, err := New("",
 		WithConfigManager(newTestManager(t, assemblyTestConfig(true))),
 		WithAppName("compose-conflict"),
 		WithModules(testTransportModule{recorder: newTransportRecorder()}),
@@ -137,7 +137,7 @@ func TestComposeAndInstallRegistersBindingsAndRejectsConflicts(t *testing.T) {
 	require.ErrorContains(t, err, "already installed")
 	require.ErrorIs(t, conflictApp.Start(context.Background()), errRestartUnsupported)
 
-	badApp, err := Open(
+	badApp, err := New("",
 		WithConfigManager(newTestManager(t, assemblyTestConfig(false))),
 		WithAppName("compose-bad-handler"),
 		WithModules(testTransportModule{recorder: newTransportRecorder()}),
@@ -162,7 +162,7 @@ func TestStartWaitStopWithPreparedBusinessBundle(t *testing.T) {
 	recorder := newTransportRecorder()
 	manager := newTestManager(t, assemblyTestConfig(false))
 
-	app, err := Open(
+	app, err := New("",
 		WithConfigManager(manager),
 		WithAppName("start-wait-stop"),
 		WithModules(testTransportModule{recorder: recorder}),
@@ -220,7 +220,7 @@ func TestStartWaitStopWithPreparedBusinessBundle(t *testing.T) {
 
 func TestRuntimeLookupSupportsTypedTargets(t *testing.T) {
 	manager := newTestManager(t, assemblyTestConfig(false))
-	app, err := Open(
+	app, err := New("",
 		WithConfigManager(manager),
 		WithAppName("runtime-lookup"),
 		WithModules(testTransportModule{recorder: newTransportRecorder()}),
@@ -248,7 +248,7 @@ func TestRuntimeLookupSupportsTypedTargets(t *testing.T) {
 }
 
 func TestRuntimeUnavailableBeforePrepareAndAfterStop(t *testing.T) {
-	app, err := Open(
+	app, err := New("",
 		WithConfigManager(newTestManager(t, assemblyTestConfig(false))),
 		WithAppName("runtime-state"),
 		WithModules(testTransportModule{recorder: newTransportRecorder()}),
@@ -273,7 +273,7 @@ func TestPrepareFailureCleansUpSynchronously(t *testing.T) {
 		},
 		closeCount: &closeCount,
 	}
-	app, err := Open(
+	app, err := New("",
 		WithConfigManager(config.NewManager()),
 		WithAppName("prepare-cleanup"),
 		WithConfigSource("invalid-mode", config.PriorityOverride, source),
@@ -293,7 +293,7 @@ func TestComposeFailureCleansUpBeforeReturn(t *testing.T) {
 		data:       map[string]any{"yggdrasil": map[string]any{}},
 		closeCount: &closeCount,
 	}
-	app, err := Open(
+	app, err := New("",
 		WithConfigManager(config.NewManager()),
 		WithAppName("compose-cleanup"),
 		WithConfigSource("compose-source", config.PriorityOverride, source),
@@ -316,7 +316,7 @@ func TestInstallBusinessPartialFailureCleansUpBeforeReturn(t *testing.T) {
 		data:       map[string]any{"yggdrasil": map[string]any{}},
 		closeCount: &closeCount,
 	}
-	app, err := Open(
+	app, err := New("",
 		WithConfigManager(config.NewManager()),
 		WithAppName("install-cleanup"),
 		WithConfigSource("install-source", config.PriorityOverride, source),
@@ -448,7 +448,7 @@ func TestStatsOtelAutoSpecEnablesRealModule(t *testing.T) {
 			},
 		},
 	})
-	app, err := Open(
+	app, err := New("",
 		WithConfigManager(manager),
 		WithAppName("stats-auto"),
 	)
@@ -490,7 +490,7 @@ func TestDiagnosticsEndpointIncludesAssemblyState(t *testing.T) {
 			},
 		},
 	})
-	app, err := Open(
+	app, err := New("",
 		WithConfigManager(manager),
 		WithAppName("diagnostics-assembly"),
 		WithModules(testTransportModule{recorder: recorder}),
@@ -568,7 +568,7 @@ func TestReloadWithInstalledBusinessMarksRestartRequired(t *testing.T) {
 	recorder := newTransportRecorder()
 	manager := newTestManager(t, assemblyTestConfig(false))
 
-	app, err := Open(
+	app, err := New("",
 		WithConfigManager(manager),
 		WithAppName("reload-installed-business"),
 		WithModules(testTransportModule{recorder: recorder}),
@@ -617,7 +617,7 @@ func TestReloadRuntimeOnlyChangeHotReloadsWithoutBusinessBundle(t *testing.T) {
 	recorder := newTransportRecorder()
 	manager := newTestManager(t, assemblyTestConfig(false))
 
-	app, err := Open(
+	app, err := New("",
 		WithConfigManager(manager),
 		WithAppName("reload-runtime-only"),
 		WithModules(testTransportModule{recorder: recorder}),
@@ -661,7 +661,7 @@ func TestReloadUpdatesPlanHashesAndDiffDiagnostics(t *testing.T) {
 			},
 		},
 	})
-	app, err := Open(
+	app, err := New("",
 		WithConfigManager(manager),
 		WithAppName("reload-plan-diff"),
 		WithModules(testTransportModule{recorder: recorder}),

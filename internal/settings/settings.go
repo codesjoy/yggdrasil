@@ -292,10 +292,13 @@ type Catalog struct {
 	manager *config.Manager
 }
 
+const nilCatalogManagerPanic = "settings: config manager is nil"
+
 // NewCatalog binds a manager to the framework typed catalog.
+// It panics if manager is nil.
 func NewCatalog(manager *config.Manager) Catalog {
 	if manager == nil {
-		manager = config.Default()
+		panic(nilCatalogManagerPanic)
 	}
 	return Catalog{manager: manager}
 }

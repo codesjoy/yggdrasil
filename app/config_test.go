@@ -51,6 +51,9 @@ func TestResolveConfigPath(t *testing.T) {
 
 func TestInitLoadsConfigAndOptionSources(t *testing.T) {
 	withTestFlagSet(t)
+	prev := config.Default()
+	t.Cleanup(func() { config.SetDefault(prev) })
+
 	manager := config.NewManager()
 	config.SetDefault(manager)
 
@@ -89,6 +92,27 @@ func TestInitLoadsConfigAndOptionSources(t *testing.T) {
 	}
 	require.NoError(t, manager.Section("app").Decode(&out.App))
 	assert.Equal(t, "option", out.App.StartupOrder)
+}
+
+func TestInitializeLocked_WithConfigManagerDoesNotChangeDefaultManager(t *testing.T) {
+	withTestFlagSet(t)
+	chdir(t, t.TempDir())
+
+	prev := config.Default()
+	defaultManager := config.NewManager()
+	config.SetDefault(defaultManager)
+	t.Cleanup(func() { config.SetDefault(prev) })
+
+	app, customManager := newTestAppWithConfig(
+		t,
+		"config-manager-isolated",
+		minimalV3Config("grpc"),
+	)
+	require.NoError(t, app.initializeLocked(context.Background()))
+
+	assert.Same(t, customManager, app.opts.configManager)
+	assert.Same(t, defaultManager, config.Default())
+	assert.NotSame(t, customManager, config.Default())
 }
 
 func TestStopClosesManagedConfigSourcesOnce(t *testing.T) {

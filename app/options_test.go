@@ -244,11 +244,11 @@ func TestApplyOptions(t *testing.T) {
 	})
 }
 
-// --- Open ---
+// --- New ---
 
-func TestOpen(t *testing.T) {
+func TestNew(t *testing.T) {
 	t.Run("creates app with options", func(t *testing.T) {
-		app, err := Open(WithAppName("open-test"))
+		app, err := New("", WithAppName("open-test"))
 		require.NoError(t, err)
 		require.NotNil(t, app)
 		assert.Equal(t, "open-test", app.opts.appName)

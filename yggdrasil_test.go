@@ -79,7 +79,7 @@ func useTestManager() {
 func TestOpenComposeAndInstallStartStop(t *testing.T) {
 	useTestManager()
 
-	app, err := Open(
+	app, err := New(
 		WithAppName("root-open"),
 		WithConfigSource("root", config.PriorityOverride, rootConfigSource()),
 	)
@@ -110,7 +110,7 @@ func TestOpenComposeAndInstallStartStop(t *testing.T) {
 func TestComposeAndInstallFailureStopsFacade(t *testing.T) {
 	useTestManager()
 
-	app, err := Open(
+	app, err := New(
 		WithAppName("root-compose-failure"),
 		WithConfigSource("root", config.PriorityOverride, rootConfigSource()),
 	)
@@ -152,7 +152,7 @@ func TestRunHappyPathStopsOnContextCancel(t *testing.T) {
 func TestWaitPropagatesServeFailure(t *testing.T) {
 	useTestManager()
 
-	app, err := Open(
+	app, err := New(
 		WithAppName("root-wait-error"),
 		WithConfigSource("root", config.PriorityOverride, rootConfigSource()),
 	)

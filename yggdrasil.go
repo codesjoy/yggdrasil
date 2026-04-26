@@ -82,7 +82,7 @@ type options struct {
 // Option configures one root bootstrap app instance.
 type Option func(*options) error
 
-// WithAppName overrides the app name resolved by Open.
+// WithAppName overrides the app name resolved by New.
 func WithAppName(name string) Option {
 	return func(opts *options) error {
 		opts.appName = name
@@ -113,7 +113,7 @@ func WithConfigSource(name string, priority config.Priority, src source.Source) 
 	}
 }
 
-// WithMode overrides the mode resolved by Open.
+// WithMode overrides the mode resolved by New.
 func WithMode(mode string) Option {
 	return func(opts *options) error {
 		opts.mode = mode
@@ -126,13 +126,13 @@ type App struct {
 	inner *yapp.App
 }
 
-// Open creates one App ready for the bootstrap flow.
-func Open(opts ...Option) (*App, error) {
+// New creates one App ready for the bootstrap flow.
+func New(opts ...Option) (*App, error) {
 	appOpts, err := convertOptions(opts...)
 	if err != nil {
 		return nil, err
 	}
-	inner, err := yapp.Open(appOpts...)
+	inner, err := yapp.New("", appOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +144,7 @@ func Run(ctx context.Context, fn ComposeFunc, opts ...Option) error {
 	if ctx == nil {
 		return errors.New("run context is nil")
 	}
-	app, err := Open(opts...)
+	app, err := New(opts...)
 	if err != nil {
 		return err
 	}

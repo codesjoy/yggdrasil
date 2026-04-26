@@ -67,9 +67,6 @@ func NewServer() (*Server, error) {
 
 // NewServerWithConfig creates a new governor server with explicit config and manager.
 func NewServerWithConfig(cfg Config, manager *config.Manager) (*Server, error) {
-	if manager == nil {
-		manager = config.Default()
-	}
 	if err := cfg.SetDefault(); err != nil {
 		return nil, err
 	}

@@ -134,9 +134,9 @@ func TestCatalogAccessorsAndDecodePayload(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "static", resolverSpec.Type)
 
-	defaultCatalog := NewCatalog(nil)
-	_, err = defaultCatalog.Root().Current()
-	require.NoError(t, err)
+	require.PanicsWithValue(t, nilCatalogManagerPanic, func() {
+		_ = NewCatalog(nil)
+	})
 
 	var payload struct {
 		Nested struct {

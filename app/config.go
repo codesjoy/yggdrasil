@@ -33,8 +33,6 @@ const (
 func initConfigChain(opts *options) error {
 	if opts.configManager == nil {
 		opts.configManager = config.Default()
-	} else {
-		config.SetDefault(opts.configManager)
 	}
 	if err := loadConfigFileChain(opts); err != nil {
 		return err
@@ -149,9 +147,6 @@ func closeManagedConfigSources(opts *options) error {
 func refreshResolvedSettings(opts *options) error {
 	if opts == nil {
 		return errors.New("options is nil")
-	}
-	if opts.configManager == nil {
-		opts.configManager = config.Default()
 	}
 	resolved, err := internalbootstrap.RefreshResolvedSettings(opts.configManager)
 	if err != nil {
