@@ -16,6 +16,7 @@ package yggdrasil
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,6 +25,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
 	"github.com/codesjoy/yggdrasil/v3/internal/instance"
+	"github.com/codesjoy/yggdrasil/v3/module"
 )
 
 func TestInstanceFunctions(t *testing.T) {
@@ -119,4 +121,88 @@ func TestWithOptions(t *testing.T) {
 		_, err := convertOptions(badOpt)
 		require.ErrorIs(t, err, assert.AnError)
 	})
+
+	t.Run("WithModules", func(t *testing.T) {
+		opts := options{}
+		mod := &rootInitModule{name: "root.test.module"}
+		err := WithModules(mod)(&opts)
+		require.NoError(t, err)
+		require.Len(t, opts.modules, 1)
+		assert.Equal(t, mod, opts.modules[0])
+	})
+
+	t.Run("WithCapabilityRegistrations", func(t *testing.T) {
+		opts := options{}
+		reg := CapabilityRegistration{
+			Name:         "capability.root.test",
+			Capabilities: func() []module.Capability { return nil },
+		}
+		err := WithCapabilityRegistrations(reg)(&opts)
+		require.NoError(t, err)
+		require.Len(t, opts.capabilityRegistrations, 1)
+		assert.Equal(t, reg.Name, opts.capabilityRegistrations[0].Name)
+	})
+}
+
+func TestRootWithModulesPassThrough(t *testing.T) {
+	useTestManager()
+
+	var initCalled atomic.Bool
+	app, err := New(
+		WithAppName("root-modules-pass-through"),
+		WithConfigSource("root", config.PriorityOverride, rootConfigSource()),
+		WithModules(&rootInitModule{
+			name: "root.test.module",
+			init: func(context.Context, config.View) error {
+				initCalled.Store(true)
+				return nil
+			},
+		}),
+	)
+	require.NoError(t, err)
+
+	require.NoError(t, app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
+		return &BusinessBundle{}, nil
+	}))
+	assert.True(t, initCalled.Load())
+	require.NoError(t, app.Stop(context.Background()))
+}
+
+func TestRootWithCapabilityRegistrationsPassThrough(t *testing.T) {
+	useTestManager()
+
+	var initCalled atomic.Bool
+	app, err := New(
+		WithAppName("root-registrations-pass-through"),
+		WithConfigSource("root", config.PriorityOverride, rootConfigSource()),
+		WithCapabilityRegistrations(CapabilityRegistration{
+			Name: "capability.root.pass-through",
+			Init: func(context.Context, config.View) error {
+				initCalled.Store(true)
+				return nil
+			},
+			Capabilities: func() []module.Capability { return nil },
+		}),
+	)
+	require.NoError(t, err)
+
+	require.NoError(t, app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
+		return &BusinessBundle{}, nil
+	}))
+	assert.True(t, initCalled.Load())
+	require.NoError(t, app.Stop(context.Background()))
+}
+
+type rootInitModule struct {
+	name string
+	init func(context.Context, config.View) error
+}
+
+func (m *rootInitModule) Name() string { return m.name }
+
+func (m *rootInitModule) Init(ctx context.Context, view config.View) error {
+	if m.init != nil {
+		return m.init(ctx, view)
+	}
+	return nil
 }

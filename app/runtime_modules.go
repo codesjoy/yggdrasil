@@ -16,27 +16,21 @@ package app
 
 import (
 	"context"
-	"reflect"
 	"sort"
 	"strings"
 
+	"github.com/codesjoy/yggdrasil/v3/capabilities"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
-	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 	"github.com/codesjoy/yggdrasil/v3/module"
 	"github.com/codesjoy/yggdrasil/v3/observability/logger"
-	xotel "github.com/codesjoy/yggdrasil/v3/observability/otel"
-	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 	statsotel "github.com/codesjoy/yggdrasil/v3/observability/stats/otel"
-	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
 	intlogging "github.com/codesjoy/yggdrasil/v3/rpc/interceptor/logging"
-	remote "github.com/codesjoy/yggdrasil/v3/transport"
 	"github.com/codesjoy/yggdrasil/v3/transport/gateway/rest"
 	grpcprotocol "github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc"
 	rpchttp "github.com/codesjoy/yggdrasil/v3/transport/protocol/rpchttp"
 	"github.com/codesjoy/yggdrasil/v3/transport/runtime/client/balancer"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
-	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/security/insecure"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/security/local"
 	ytls "github.com/codesjoy/yggdrasil/v3/transport/support/security/tls"
@@ -45,91 +39,23 @@ import (
 // --- CapabilitySpec declarations ---
 
 var (
-	loggerHandlerCapabilitySpec = module.CapabilitySpec{
-		Name:        "observability.logger.handler",
-		Cardinality: module.NamedOne,
-		Type:        reflect.TypeOf((logger.HandlerBuilder)(nil)),
-	}
-	loggerWriterCapabilitySpec = module.CapabilitySpec{
-		Name:        "observability.logger.writer",
-		Cardinality: module.NamedOne,
-		Type:        reflect.TypeOf((logger.WriterBuilder)(nil)),
-	}
-	tracerProviderCapabilitySpec = module.CapabilitySpec{
-		Name:        "observability.otel.tracer_provider",
-		Cardinality: module.NamedOne,
-		Type:        reflect.TypeOf((xotel.TracerProviderBuilder)(nil)),
-	}
-	meterProviderCapabilitySpec = module.CapabilitySpec{
-		Name:        "observability.otel.meter_provider",
-		Cardinality: module.NamedOne,
-		Type:        reflect.TypeOf((xotel.MeterProviderBuilder)(nil)),
-	}
-	statsHandlerCapabilitySpec = module.CapabilitySpec{
-		Name:        "observability.stats.handler",
-		Cardinality: module.NamedOne,
-		Type:        reflect.TypeOf((stats.HandlerBuilder)(nil)),
-	}
-	securityProfileCapabilitySpec = module.CapabilitySpec{
-		Name:        "security.profile.provider",
-		Cardinality: module.NamedOne,
-		Type:        reflect.TypeOf((*security.Provider)(nil)).Elem(),
-	}
-	marshalerCapabilitySpec = module.CapabilitySpec{
-		Name:        "marshaler.scheme",
-		Cardinality: module.NamedOne,
-		Type:        reflect.TypeOf((marshaler.MarshalerBuilder)(nil)),
-	}
-	transportServerProviderCapabilitySpec = module.CapabilitySpec{
-		Name:        "transport.server.provider",
-		Cardinality: module.NamedOne,
-		Type:        reflect.TypeOf((*remote.TransportServerProvider)(nil)).Elem(),
-	}
-	transportClientProviderCapabilitySpec = module.CapabilitySpec{
-		Name:        "transport.client.provider",
-		Cardinality: module.NamedOne,
-		Type:        reflect.TypeOf((*remote.TransportClientProvider)(nil)).Elem(),
-	}
-	unaryServerInterceptorCapabilitySpec = module.CapabilitySpec{
-		Name:        "rpc.interceptor.unary_server",
-		Cardinality: module.OrderedMany,
-		Type:        reflect.TypeOf((*interceptor.UnaryServerInterceptorProvider)(nil)).Elem(),
-	}
-	streamServerInterceptorCapabilitySpec = module.CapabilitySpec{
-		Name:        "rpc.interceptor.stream_server",
-		Cardinality: module.OrderedMany,
-		Type:        reflect.TypeOf((*interceptor.StreamServerInterceptorProvider)(nil)).Elem(),
-	}
-	unaryClientInterceptorCapabilitySpec = module.CapabilitySpec{
-		Name:        "rpc.interceptor.unary_client",
-		Cardinality: module.OrderedMany,
-		Type:        reflect.TypeOf((*interceptor.UnaryClientInterceptorProvider)(nil)).Elem(),
-	}
-	streamClientInterceptorCapabilitySpec = module.CapabilitySpec{
-		Name:        "rpc.interceptor.stream_client",
-		Cardinality: module.OrderedMany,
-		Type:        reflect.TypeOf((*interceptor.StreamClientInterceptorProvider)(nil)).Elem(),
-	}
-	restMiddlewareCapabilitySpec = module.CapabilitySpec{
-		Name:        "transport.rest.middleware",
-		Cardinality: module.OrderedMany,
-		Type:        reflect.TypeOf((*rest.Provider)(nil)).Elem(),
-	}
-	registryProviderCapabilitySpec = module.CapabilitySpec{
-		Name:        "discovery.registry.provider",
-		Cardinality: module.NamedOne,
-		Type:        reflect.TypeOf((*registry.Provider)(nil)).Elem(),
-	}
-	resolverProviderCapabilitySpec = module.CapabilitySpec{
-		Name:        "discovery.resolver.provider",
-		Cardinality: module.NamedOne,
-		Type:        reflect.TypeOf((*resolver.Provider)(nil)).Elem(),
-	}
-	balancerProviderCapabilitySpec = module.CapabilitySpec{
-		Name:        "transport.balancer.provider",
-		Cardinality: module.NamedOne,
-		Type:        reflect.TypeOf((*balancer.Provider)(nil)).Elem(),
-	}
+	loggerHandlerCapabilitySpec           = capabilities.LoggerHandlerSpec
+	loggerWriterCapabilitySpec            = capabilities.LoggerWriterSpec
+	tracerProviderCapabilitySpec          = capabilities.TracerProviderSpec
+	meterProviderCapabilitySpec           = capabilities.MeterProviderSpec
+	statsHandlerCapabilitySpec            = capabilities.StatsHandlerSpec
+	securityProfileCapabilitySpec         = capabilities.SecurityProfileProviderSpec
+	marshalerCapabilitySpec               = capabilities.MarshalerSchemeSpec
+	transportServerProviderCapabilitySpec = capabilities.TransportServerProviderSpec
+	transportClientProviderCapabilitySpec = capabilities.TransportClientProviderSpec
+	unaryServerInterceptorCapabilitySpec  = capabilities.UnaryServerInterceptorSpec
+	streamServerInterceptorCapabilitySpec = capabilities.StreamServerInterceptorSpec
+	unaryClientInterceptorCapabilitySpec  = capabilities.UnaryClientInterceptorSpec
+	streamClientInterceptorCapabilitySpec = capabilities.StreamClientInterceptorSpec
+	restMiddlewareCapabilitySpec          = capabilities.RESTMiddlewareSpec
+	registryProviderCapabilitySpec        = capabilities.RegistryProviderSpec
+	resolverProviderCapabilitySpec        = capabilities.ResolverProviderSpec
+	balancerProviderCapabilitySpec        = capabilities.BalancerProviderSpec
 )
 
 // --- Builtin capability modules ---

@@ -26,6 +26,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
 	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
+	"github.com/codesjoy/yggdrasil/v3/module"
 )
 
 // --- WithInternalServer ---
@@ -213,6 +214,45 @@ func TestWithModules(t *testing.T) {
 		err := WithModules(nil, nil)(opts)
 		require.NoError(t, err)
 		assert.Empty(t, opts.modules)
+	})
+}
+
+func TestWithCapabilityRegistrations(t *testing.T) {
+	t.Run("adds registrations", func(t *testing.T) {
+		opts := &options{}
+		err := WithCapabilityRegistrations(CapabilityRegistration{
+			Name:         "capability.test.provider",
+			Capabilities: func() []module.Capability { return nil },
+		})(opts)
+		require.NoError(t, err)
+		require.Len(t, opts.capabilityRegistrations, 1)
+		assert.Equal(t, "capability.test.provider", opts.capabilityRegistrations[0].Name)
+	})
+
+	t.Run("empty name is rejected", func(t *testing.T) {
+		opts := &options{}
+		err := WithCapabilityRegistrations(CapabilityRegistration{
+			Capabilities: func() []module.Capability { return nil },
+		})(opts)
+		require.ErrorContains(t, err, "name is empty")
+	})
+
+	t.Run("nil capabilities callback is rejected", func(t *testing.T) {
+		opts := &options{}
+		err := WithCapabilityRegistrations(CapabilityRegistration{
+			Name: "capability.test.nil",
+		})(opts)
+		require.ErrorContains(t, err, "capabilities callback is nil")
+	})
+
+	t.Run("config path without init is rejected", func(t *testing.T) {
+		opts := &options{}
+		err := WithCapabilityRegistrations(CapabilityRegistration{
+			Name:         "capability.test.path",
+			ConfigPath:   "yggdrasil.test",
+			Capabilities: func() []module.Capability { return nil },
+		})(opts)
+		require.ErrorContains(t, err, "config_path requires init callback")
 	})
 }
 

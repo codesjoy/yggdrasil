@@ -21,6 +21,7 @@ import (
 	yapp "github.com/codesjoy/yggdrasil/v3/app"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
+	"github.com/codesjoy/yggdrasil/v3/module"
 )
 
 // ComposeFunc builds one business bundle from the prepared runtime.
@@ -66,6 +67,9 @@ type InstallContext = yapp.InstallContext
 // BusinessBundle is one prepared business installation bundle.
 type BusinessBundle = yapp.BusinessBundle
 
+// CapabilityRegistration declares one provider-only capability extension.
+type CapabilityRegistration = yapp.CapabilityRegistration
+
 type configLayerSource struct {
 	name     string
 	priority config.Priority
@@ -73,10 +77,12 @@ type configLayerSource struct {
 }
 
 type options struct {
-	appName       string
-	configPath    string
-	mode          string
-	configSources []configLayerSource
+	appName                 string
+	configPath              string
+	mode                    string
+	configSources           []configLayerSource
+	modules                 []module.Module
+	capabilityRegistrations []yapp.CapabilityRegistration
 }
 
 // Option configures one root bootstrap app instance.
@@ -117,6 +123,29 @@ func WithConfigSource(name string, priority config.Priority, src source.Source) 
 func WithMode(mode string) Option {
 	return func(opts *options) error {
 		opts.mode = mode
+		return nil
+	}
+}
+
+// WithModules registers additional full lifecycle modules.
+func WithModules(mods ...module.Module) Option {
+	return func(opts *options) error {
+		for _, mod := range mods {
+			if mod == nil {
+				continue
+			}
+			opts.modules = append(opts.modules, mod)
+		}
+		return nil
+	}
+}
+
+// WithCapabilityRegistrations registers provider-only capability extensions.
+func WithCapabilityRegistrations(regs ...CapabilityRegistration) Option {
+	return func(opts *options) error {
+		for _, reg := range regs {
+			opts.capabilityRegistrations = append(opts.capabilityRegistrations, reg)
+		}
 		return nil
 	}
 }
@@ -210,7 +239,7 @@ func convertOptions(opts ...Option) ([]yapp.Option, error) {
 			return nil, err
 		}
 	}
-	appOpts := make([]yapp.Option, 0, 4+len(rootOpts.configSources))
+	appOpts := make([]yapp.Option, 0, 6+len(rootOpts.configSources))
 	if rootOpts.appName != "" {
 		appOpts = append(appOpts, yapp.WithAppName(rootOpts.appName))
 	}
@@ -222,6 +251,15 @@ func convertOptions(opts ...Option) ([]yapp.Option, error) {
 	}
 	for _, item := range rootOpts.configSources {
 		appOpts = append(appOpts, yapp.WithConfigSource(item.name, item.priority, item.source))
+	}
+	if len(rootOpts.modules) > 0 {
+		appOpts = append(appOpts, yapp.WithModules(rootOpts.modules...))
+	}
+	if len(rootOpts.capabilityRegistrations) > 0 {
+		appOpts = append(
+			appOpts,
+			yapp.WithCapabilityRegistrations(rootOpts.capabilityRegistrations...),
+		)
 	}
 	return appOpts, nil
 }

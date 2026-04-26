@@ -43,7 +43,7 @@ func (pa *preparedAssembly) Close(ctx context.Context) error {
 }
 
 func (a *App) plannedModules() []module.Module {
-	mods := make([]module.Module, 0, 4+len(a.opts.modules))
+	mods := make([]module.Module, 0, 4+len(a.opts.modules)+len(a.opts.capabilityRegistrations))
 	mods = append(mods,
 		foundationBuiltinCapabilityModule{},
 		connectivityBuiltinCapabilityModule{},
@@ -51,6 +51,9 @@ func (a *App) plannedModules() []module.Module {
 		foundationRuntimeModule{app: a},
 		connectivityRuntimeModule{app: a},
 	)
+	for _, reg := range a.opts.capabilityRegistrations {
+		mods = append(mods, capabilityRegistrationModule{reg: reg})
+	}
 	mods = append(mods, a.opts.modules...)
 	return mods
 }

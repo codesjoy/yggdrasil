@@ -59,6 +59,7 @@ type options struct {
 	managedConfigSourcesClosed    bool
 	resolvedSettings              settings.Resolved
 	modules                       []module.Module
+	capabilityRegistrations       []CapabilityRegistration
 }
 
 func (opts *options) buildLifecycleOptions() []lifecycleOption {
