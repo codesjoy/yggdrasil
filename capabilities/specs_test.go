@@ -113,7 +113,8 @@ func TestBuiltinSpecs(t *testing.T) {
 			want: module.CapabilitySpec{
 				Name:        "rpc.interceptor.unary_server",
 				Cardinality: module.OrderedMany,
-				Type:        reflect.TypeOf((*interceptor.UnaryServerInterceptorProvider)(nil)).Elem(),
+				Type: reflect.TypeOf((*interceptor.UnaryServerInterceptorProvider)(nil)).
+					Elem(),
 			},
 		},
 		{
@@ -122,7 +123,8 @@ func TestBuiltinSpecs(t *testing.T) {
 			want: module.CapabilitySpec{
 				Name:        "rpc.interceptor.stream_server",
 				Cardinality: module.OrderedMany,
-				Type:        reflect.TypeOf((*interceptor.StreamServerInterceptorProvider)(nil)).Elem(),
+				Type: reflect.TypeOf((*interceptor.StreamServerInterceptorProvider)(nil)).
+					Elem(),
 			},
 		},
 		{
@@ -131,7 +133,8 @@ func TestBuiltinSpecs(t *testing.T) {
 			want: module.CapabilitySpec{
 				Name:        "rpc.interceptor.unary_client",
 				Cardinality: module.OrderedMany,
-				Type:        reflect.TypeOf((*interceptor.UnaryClientInterceptorProvider)(nil)).Elem(),
+				Type: reflect.TypeOf((*interceptor.UnaryClientInterceptorProvider)(nil)).
+					Elem(),
 			},
 		},
 		{
@@ -140,7 +143,8 @@ func TestBuiltinSpecs(t *testing.T) {
 			want: module.CapabilitySpec{
 				Name:        "rpc.interceptor.stream_client",
 				Cardinality: module.OrderedMany,
-				Type:        reflect.TypeOf((*interceptor.StreamClientInterceptorProvider)(nil)).Elem(),
+				Type: reflect.TypeOf((*interceptor.StreamClientInterceptorProvider)(nil)).
+					Elem(),
 			},
 		},
 		{

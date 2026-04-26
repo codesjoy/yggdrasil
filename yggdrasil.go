@@ -143,9 +143,7 @@ func WithModules(mods ...module.Module) Option {
 // WithCapabilityRegistrations registers provider-only capability extensions.
 func WithCapabilityRegistrations(regs ...CapabilityRegistration) Option {
 	return func(opts *options) error {
-		for _, reg := range regs {
-			opts.capabilityRegistrations = append(opts.capabilityRegistrations, reg)
-		}
+		opts.capabilityRegistrations = append(opts.capabilityRegistrations, regs...)
 		return nil
 	}
 }

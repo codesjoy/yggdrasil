@@ -161,9 +161,12 @@ func TestRootWithModulesPassThrough(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	require.NoError(t, app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
-		return &BusinessBundle{}, nil
-	}))
+	require.NoError(
+		t,
+		app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
+			return &BusinessBundle{}, nil
+		}),
+	)
 	assert.True(t, initCalled.Load())
 	require.NoError(t, app.Stop(context.Background()))
 }
@@ -186,9 +189,12 @@ func TestRootWithCapabilityRegistrationsPassThrough(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	require.NoError(t, app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
-		return &BusinessBundle{}, nil
-	}))
+	require.NoError(
+		t,
+		app.ComposeAndInstall(context.Background(), func(Runtime) (*BusinessBundle, error) {
+			return &BusinessBundle{}, nil
+		}),
+	)
 	assert.True(t, initCalled.Load())
 	require.NoError(t, app.Stop(context.Background()))
 }

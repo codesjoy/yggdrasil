@@ -225,14 +225,17 @@ func TestCapabilityRegistrationLazyProviderCanUseInitializedState(t *testing.T) 
 				capabilities.ProvideNamed(
 					capabilities.TransportServerProviderSpec,
 					"lazy",
-					remote.NewTransportServerProvider("lazy", func(remote.MethodHandle) (remote.Server, error) {
-						state.mu.RLock()
-						defer state.mu.RUnlock()
-						if state.address == "" {
-							return nil, errors.New("lazy state address is empty")
-						}
-						return &lazyServer{address: state.address}, nil
-					}),
+					remote.NewTransportServerProvider(
+						"lazy",
+						func(remote.MethodHandle) (remote.Server, error) {
+							state.mu.RLock()
+							defer state.mu.RUnlock()
+							if state.address == "" {
+								return nil, errors.New("lazy state address is empty")
+							}
+							return &lazyServer{address: state.address}, nil
+						},
+					),
 				),
 			}
 		},

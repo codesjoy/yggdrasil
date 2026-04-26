@@ -33,7 +33,10 @@ func WithCapabilityRegistrations(regs ...CapabilityRegistration) Option {
 				return fmt.Errorf("capability registration[%d] name is empty", i)
 			}
 			if reg.Capabilities == nil {
-				return fmt.Errorf("capability registration %q capabilities callback is nil", reg.Name)
+				return fmt.Errorf(
+					"capability registration %q capabilities callback is nil",
+					reg.Name,
+				)
 			}
 			if reg.Init == nil && reg.ConfigPath != "" {
 				return fmt.Errorf(
