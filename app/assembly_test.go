@@ -439,9 +439,11 @@ func TestStatsOtelAutoSpecEnablesRealModule(t *testing.T) {
 			"admin": map[string]any{
 				"governor": map[string]any{"port": 0},
 			},
-			"telemetry": map[string]any{
-				"stats": map[string]any{
-					"server": "otel",
+			"observability": map[string]any{
+				"telemetry": map[string]any{
+					"stats": map[string]any{
+						"server": "otel",
+					},
 				},
 			},
 		},
@@ -462,9 +464,9 @@ func TestStatsOtelAutoSpecEnablesRealModule(t *testing.T) {
 	require.Contains(
 		t,
 		app.lastPlanResult.AffectedPathsByDomain["modules"],
-		"yggdrasil.telemetry.stats.server",
+		"yggdrasil.observability.telemetry.stats.server",
 	)
-	require.True(t, containsPlannedModule(app.assemblySpec, "telemetry.stats.otel"))
+	require.True(t, containsPlannedModule(app.assemblySpec, "observability.stats.otel"))
 }
 
 func TestDiagnosticsEndpointIncludesAssemblyState(t *testing.T) {
@@ -597,8 +599,10 @@ func TestReloadWithInstalledBusinessMarksRestartRequired(t *testing.T) {
 			config.PriorityOverride,
 			memory.NewSource("override", map[string]any{
 				"yggdrasil": map[string]any{
-					"logging": map[string]any{
-						"remote_level": "warn",
+					"observability": map[string]any{
+						"logging": map[string]any{
+							"remote_level": "warn",
+						},
 					},
 				},
 			}),
@@ -630,8 +634,10 @@ func TestReloadRuntimeOnlyChangeHotReloadsWithoutBusinessBundle(t *testing.T) {
 			config.PriorityOverride,
 			memory.NewSource("override", map[string]any{
 				"yggdrasil": map[string]any{
-					"logging": map[string]any{
-						"remote_level": "warn",
+					"observability": map[string]any{
+						"logging": map[string]any{
+							"remote_level": "warn",
+						},
 					},
 				},
 			}),

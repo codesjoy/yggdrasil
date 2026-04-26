@@ -121,7 +121,7 @@ func TestValidateStartup_DoesNotFailForRuntimeResolvedBindings(t *testing.T) {
 			name: "strict missing tracer builder",
 			configure: func(ct *configtest.T) {
 				ct.Set("yggdrasil.admin.validation.strict", true)
-				ct.Set("yggdrasil.telemetry.tracer", "missing-tracer")
+				ct.Set("yggdrasil.observability.telemetry.tracer", "missing-tracer")
 			},
 		},
 		{
@@ -129,14 +129,14 @@ func TestValidateStartup_DoesNotFailForRuntimeResolvedBindings(t *testing.T) {
 			configure: func(ct *configtest.T) {
 				ct.Set("yggdrasil.admin.validation.enable", true)
 				ct.Set("yggdrasil.admin.validation.strict", false)
-				ct.Set("yggdrasil.telemetry.tracer", "missing-tracer")
+				ct.Set("yggdrasil.observability.telemetry.tracer", "missing-tracer")
 			},
 		},
 		{
 			name: "strict missing stats handler builder",
 			configure: func(ct *configtest.T) {
 				ct.Set("yggdrasil.admin.validation.strict", true)
-				ct.Set("yggdrasil.telemetry.stats.server", "missing-stats-handler")
+				ct.Set("yggdrasil.observability.stats.server", "missing-stats-handler")
 			},
 		},
 		{
@@ -144,7 +144,7 @@ func TestValidateStartup_DoesNotFailForRuntimeResolvedBindings(t *testing.T) {
 			configure: func(ct *configtest.T) {
 				ct.Set("yggdrasil.admin.validation.enable", true)
 				ct.Set("yggdrasil.admin.validation.strict", false)
-				ct.Set("yggdrasil.telemetry.stats.client", "missing-stats-handler")
+				ct.Set("yggdrasil.observability.stats.client", "missing-stats-handler")
 			},
 		},
 		{
@@ -216,15 +216,17 @@ func TestValidateStartup_Strict_FailsOnInvalidTLSSecurityProfileConfig(t *testin
 func TestInitializeLocked_FailsWhenDefaultLoggerHandlerBuilderIsMissingAtRuntime(t *testing.T) {
 	manager := newTestManager(t, map[string]any{
 		"yggdrasil": map[string]any{
-			"logging": map[string]any{
-				"handlers": map[string]any{
-					"default": map[string]any{
-						"type":   "missing",
-						"writer": "default",
+			"observability": map[string]any{
+				"logging": map[string]any{
+					"handlers": map[string]any{
+						"default": map[string]any{
+							"type":   "missing",
+							"writer": "default",
+						},
 					},
-				},
-				"writers": map[string]any{
-					"default": map[string]any{"type": "console"},
+					"writers": map[string]any{
+						"default": map[string]any{"type": "console"},
+					},
 				},
 			},
 		},

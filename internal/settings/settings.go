@@ -56,19 +56,24 @@ type Overrides struct {
 
 // Framework contains the framework-owned configuration tree.
 type Framework struct {
-	App        Application          `mapstructure:"app"`
-	Mode       string               `mapstructure:"mode"`
-	Overrides  Overrides            `mapstructure:"overrides"`
-	Config     configchain.Settings `mapstructure:"config"`
-	Server     server.Settings      `mapstructure:"server"`
-	Transports Transports           `mapstructure:"transports"`
-	Clients    Clients              `mapstructure:"clients"`
-	Discovery  Discovery            `mapstructure:"discovery"`
-	Balancers  Balancers            `mapstructure:"balancers"`
-	Logging    logger.Settings      `mapstructure:"logging"`
-	Telemetry  Telemetry            `mapstructure:"telemetry"`
-	Admin      Admin                `mapstructure:"admin"`
-	Extensions Extensions           `mapstructure:"extensions"`
+	App           Application          `mapstructure:"app"`
+	Mode          string               `mapstructure:"mode"`
+	Overrides     Overrides            `mapstructure:"overrides"`
+	Config        configchain.Settings `mapstructure:"config"`
+	Server        server.Settings      `mapstructure:"server"`
+	Transports    Transports           `mapstructure:"transports"`
+	Clients       Clients              `mapstructure:"clients"`
+	Discovery     Discovery            `mapstructure:"discovery"`
+	Balancers     Balancers            `mapstructure:"balancers"`
+	Observability Observability        `mapstructure:"observability"`
+	Admin         Admin                `mapstructure:"admin"`
+	Extensions    Extensions           `mapstructure:"extensions"`
+}
+
+// Observability contains logging and telemetry settings under a unified section.
+type Observability struct {
+	Logging   logger.Settings `mapstructure:"logging"`
+	Telemetry Telemetry       `mapstructure:"telemetry"`
 }
 
 // Transports contains global transport settings.
@@ -317,12 +322,26 @@ func (c Catalog) ClientService(name string) config.Section[ClientServiceSpec] {
 
 // LoggingHandler returns a single typed logging handler section.
 func (c Catalog) LoggingHandler(name string) config.Section[logger.HandlerSpec] {
-	return config.Bind[logger.HandlerSpec](c.manager, "yggdrasil", "logging", "handlers", name)
+	return config.Bind[logger.HandlerSpec](
+		c.manager,
+		"yggdrasil",
+		"observability",
+		"logging",
+		"handlers",
+		name,
+	)
 }
 
 // LoggingWriter returns a single typed logging writer section.
 func (c Catalog) LoggingWriter(name string) config.Section[logger.WriterSpec] {
-	return config.Bind[logger.WriterSpec](c.manager, "yggdrasil", "logging", "writers", name)
+	return config.Bind[logger.WriterSpec](
+		c.manager,
+		"yggdrasil",
+		"observability",
+		"logging",
+		"writers",
+		name,
+	)
 }
 
 // Registry returns the typed registry section.

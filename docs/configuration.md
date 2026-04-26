@@ -242,17 +242,17 @@ yggdrasil:
     name: my-service
     version: "1.0.0"
 
-  logging:
-    handlers:
-      default:
-        type: json
-    writers:
-      default:
-        type: console
-
-  telemetry:
-    tracer: otel
-    meter: otel
+  observability:
+    logging:
+      handlers:
+        default:
+          type: json
+      writers:
+        default:
+          type: console
+    telemetry:
+      tracer: otel
+      meter: otel
 
   server:
     transports:
@@ -297,7 +297,7 @@ yggdrasil:
 
   overrides:
     disable_modules:
-      - telemetry.stats.otel
+      - observability.stats.otel
     force_defaults:
       observability.logger.handler: json
     force_templates:

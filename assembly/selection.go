@@ -66,16 +66,15 @@ var frameworkModules = map[string]struct{}{
 	"connectivity.capabilities": {},
 	"foundation.runtime":        {},
 	"connectivity.runtime":      {},
-	"telemetry.stats.otel":      {},
+	"observability.stats.otel":  {},
 }
 
 var businessInputPaths = []string{
 	"yggdrasil.clients",
 	"yggdrasil.discovery",
 	"yggdrasil.extensions",
-	"yggdrasil.logging",
+	"yggdrasil.observability",
 	"yggdrasil.server",
-	"yggdrasil.telemetry",
 	"yggdrasil.transports",
 }
 
@@ -413,13 +412,13 @@ func uniqueCapabilityProviderName(mod module.Module, capability string) (string,
 func capabilityConfigPaths(capability string) []string {
 	switch capability {
 	case capLoggerHandler:
-		return []string{"yggdrasil.logging.handlers.default.type"}
+		return []string{"yggdrasil.observability.logging.handlers.default.type"}
 	case capLoggerWriter:
-		return []string{"yggdrasil.logging.writers.default.type"}
+		return []string{"yggdrasil.observability.logging.writers.default.type"}
 	case capTracer:
-		return []string{"yggdrasil.telemetry.tracer"}
+		return []string{"yggdrasil.observability.telemetry.tracer"}
 	case capMeter:
-		return []string{"yggdrasil.telemetry.meter"}
+		return []string{"yggdrasil.observability.telemetry.meter"}
 	case capRegistry:
 		return []string{"yggdrasil.discovery.registry.type"}
 	default:
@@ -691,24 +690,24 @@ func explicitDefaultValue(
 ) (string, bool) {
 	switch capability {
 	case capLoggerHandler:
-		if !pathExists(snap, "yggdrasil.logging.handlers.default.type") {
+		if !pathExists(snap, "yggdrasil.observability.logging.handlers.default.type") {
 			return "", false
 		}
 		value := normalizedHandlerType(resolved.Logging.Handlers["default"].Type)
 		return value, value != ""
 	case capLoggerWriter:
-		if !pathExists(snap, "yggdrasil.logging.writers.default.type") {
+		if !pathExists(snap, "yggdrasil.observability.logging.writers.default.type") {
 			return "", false
 		}
 		value := resolved.Logging.Writers["default"].Type
 		return value, value != ""
 	case capTracer:
-		if !pathExists(snap, "yggdrasil.telemetry.tracer") {
+		if !pathExists(snap, "yggdrasil.observability.telemetry.tracer") {
 			return "", false
 		}
 		return resolved.Telemetry.Tracer, resolved.Telemetry.Tracer != ""
 	case capMeter:
-		if !pathExists(snap, "yggdrasil.telemetry.meter") {
+		if !pathExists(snap, "yggdrasil.observability.telemetry.meter") {
 			return "", false
 		}
 		return resolved.Telemetry.Meter, resolved.Telemetry.Meter != ""

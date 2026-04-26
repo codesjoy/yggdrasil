@@ -192,9 +192,11 @@ func (foundationBuiltinCapabilityModule) Capabilities() []module.Capability {
 
 type statsOtelCapabilityModule struct{}
 
-func (statsOtelCapabilityModule) Name() string { return "telemetry.stats.otel" }
+func (statsOtelCapabilityModule) Name() string { return "observability.stats.otel" }
 
-func (statsOtelCapabilityModule) ConfigPath() string { return "yggdrasil.telemetry.stats" }
+func (statsOtelCapabilityModule) ConfigPath() string {
+	return "yggdrasil.observability.telemetry.stats"
+}
 
 func (statsOtelCapabilityModule) Init(context.Context, config.View) error { return nil }
 
@@ -209,15 +211,15 @@ func (statsOtelCapabilityModule) AutoSpec() module.AutoSpec {
 		Provides: []module.CapabilitySpec{statsHandlerCapabilitySpec},
 		AutoRules: []module.AutoRule{
 			configPathAutoRule{
-				path:        "yggdrasil.telemetry.stats.server",
+				path:        "yggdrasil.observability.telemetry.stats.server",
 				description: "server stats handler configured",
 			},
 			configPathAutoRule{
-				path:        "yggdrasil.telemetry.stats.client",
+				path:        "yggdrasil.observability.telemetry.stats.client",
 				description: "client stats handler configured",
 			},
 			configPathAutoRule{
-				path:        "yggdrasil.telemetry.stats.providers.otel",
+				path:        "yggdrasil.observability.telemetry.stats.providers.otel",
 				description: "otel stats provider configured",
 			},
 		},

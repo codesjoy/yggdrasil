@@ -69,16 +69,18 @@ func TestCatalogAccessorsAndDecodePayload(t *testing.T) {
 						},
 					},
 				},
-				"logging": map[string]any{
-					"handlers": map[string]any{
-						"main": map[string]any{
-							"type":   "json",
-							"writer": "stdout",
+				"observability": map[string]any{
+					"logging": map[string]any{
+						"handlers": map[string]any{
+							"main": map[string]any{
+								"type":   "json",
+								"writer": "stdout",
+							},
 						},
-					},
-					"writers": map[string]any{
-						"stdout": map[string]any{
-							"type": "console",
+						"writers": map[string]any{
+							"stdout": map[string]any{
+								"type": "console",
+							},
 						},
 					},
 				},
@@ -358,22 +360,24 @@ func TestCompile_InitializesNilMaps(t *testing.T) {
 func TestCompile_ProducesOrderedExtensionsAndCapabilityBindings(t *testing.T) {
 	root := decodeRoot(t, map[string]any{
 		"yggdrasil": map[string]any{
-			"logging": map[string]any{
-				"handlers": map[string]any{
-					"default": map[string]any{"type": "text", "writer": "default"},
-					"json":    map[string]any{"type": "json", "writer": "default"},
+			"observability": map[string]any{
+				"logging": map[string]any{
+					"handlers": map[string]any{
+						"default": map[string]any{"type": "text", "writer": "default"},
+						"json":    map[string]any{"type": "json", "writer": "default"},
+					},
+					"writers": map[string]any{
+						"default": map[string]any{"type": "console"},
+						"file":    map[string]any{"type": "file"},
+					},
 				},
-				"writers": map[string]any{
-					"default": map[string]any{"type": "console"},
-					"file":    map[string]any{"type": "file"},
-				},
-			},
-			"telemetry": map[string]any{
-				"tracer": "noop-tracer",
-				"meter":  "noop-meter",
-				"stats": map[string]any{
-					"server": "otel",
-					"client": "otel",
+				"telemetry": map[string]any{
+					"tracer": "noop-tracer",
+					"meter":  "noop-meter",
+					"stats": map[string]any{
+						"server": "otel",
+						"client": "otel",
+					},
 				},
 			},
 			"transports": map[string]any{
@@ -411,7 +415,7 @@ func TestCompile_ProducesOrderedExtensionsAndCapabilityBindings(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"a", "b"}, resolved.OrderedExtensions.UnaryServer)
 	require.Equal(t, []string{"m1"}, resolved.OrderedExtensions.RestAll)
-	require.NotEmpty(t, resolved.ModuleViews["logging"])
+	require.NotEmpty(t, resolved.ModuleViews["telemetry"])
 	require.Equal(
 		t,
 		[]string{"json", "text"},

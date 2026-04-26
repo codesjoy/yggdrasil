@@ -138,9 +138,11 @@ func TestExpandTemplate_VersionNotFound(t *testing.T) {
 func TestPlan_EnableModuleOverride(t *testing.T) {
 	input := compileTestInput(t, map[string]any{
 		"yggdrasil": map[string]any{
-			"telemetry": map[string]any{
-				"stats": map[string]any{
-					"server": "otel",
+			"observability": map[string]any{
+				"telemetry": map[string]any{
+					"stats": map[string]any{
+						"server": "otel",
+					},
 				},
 			},
 		},
@@ -184,9 +186,11 @@ func TestPlan_EnableModuleOverride(t *testing.T) {
 	// With EnableModule override, it should be force-enabled.
 	input2 := compileTestInput(t, map[string]any{
 		"yggdrasil": map[string]any{
-			"telemetry": map[string]any{
-				"stats": map[string]any{
-					"server": "otel",
+			"observability": map[string]any{
+				"telemetry": map[string]any{
+					"stats": map[string]any{
+						"server": "otel",
+					},
 				},
 			},
 		},

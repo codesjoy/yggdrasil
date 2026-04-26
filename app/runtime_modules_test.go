@@ -68,14 +68,16 @@ func TestAppendSortedCapabilities(t *testing.T) {
 
 func TestConfigPathAutoRule_Match(t *testing.T) {
 	t.Run("matching path", func(t *testing.T) {
-		rule := configPathAutoRule{path: "yggdrasil.telemetry.stats.server"}
+		rule := configPathAutoRule{path: "yggdrasil.observability.telemetry.stats.server"}
 		mgr := config.NewManager()
 		require.NoError(t, mgr.LoadLayer("test", config.PriorityOverride,
 			memory.NewSource("test", map[string]any{
 				"yggdrasil": map[string]any{
-					"telemetry": map[string]any{
-						"stats": map[string]any{
-							"server": map[string]any{"enabled": true},
+					"observability": map[string]any{
+						"telemetry": map[string]any{
+							"stats": map[string]any{
+								"server": map[string]any{"enabled": true},
+							},
 						},
 					},
 				},
@@ -86,7 +88,7 @@ func TestConfigPathAutoRule_Match(t *testing.T) {
 	})
 
 	t.Run("non-matching path", func(t *testing.T) {
-		rule := configPathAutoRule{path: "yggdrasil.telemetry.stats.server"}
+		rule := configPathAutoRule{path: "yggdrasil.observability.telemetry.stats.server"}
 		mgr := config.NewManager()
 		ctx := module.AutoRuleContext{Snapshot: mgr.Snapshot()}
 		assert.False(t, rule.Match(ctx))
@@ -116,8 +118,12 @@ func TestConfigPathAutoRule_Describe(t *testing.T) {
 
 func TestConfigPathAutoRule_AffectedPaths(t *testing.T) {
 	t.Run("returns paths", func(t *testing.T) {
-		rule := configPathAutoRule{path: "yggdrasil.telemetry.stats.server"}
-		assert.Equal(t, []string{"yggdrasil.telemetry.stats.server"}, rule.AffectedPaths())
+		rule := configPathAutoRule{path: "yggdrasil.observability.telemetry.stats.server"}
+		assert.Equal(
+			t,
+			[]string{"yggdrasil.observability.telemetry.stats.server"},
+			rule.AffectedPaths(),
+		)
 	})
 
 	t.Run("empty path returns nil", func(t *testing.T) {
@@ -142,8 +148,8 @@ func TestSplitConfigPathCapabilities(t *testing.T) {
 		{"single segment", "yggdrasil", []string{"yggdrasil"}},
 		{
 			"multiple segments",
-			"yggdrasil.telemetry.stats",
-			[]string{"yggdrasil", "telemetry", "stats"},
+			"yggdrasil.observability.stats",
+			[]string{"yggdrasil", "observability", "stats"},
 		},
 		{"leading dot", ".yggdrasil", []string{"yggdrasil"}},
 	}

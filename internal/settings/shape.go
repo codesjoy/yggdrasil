@@ -17,16 +17,15 @@ package settings
 import "fmt"
 
 var legacyTopLevelKeys = map[string]struct{}{
-	"config":     {},
-	"server":     {},
-	"transports": {},
-	"clients":    {},
-	"discovery":  {},
-	"balancers":  {},
-	"logging":    {},
-	"telemetry":  {},
-	"admin":      {},
-	"extensions": {},
+	"config":        {},
+	"server":        {},
+	"transports":    {},
+	"clients":       {},
+	"discovery":     {},
+	"balancers":     {},
+	"observability": {},
+	"admin":         {},
+	"extensions":    {},
 }
 
 // ValidateV3RootShape enforces v3 root shape where framework config must be under yggdrasil.*.

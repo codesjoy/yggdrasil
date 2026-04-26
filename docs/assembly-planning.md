@@ -173,7 +173,7 @@ The planner supports five override types, applicable from both code and config:
 yggdrasil:
   overrides:
     disable_modules:
-      - telemetry.stats.otel
+      - observability.stats.otel
     force_defaults:
       observability.logger.handler: json
     force_templates:
@@ -189,7 +189,7 @@ assembly.Plan(ctx, assembly.Input{
     Modules:   modules,
     Overrides: []assembly.Override{
         assembly.ForceDefault("observability.logger.handler", "json"),
-        assembly.DisableModule("telemetry.stats.otel"),
+        assembly.DisableModule("observability.stats.otel"),
     },
 })
 ```
@@ -248,7 +248,7 @@ For each defaultable capability, the planner tries these sources in order, stopp
 ```
 1. code override (ForceDefault from Go code)
 2. config override (force_defaults from YAML)
-3. explicit config (e.g., yggdrasil.logging.handlers.default.type)
+3. explicit config (e.g., yggdrasil.observability.logging.handlers.default.type)
 4. mode default (dev/prod-grpc/prod-http-gateway preset)
 5. module fallback (AutoSpec.DefaultPolicy, highest score wins)
 6. framework fallback (hard-coded preference order)

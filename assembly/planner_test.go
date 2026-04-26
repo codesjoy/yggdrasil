@@ -250,9 +250,11 @@ func TestDryRunRejectsAmbiguousDefault(t *testing.T) {
 func TestDryRunSelectsAutoModulesAndDefaultPolicyDeterministically(t *testing.T) {
 	input := compileTestInput(t, map[string]any{
 		"yggdrasil": map[string]any{
-			"telemetry": map[string]any{
-				"stats": map[string]any{
-					"server": "otel",
+			"observability": map[string]any{
+				"telemetry": map[string]any{
+					"stats": map[string]any{
+						"server": "otel",
+					},
 				},
 			},
 		},
@@ -283,8 +285,8 @@ func TestDryRunSelectsAutoModulesAndDefaultPolicyDeterministically(t *testing.T)
 				},
 				AutoRules: []module.AutoRule{
 					testAutoRule{
-						path:        "yggdrasil.telemetry.stats.server",
-						description: "telemetry stats enabled",
+						path:        "yggdrasil.observability.telemetry.stats.server",
+						description: "observability stats enabled",
 					},
 				},
 				DefaultPolicy: &module.DefaultPolicy{Score: 20},
@@ -315,8 +317,8 @@ func TestDryRunSelectsAutoModulesAndDefaultPolicyDeterministically(t *testing.T)
 				},
 				AutoRules: []module.AutoRule{
 					testAutoRule{
-						path:        "yggdrasil.telemetry.stats.server",
-						description: "telemetry stats enabled",
+						path:        "yggdrasil.observability.telemetry.stats.server",
+						description: "observability stats enabled",
 					},
 				},
 				DefaultPolicy: &module.DefaultPolicy{Score: 10},
@@ -328,7 +330,11 @@ func TestDryRunSelectsAutoModulesAndDefaultPolicyDeterministically(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, "trace-high", result.Spec.Defaults[capTracer])
 	require.Len(t, result.MatchedAutoRules, 2)
-	require.Contains(t, result.AffectedPathsByDomain["modules"], "yggdrasil.telemetry.stats.server")
+	require.Contains(
+		t,
+		result.AffectedPathsByDomain["modules"],
+		"yggdrasil.observability.telemetry.stats.server",
+	)
 	require.Len(t, result.DefaultCandidates[capTracer], 2)
 	require.True(t, result.DefaultCandidates[capTracer][0].Selected)
 	require.Equal(t, "trace-high", result.DefaultCandidates[capTracer][0].Provider)
@@ -337,9 +343,11 @@ func TestDryRunSelectsAutoModulesAndDefaultPolicyDeterministically(t *testing.T)
 func TestDryRunRejectsInvalidAutoSpecAndAmbiguousAutoDefault(t *testing.T) {
 	input := compileTestInput(t, map[string]any{
 		"yggdrasil": map[string]any{
-			"telemetry": map[string]any{
-				"stats": map[string]any{
-					"server": "otel",
+			"observability": map[string]any{
+				"telemetry": map[string]any{
+					"stats": map[string]any{
+						"server": "otel",
+					},
 				},
 			},
 		},
@@ -365,8 +373,8 @@ func TestDryRunRejectsInvalidAutoSpecAndAmbiguousAutoDefault(t *testing.T) {
 			},
 			AutoRules: []module.AutoRule{
 				testAutoRule{
-					path:        "yggdrasil.telemetry.stats.server",
-					description: "telemetry stats enabled",
+					path:        "yggdrasil.observability.telemetry.stats.server",
+					description: "observability stats enabled",
 				},
 			},
 		},
@@ -383,9 +391,11 @@ func TestDryRunRejectsInvalidAutoSpecAndAmbiguousAutoDefault(t *testing.T) {
 
 	ambiguous := compileTestInput(t, map[string]any{
 		"yggdrasil": map[string]any{
-			"telemetry": map[string]any{
-				"stats": map[string]any{
-					"server": "otel",
+			"observability": map[string]any{
+				"telemetry": map[string]any{
+					"stats": map[string]any{
+						"server": "otel",
+					},
 				},
 			},
 		},
@@ -416,8 +426,8 @@ func TestDryRunRejectsInvalidAutoSpecAndAmbiguousAutoDefault(t *testing.T) {
 				},
 				AutoRules: []module.AutoRule{
 					testAutoRule{
-						path:        "yggdrasil.telemetry.stats.server",
-						description: "telemetry stats enabled",
+						path:        "yggdrasil.observability.telemetry.stats.server",
+						description: "observability stats enabled",
 					},
 				},
 				DefaultPolicy: &module.DefaultPolicy{Score: 10},
@@ -448,8 +458,8 @@ func TestDryRunRejectsInvalidAutoSpecAndAmbiguousAutoDefault(t *testing.T) {
 				},
 				AutoRules: []module.AutoRule{
 					testAutoRule{
-						path:        "yggdrasil.telemetry.stats.server",
-						description: "telemetry stats enabled",
+						path:        "yggdrasil.observability.telemetry.stats.server",
+						description: "observability stats enabled",
 					},
 				},
 				DefaultPolicy: &module.DefaultPolicy{Score: 10},

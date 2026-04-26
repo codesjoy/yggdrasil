@@ -24,7 +24,7 @@ type ProviderSettings struct {
 	OTel map[string]any `mapstructure:"otel"`
 }
 
-// Settings contains resolved telemetry stats settings.
+// Settings contains resolved observability stats settings.
 type Settings struct {
 	Server    string           `mapstructure:"server"`
 	Client    string           `mapstructure:"client"`

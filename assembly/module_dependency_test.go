@@ -74,9 +74,11 @@ func TestRecordDisabledModuleOverrides_Success(t *testing.T) {
 	// Add an auto module that can be disabled
 	input := compileTestInput(t, map[string]any{
 		"yggdrasil": map[string]any{
-			"telemetry": map[string]any{
-				"stats": map[string]any{
-					"server": "otel",
+			"observability": map[string]any{
+				"telemetry": map[string]any{
+					"stats": map[string]any{
+						"server": "otel",
+					},
 				},
 			},
 		},
@@ -102,8 +104,8 @@ func TestRecordDisabledModuleOverrides_Success(t *testing.T) {
 			},
 			AutoRules: []module.AutoRule{
 				testAutoRule{
-					path:        "yggdrasil.telemetry.stats.server",
-					description: "telemetry stats enabled",
+					path:        "yggdrasil.observability.telemetry.stats.server",
+					description: "observability stats enabled",
 				},
 			},
 			DefaultPolicy: &module.DefaultPolicy{Score: 5},
