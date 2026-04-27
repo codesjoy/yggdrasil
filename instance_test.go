@@ -28,6 +28,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/module"
 )
 
+//nolint:staticcheck // This test intentionally verifies deprecated process-default facade helpers.
 func TestInstanceFunctions(t *testing.T) {
 	instance.InitInstanceInfo("test-name", instance.Config{
 		Namespace: "test-ns",

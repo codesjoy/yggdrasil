@@ -17,7 +17,6 @@ package otel
 import (
 	"context"
 
-	"go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
 
@@ -45,7 +44,7 @@ func (h *serverHandler) HandleChannel(context.Context, stats.ChanStats) {
 
 // TagRPC can attach some information to the given context.
 func (h *serverHandler) TagRPC(ctx context.Context, info stats.RPCTagInfo) context.Context {
-	ctx = extract(ctx, otel.GetTextMapPropagator())
+	ctx = extract(ctx, h.propagator)
 
 	spanName, attrs := parseFullMethod(info.GetFullMethod())
 	attrs = append(attrs, semconv.RPCSystemKey.String("yggdrasil"))

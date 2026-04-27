@@ -20,7 +20,6 @@ import (
 	"log/slog"
 	"reflect"
 
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -37,6 +36,7 @@ type Runtime interface {
 	Logger() *slog.Logger
 	TracerProvider() trace.TracerProvider
 	MeterProvider() metric.MeterProvider
+	Identity() Identity
 	Lookup(target any) error
 }
 
@@ -196,9 +196,14 @@ func newRuntimeSurface(app *App) Runtime {
 		rt.lookups[reflect.TypeOf((*config.Manager)(nil))] = app.opts.configManager
 		rt.lookups[reflect.TypeOf(settings.Catalog{})] = settings.NewCatalog(app.opts.configManager)
 	}
-	rt.lookups[reflect.TypeOf((*slog.Logger)(nil))] = slog.Default()
-	rt.lookups[reflect.TypeOf((*trace.TracerProvider)(nil)).Elem()] = otel.GetTracerProvider()
-	rt.lookups[reflect.TypeOf((*metric.MeterProvider)(nil)).Elem()] = otel.GetMeterProvider()
+	if app != nil {
+		if snapshot := app.currentRuntimeSnapshot(); snapshot != nil {
+			rt.lookups[reflect.TypeOf((*slog.Logger)(nil))] = snapshot.Logger
+			rt.lookups[reflect.TypeOf((*trace.TracerProvider)(nil)).Elem()] = snapshot.TracerProvider
+			rt.lookups[reflect.TypeOf((*metric.MeterProvider)(nil)).Elem()] = snapshot.MeterProvider
+			rt.lookups[reflect.TypeOf(Identity{})] = snapshot.Identity
+		}
+	}
 	return rt
 }
 
@@ -217,15 +222,33 @@ func (r *runtimeSurface) Config() *config.Manager {
 }
 
 func (r *runtimeSurface) Logger() *slog.Logger {
+	if snapshot := r.snapshot(); snapshot != nil && snapshot.Logger != nil {
+		return snapshot.Logger
+	}
 	return slog.Default()
 }
 
 func (r *runtimeSurface) TracerProvider() trace.TracerProvider {
-	return otel.GetTracerProvider()
+	if snapshot := r.snapshot(); snapshot != nil {
+		return snapshot.TracerProvider
+	}
+	return nil
 }
 
 func (r *runtimeSurface) MeterProvider() metric.MeterProvider {
-	return otel.GetMeterProvider()
+	if snapshot := r.snapshot(); snapshot != nil {
+		return snapshot.MeterProvider
+	}
+	return nil
+}
+
+func (r *runtimeSurface) Identity() Identity {
+	if snapshot := r.snapshot(); snapshot != nil {
+		identity := snapshot.Identity
+		identity.Metadata = identity.metadataCopy()
+		return identity
+	}
+	return Identity{}
 }
 
 func (r *runtimeSurface) Lookup(target any) error {
@@ -237,6 +260,10 @@ func (r *runtimeSurface) Lookup(target any) error {
 		return errors.New("lookup target must be a non-nil pointer")
 	}
 	typ := rv.Elem().Type()
+	if typ == reflect.TypeOf(Identity{}) {
+		rv.Elem().Set(reflect.ValueOf(r.Identity()))
+		return nil
+	}
 	value, ok := r.lookups[typ]
 	if !ok {
 		return errors.New("runtime capability not found")
@@ -254,4 +281,11 @@ func (r *runtimeSurface) Lookup(target any) error {
 	}
 	rv.Elem().Set(v)
 	return nil
+}
+
+func (r *runtimeSurface) snapshot() *Snapshot {
+	if r == nil || r.app == nil {
+		return nil
+	}
+	return r.app.currentRuntimeSnapshot()
 }

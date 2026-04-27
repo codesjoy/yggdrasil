@@ -30,6 +30,9 @@ type ComposeFunc = yapp.ComposeFunc
 // Runtime is the business-safe runtime surface exposed during composition.
 type Runtime = yapp.Runtime
 
+// Identity contains the resolved runtime identity for one App.
+type Identity = yapp.Identity
+
 // RPCBinding declares one RPC service binding.
 type RPCBinding = yapp.RPCBinding
 
@@ -80,6 +83,7 @@ type options struct {
 	appName                 string
 	configPath              string
 	mode                    string
+	processDefaults         *bool
 	configSources           []configLayerSource
 	modules                 []module.Module
 	capabilityRegistrations []yapp.CapabilityRegistration
@@ -87,6 +91,10 @@ type options struct {
 
 // Option configures one root bootstrap app instance.
 type Option func(*options) error
+
+// ErrProcessDefaultsAlreadyInstalled is returned when another active App owns
+// process-global compatibility defaults.
+var ErrProcessDefaultsAlreadyInstalled = yapp.ErrProcessDefaultsAlreadyInstalled
 
 // WithAppName overrides the app name resolved by New.
 func WithAppName(name string) Option {
@@ -123,6 +131,16 @@ func WithConfigSource(name string, priority config.Priority, src source.Source) 
 func WithMode(mode string) Option {
 	return func(opts *options) error {
 		opts.mode = mode
+		return nil
+	}
+}
+
+// WithProcessDefaults controls whether this App installs process-global
+// compatibility defaults such as slog.Default, OTel globals, and legacy
+// instance facade state.
+func WithProcessDefaults(enabled bool) Option {
+	return func(opts *options) error {
+		opts.processDefaults = &enabled
 		return nil
 	}
 }
@@ -171,7 +189,15 @@ func Run(ctx context.Context, fn ComposeFunc, opts ...Option) error {
 	if ctx == nil {
 		return errors.New("run context is nil")
 	}
-	app, err := New(opts...)
+	rootOpts, err := collectOptions(opts...)
+	if err != nil {
+		return err
+	}
+	if rootOpts.processDefaults == nil {
+		enabled := true
+		rootOpts.processDefaults = &enabled
+	}
+	app, err := newFromOptions(rootOpts)
 	if err != nil {
 		return err
 	}
@@ -227,16 +253,45 @@ func (a *App) Stop(ctx context.Context) error {
 	return a.inner.Stop(ctx)
 }
 
+// Identity returns the resolved App identity.
+func (a *App) Identity() (Identity, bool) {
+	if a == nil || a.inner == nil {
+		return Identity{}, false
+	}
+	return a.inner.Identity()
+}
+
 func convertOptions(opts ...Option) ([]yapp.Option, error) {
+	rootOpts, err := collectOptions(opts...)
+	if err != nil {
+		return nil, err
+	}
+	return rootOpts.appOptions(), nil
+}
+
+func collectOptions(opts ...Option) (options, error) {
 	rootOpts := options{}
 	for _, opt := range opts {
 		if opt == nil {
 			continue
 		}
 		if err := opt(&rootOpts); err != nil {
-			return nil, err
+			return options{}, err
 		}
 	}
+	return rootOpts, nil
+}
+
+func newFromOptions(rootOpts options) (*App, error) {
+	appOpts := rootOpts.appOptions()
+	inner, err := yapp.New("", appOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return &App{inner: inner}, nil
+}
+
+func (rootOpts options) appOptions() []yapp.Option {
 	appOpts := make([]yapp.Option, 0, 6+len(rootOpts.configSources))
 	if rootOpts.appName != "" {
 		appOpts = append(appOpts, yapp.WithAppName(rootOpts.appName))
@@ -246,6 +301,9 @@ func convertOptions(opts ...Option) ([]yapp.Option, error) {
 	}
 	if rootOpts.mode != "" {
 		appOpts = append(appOpts, yapp.WithMode(rootOpts.mode))
+	}
+	if rootOpts.processDefaults != nil {
+		appOpts = append(appOpts, yapp.WithProcessDefaults(*rootOpts.processDefaults))
 	}
 	for _, item := range rootOpts.configSources {
 		appOpts = append(appOpts, yapp.WithConfigSource(item.name, item.priority, item.source))
@@ -259,5 +317,5 @@ func convertOptions(opts ...Option) ([]yapp.Option, error) {
 			yapp.WithCapabilityRegistrations(rootOpts.capabilityRegistrations...),
 		)
 	}
-	return appOpts, nil
+	return appOpts
 }

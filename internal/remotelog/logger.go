@@ -54,12 +54,29 @@ func (h *levelFilterHandler) WithGroup(name string) slog.Handler {
 
 // Init configures the internal remote logger.
 func Init(level slog.Level, handler slog.Handler) {
+	if next := New(level, handler); next != nil {
+		SetLogger(next)
+	}
+}
+
+// New builds a remote logger with the framework remote-level filter.
+func New(level slog.Level, handler slog.Handler) *slog.Logger {
 	if handler == nil {
-		return
+		return nil
+	}
+	return slog.New(&levelFilterHandler{level: level, base: handler})
+}
+
+// SetLogger swaps the internal remote logger and returns the previous logger.
+func SetLogger(next *slog.Logger) *slog.Logger {
+	if next == nil {
+		next = slog.Default()
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	logger = slog.New(&levelFilterHandler{level: level, base: handler})
+	prev := logger
+	logger = next
+	return prev
 }
 
 // Logger returns the internal remote logger.

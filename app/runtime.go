@@ -24,7 +24,6 @@ import (
 	internalruntime "github.com/codesjoy/yggdrasil/v3/app/internal/runtime"
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
-	"github.com/codesjoy/yggdrasil/v3/internal/instance"
 	"github.com/codesjoy/yggdrasil/v3/internal/remotelog"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 	"github.com/codesjoy/yggdrasil/v3/observability/logger"
@@ -41,7 +40,8 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
 
-	"go.opentelemetry.io/otel"
+	metricnoop "go.opentelemetry.io/otel/metric/noop"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 )
 
 // --- snapshot state management ---
@@ -111,11 +111,12 @@ func (a *App) applyRuntimeAdapters(snapshot *Snapshot) error {
 		return errors.New("runtime snapshot is nil")
 	}
 
+	snapshot.Identity = publicIdentity(a.identity)
 	handler, err := snapshot.BuildDefaultLoggerHandler()
 	if err != nil {
 		return err
 	}
-	slog.SetDefault(slog.New(handler))
+	snapshot.Logger = slog.New(handler)
 	remoteLoggerLvStr := snapshot.Resolved.Logging.RemoteLevel
 	if remoteLoggerLvStr == "" {
 		remoteLoggerLvStr = "error"
@@ -124,28 +125,52 @@ func (a *App) applyRuntimeAdapters(snapshot *Snapshot) error {
 	if err = remoteLoggerLv.UnmarshalText([]byte(remoteLoggerLvStr)); err != nil {
 		return err
 	}
-	remotelog.Init(remoteLoggerLv, handler)
-	xotel.ConfigureDefaultPropagator()
+	snapshot.RemoteLogger = remotelog.New(remoteLoggerLv, handler)
+	snapshot.TextMapPropagator = xotel.DefaultPropagator()
 
 	oldTracer := a.swapTracerShutdown(nil)
-	if tp, ok := snapshot.BuildTracerProvider(instance.Name()); ok {
-		otel.SetTracerProvider(tp)
+	if tp, ok := snapshot.BuildTracerProvider(a.identity.AppName); ok {
+		snapshot.TracerProvider = tp
 		a.swapTracerShutdown(runtimeShutdown(tp))
 	} else {
+		snapshot.TracerProvider = tracenoop.NewTracerProvider()
 		a.swapTracerShutdown(nil)
+	}
+
+	oldMeter := a.swapMeterShutdown(nil)
+	if mp, ok := snapshot.BuildMeterProvider(a.identity.AppName); ok {
+		snapshot.MeterProvider = mp
+		a.swapMeterShutdown(runtimeShutdown(mp))
+	} else {
+		snapshot.MeterProvider = metricnoop.NewMeterProvider()
+		a.swapMeterShutdown(nil)
+	}
+
+	statsBuilders := internalruntime.BindStatsHandlerBuildersWithRuntime(
+		snapshot.Resolved,
+		snapshot.StatsHandlerBuilders,
+		snapshot.TracerProvider,
+		snapshot.MeterProvider,
+		snapshot.TextMapPropagator,
+	)
+	snapshot.StatsHandlerBuilders = statsBuilders
+	snapshot.ServerStats = stats.BuildHandlerChainWithBuilders(
+		snapshot.Resolved.Telemetry.Stats,
+		statsBuilders,
+		true,
+	)
+	snapshot.ClientStats = stats.BuildHandlerChainWithBuilders(
+		snapshot.Resolved.Telemetry.Stats,
+		statsBuilders,
+		false,
+	)
+	if a.opts != nil && a.opts.processDefaults && a.processDefaultsLease != nil {
+		a.processDefaultsLease.install(snapshot)
 	}
 	if oldTracer != nil {
 		if shutdownErr := oldTracer(context.Background()); shutdownErr != nil {
 			slog.Warn("shutdown previous tracer provider failed", slog.Any("error", shutdownErr))
 		}
-	}
-
-	oldMeter := a.swapMeterShutdown(nil)
-	if mp, ok := snapshot.BuildMeterProvider(instance.Name()); ok {
-		otel.SetMeterProvider(mp)
-		a.swapMeterShutdown(runtimeShutdown(mp))
-	} else {
-		a.swapMeterShutdown(nil)
 	}
 	if oldMeter != nil {
 		if shutdownErr := oldMeter(context.Background()); shutdownErr != nil {
@@ -176,11 +201,16 @@ func (a *App) shutdownRuntimeAdapters(ctx context.Context) error {
 	a.runtimeMu.Lock()
 	tracerShutdown := a.tracerShutdown
 	meterShutdown := a.meterShutdown
+	lease := a.processDefaultsLease
 	a.tracerShutdown = nil
 	a.meterShutdown = nil
+	a.processDefaultsLease = nil
 	a.runtimeMu.Unlock()
 
 	var err error
+	if lease != nil {
+		err = errors.Join(err, lease.release(ctx))
+	}
 	if tracerShutdown != nil {
 		err = errors.Join(err, tracerShutdown(ctx))
 	}
@@ -239,7 +269,7 @@ func (a *App) initServer() error {
 	if err != nil {
 		return err
 	}
-	server.RegisterGovernorRoutes(a.opts.governor, svr)
+	server.RegisterGovernorRoutes(a.opts.governor, svr, a.identity)
 	a.opts.server = svr
 	return nil
 }

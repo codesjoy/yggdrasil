@@ -93,6 +93,10 @@ func (rt fakeRuntime) MeterProvider() metric.MeterProvider {
 	return otel.GetMeterProvider()
 }
 
+func (rt fakeRuntime) Identity() yapp.Identity {
+	return yapp.Identity{AppName: "test"}
+}
+
 func (rt fakeRuntime) Lookup(target any) error {
 	ptr, ok := target.(**config.Manager)
 	if !ok {

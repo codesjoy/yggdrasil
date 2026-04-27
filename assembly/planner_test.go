@@ -63,6 +63,15 @@ func (m testAutoModule) AutoSpec() module.AutoSpec {
 	return m.autoSpec
 }
 
+type testIsolationModule struct {
+	testCapabilityModule
+	mode module.IsolationMode
+}
+
+func (m testIsolationModule) IsolationMode() module.IsolationMode {
+	return m.mode
+}
+
 func testPlannerModules() []module.Module {
 	buildNamed := func(spec, name string, cardinality module.CapabilityCardinality) module.Capability {
 		return module.Capability{
@@ -116,6 +125,43 @@ func compileTestInput(t *testing.T, payload map[string]any, overrides ...Overrid
 		Modules:   testPlannerModules(),
 		Overrides: overrides,
 	}
+}
+
+func TestPlanWarnsForProcessDefaultDependentModuleInAppLocalMode(t *testing.T) {
+	input := compileTestInput(t, map[string]any{"yggdrasil": map[string]any{}})
+	input.Modules = append(input.Modules, testIsolationModule{
+		testCapabilityModule: testCapabilityModule{name: "test.process-default-module"},
+		mode:                 module.IsolationModeRequiresProcessDefaults,
+	})
+
+	result, err := Plan(context.Background(), input)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Spec.Warnings, 1)
+	require.Equal(t, "ModuleRequiresProcessDefaults", result.Spec.Warnings[0].Code)
+}
+
+func TestPlanFailsForProcessDefaultDependentModuleInStrictAppLocalMode(t *testing.T) {
+	input := compileTestInput(
+		t,
+		map[string]any{
+			"yggdrasil": map[string]any{
+				"admin": map[string]any{
+					"validation": map[string]any{"strict": true},
+				},
+			},
+		},
+	)
+	input.Modules = append(input.Modules, testIsolationModule{
+		testCapabilityModule: testCapabilityModule{name: "test.process-default-module"},
+		mode:                 module.IsolationModeRequiresProcessDefaults,
+	})
+
+	_, err := Plan(context.Background(), input)
+	require.Error(t, err)
+	var assemblyErr *Error
+	require.ErrorAs(t, err, &assemblyErr)
+	require.Equal(t, ErrIsolationRequiresProcessDefaults, assemblyErr.Code)
 }
 
 func TestDryRunAppliesModeDefaultsAndTemplates(t *testing.T) {

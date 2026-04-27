@@ -161,6 +161,8 @@ func TestModuleSuppliedResolverProviderIsUsedByRuntimeSnapshotAndClient(t *testi
 }
 
 func TestRuntimeAppliesLoggingFromResolvedSettings(t *testing.T) {
+	oldDefault := slog.Default()
+	oldRemote := remotelog.Logger()
 	app, _ := newInitializedAppWithConfig(t, "logger-runtime", map[string]any{
 		"yggdrasil": map[string]any{
 			"logging": map[string]any{
@@ -185,9 +187,11 @@ func TestRuntimeAppliesLoggingFromResolvedSettings(t *testing.T) {
 	_, err := snapshot.BuildDefaultLoggerHandler()
 	require.NoError(t, err)
 
-	require.True(t, slog.Default().Handler().Enabled(context.Background(), slog.LevelInfo))
-	require.False(t, remotelog.Logger().Handler().Enabled(context.Background(), slog.LevelInfo))
-	require.True(t, remotelog.Logger().Handler().Enabled(context.Background(), slog.LevelError))
+	require.Same(t, oldDefault, slog.Default())
+	require.Same(t, oldRemote, remotelog.Logger())
+	require.True(t, snapshot.Logger.Handler().Enabled(context.Background(), slog.LevelInfo))
+	require.False(t, snapshot.RemoteLogger.Handler().Enabled(context.Background(), slog.LevelInfo))
+	require.True(t, snapshot.RemoteLogger.Handler().Enabled(context.Background(), slog.LevelError))
 }
 
 type shutdownTracerProvider struct {

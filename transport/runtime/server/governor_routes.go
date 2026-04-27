@@ -19,11 +19,11 @@ import (
 	"net/http"
 
 	"github.com/codesjoy/yggdrasil/v3/admin/governor"
-	"github.com/codesjoy/yggdrasil/v3/internal/instance"
+	internalidentity "github.com/codesjoy/yggdrasil/v3/internal/identity"
 )
 
 // RegisterGovernorRoutes registers service and rest metadata routes into governor.
-func RegisterGovernorRoutes(gov *governor.Server, app Server) {
+func RegisterGovernorRoutes(gov *governor.Server, app Server, identity internalidentity.Identity) {
 	if gov == nil || app == nil {
 		return
 	}
@@ -38,7 +38,7 @@ func RegisterGovernorRoutes(gov *governor.Server, app Server) {
 			encoder.SetIndent("", "    ")
 		}
 		result := map[string]interface{}{
-			"appName":  instance.Name(),
+			"appName":  identity.AppName,
 			"services": s.serviceDescSnapshot(),
 		}
 		_ = encoder.Encode(result)
@@ -50,7 +50,7 @@ func RegisterGovernorRoutes(gov *governor.Server, app Server) {
 			encoder.SetIndent("", "    ")
 		}
 		result := map[string]interface{}{
-			"appName": instance.Name(),
+			"appName": identity.AppName,
 			"routers": s.restRouteSnapshot(),
 		}
 		_ = encoder.Encode(result)

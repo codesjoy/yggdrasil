@@ -65,12 +65,19 @@ func (a *App) assemblyInputLocked() yassembly.Input {
 	}
 	return yassembly.Input{
 		Identity: yassembly.IdentitySpec{
-			AppName: a.name,
+			AppName:   a.identity.AppName,
+			Namespace: a.identity.Namespace,
+			Version:   a.identity.Version,
+			Region:    a.identity.Region,
+			Zone:      a.identity.Zone,
+			Campus:    a.identity.Campus,
+			Metadata:  a.identity.MetadataCopy(),
 		},
-		Resolved:  resolved,
-		Snapshot:  a.opts.configManager.Snapshot(),
-		Modules:   a.plannedModules(),
-		Overrides: append([]yassembly.Override(nil), a.opts.planOverrides...),
+		Resolved:        resolved,
+		Snapshot:        a.opts.configManager.Snapshot(),
+		Modules:         a.plannedModules(),
+		Overrides:       append([]yassembly.Override(nil), a.opts.planOverrides...),
+		ProcessDefaults: a.opts.processDefaults,
 	}
 }
 

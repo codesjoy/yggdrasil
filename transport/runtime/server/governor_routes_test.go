@@ -24,6 +24,7 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/admin/governor"
 	"github.com/codesjoy/yggdrasil/v3/config"
+	internalidentity "github.com/codesjoy/yggdrasil/v3/internal/identity"
 )
 
 func TestRegisterGovernorRoutesInstanceIsolation(t *testing.T) {
@@ -53,15 +54,17 @@ func TestRegisterGovernorRoutesInstanceIsolation(t *testing.T) {
 		},
 	}
 
-	RegisterGovernorRoutes(govA, srvA)
-	RegisterGovernorRoutes(govB, srvB)
+	RegisterGovernorRoutes(govA, srvA, internalidentity.Identity{AppName: "app-a"})
+	RegisterGovernorRoutes(govB, srvB, internalidentity.Identity{AppName: "app-b"})
 
 	servicesA := governorRouteBody(t, govA, "/services")
 	servicesB := governorRouteBody(t, govB, "/services")
 	assert.Contains(t, servicesA, "svc.alpha")
 	assert.NotContains(t, servicesA, "svc.beta")
+	assert.Contains(t, servicesA, `"appName":"app-a"`)
 	assert.Contains(t, servicesB, "svc.beta")
 	assert.NotContains(t, servicesB, "svc.alpha")
+	assert.Contains(t, servicesB, `"appName":"app-b"`)
 
 	restA := governorRouteBody(t, govA, "/rest")
 	restB := governorRouteBody(t, govB, "/rest")
@@ -73,7 +76,7 @@ func TestRegisterGovernorRoutesInstanceIsolation(t *testing.T) {
 
 func TestRegisterGovernorRoutesIgnoresNil(t *testing.T) {
 	assert.NotPanics(t, func() {
-		RegisterGovernorRoutes(nil, nil)
+		RegisterGovernorRoutes(nil, nil, internalidentity.Identity{})
 	})
 }
 

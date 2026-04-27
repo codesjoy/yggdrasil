@@ -30,6 +30,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/admin/governor"
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/internal/defers"
+	internalidentity "github.com/codesjoy/yggdrasil/v3/internal/identity"
 	"github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
 
@@ -119,6 +120,16 @@ func WithRegistry(reg registry.Registry) Option {
 	}
 }
 
+// WithIdentity configures the App-local identity used by registration and
+// lifecycle diagnostics.
+func WithIdentity(identity internalidentity.Identity) Option {
+	return func(runner *Runner) error {
+		identity.Metadata = identity.MetadataCopy()
+		runner.identity = identity
+		return nil
+	}
+}
+
 // WithShutdownTimeout configures the shutdown timeout.
 func WithShutdownTimeout(timeout time.Duration) Option {
 	return func(runner *Runner) error {
@@ -180,6 +191,7 @@ type Runner struct {
 
 	registryState int
 	registry      registry.Registry
+	identity      internalidentity.Identity
 
 	shutdownTimeout time.Duration
 

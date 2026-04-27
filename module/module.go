@@ -27,6 +27,25 @@ type Module interface {
 	Name() string
 }
 
+// IsolationMode describes whether a module can run with App-local runtime
+// state or needs process-global compatibility defaults.
+type IsolationMode string
+
+const (
+	// IsolationModeAppLocal indicates the module is compatible with App-local
+	// runtime state.
+	IsolationModeAppLocal IsolationMode = "app_local"
+	// IsolationModeRequiresProcessDefaults indicates the module depends on
+	// process-global defaults such as slog.Default or OTel globals.
+	IsolationModeRequiresProcessDefaults IsolationMode = "requires_process_defaults"
+)
+
+// IsolationReporter optionally declares a module's process-global dependency
+// requirements.
+type IsolationReporter interface {
+	IsolationMode() IsolationMode
+}
+
 // Dependent declares hard dependencies.
 type Dependent interface {
 	DependsOn() []string

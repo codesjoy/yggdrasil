@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
@@ -40,7 +41,14 @@ import (
 
 // Snapshot is the immutable App-scoped runtime assembly result.
 type Snapshot struct {
+	Identity Identity
 	Resolved settings.Resolved
+
+	Logger            *slog.Logger
+	RemoteLogger      *slog.Logger
+	TracerProvider    trace.TracerProvider
+	MeterProvider     metric.MeterProvider
+	TextMapPropagator propagation.TextMapPropagator
 
 	LoggerHandlerBuilders map[string]logger.HandlerBuilder
 	LoggerWriterBuilders  map[string]logger.WriterBuilder
@@ -87,8 +95,16 @@ func (s *Snapshot) Copy() *Snapshot {
 	if s == nil {
 		return nil
 	}
+	identity := s.Identity
+	identity.Metadata = identity.metadataCopy()
 	return &Snapshot{
+		Identity:                        identity,
 		Resolved:                        s.Resolved,
+		Logger:                          s.Logger,
+		RemoteLogger:                    s.RemoteLogger,
+		TracerProvider:                  s.TracerProvider,
+		MeterProvider:                   s.MeterProvider,
+		TextMapPropagator:               s.TextMapPropagator,
 		LoggerHandlerBuilders:           cloneMap(s.LoggerHandlerBuilders),
 		LoggerWriterBuilders:            cloneMap(s.LoggerWriterBuilders),
 		TracerProviderBuilders:          cloneMap(s.TracerProviderBuilders),

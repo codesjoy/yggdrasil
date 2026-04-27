@@ -22,6 +22,7 @@ import (
 	internalbootstrap "github.com/codesjoy/yggdrasil/v3/app/internal/bootstrap"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
+	internalidentity "github.com/codesjoy/yggdrasil/v3/internal/identity"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 )
 
@@ -32,7 +33,11 @@ const (
 
 func initConfigChain(opts *options) error {
 	if opts.configManager == nil {
-		opts.configManager = config.Default()
+		if opts.processDefaults {
+			opts.configManager = config.Default()
+		} else {
+			opts.configManager = config.NewManager()
+		}
 	}
 	if err := loadConfigFileChain(opts); err != nil {
 		return err
@@ -179,14 +184,15 @@ func (a *App) resolveIdentityLocked() error {
 	}
 	if name := a.opts.appName; name != "" {
 		a.name = name
-		return nil
-	}
-	if resolvedName := strings.TrimSpace(a.opts.resolvedSettings.App.Name); resolvedName != "" {
+	} else if resolvedName := strings.TrimSpace(a.opts.resolvedSettings.App.Name); resolvedName != "" {
 		a.name = resolvedName
-		return nil
+	} else if strings.TrimSpace(a.name) == "" {
+		return errors.New("app name is required; use WithAppName or yggdrasil.app.name")
 	}
-	if strings.TrimSpace(a.name) != "" {
-		return nil
-	}
-	return errors.New("app name is required; use WithAppName or yggdrasil.app.name")
+	a.identity = internalidentity.FromInstanceConfig(
+		a.name,
+		a.opts.resolvedSettings.Admin.Application,
+	)
+	a.identityResolved = true
+	return nil
 }

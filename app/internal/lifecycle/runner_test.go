@@ -29,6 +29,7 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/admin/governor"
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
+	internalidentity "github.com/codesjoy/yggdrasil/v3/internal/identity"
 	yserver "github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
 
@@ -310,16 +311,27 @@ func TestLifecycleDeregisterError(t *testing.T) {
 }
 
 func TestLifecycleInstanceMethods(t *testing.T) {
-	runner, err := New()
+	identity := internalidentity.Identity{
+		AppName:   "app-a",
+		Namespace: "ns-a",
+		Version:   "1.2.3",
+		Region:    "r1",
+		Zone:      "z1",
+		Campus:    "c1",
+		Metadata:  map[string]string{"k": "v"},
+	}
+	runner, err := New(WithIdentity(identity))
 	require.NoError(t, err)
 
-	assert.IsType(t, "", runner.Region())
-	assert.IsType(t, "", runner.Zone())
-	assert.IsType(t, "", runner.Campus())
-	assert.IsType(t, "", runner.Namespace())
-	assert.IsType(t, "", runner.Name())
-	assert.IsType(t, "", runner.Version())
-	assert.IsType(t, map[string]string{}, runner.Metadata())
+	assert.Equal(t, "r1", runner.Region())
+	assert.Equal(t, "z1", runner.Zone())
+	assert.Equal(t, "c1", runner.Campus())
+	assert.Equal(t, "ns-a", runner.Namespace())
+	assert.Equal(t, "app-a", runner.Name())
+	assert.Equal(t, "1.2.3", runner.Version())
+	assert.Equal(t, map[string]string{"k": "v"}, runner.Metadata())
+	identity.Metadata["k"] = "changed"
+	assert.Equal(t, map[string]string{"k": "v"}, runner.Metadata())
 }
 
 func TestLifecycleEndpointsBasic(t *testing.T) {

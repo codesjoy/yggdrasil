@@ -28,8 +28,7 @@ import (
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
-	"github.com/codesjoy/yggdrasil/v3/internal/instance"
-	"github.com/codesjoy/yggdrasil/v3/internal/settings"
+	internalidentity "github.com/codesjoy/yggdrasil/v3/internal/identity"
 	"github.com/codesjoy/yggdrasil/v3/module"
 	"github.com/codesjoy/yggdrasil/v3/transport/runtime/client"
 	"github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
@@ -86,6 +85,10 @@ func withLifecycleRegistry(reg registry.Registry) lifecycleOption {
 	return internallifecycle.WithRegistry(reg)
 }
 
+func withLifecycleIdentity(identity internalidentity.Identity) lifecycleOption {
+	return internallifecycle.WithIdentity(identity)
+}
+
 func withLifecycleShutdownTimeout(timeout time.Duration) lifecycleOption {
 	return internallifecycle.WithShutdownTimeout(timeout)
 }
@@ -102,6 +105,10 @@ var (
 	errApplicationAlreadyRunning = errors.New("application is already running")
 	errRestartUnsupported        = errors.New(
 		"restarting yggdrasil in the same process is not supported",
+	)
+	// ErrProcessDefaultsAlreadyInstalled is returned when another App already owns process defaults.
+	ErrProcessDefaultsAlreadyInstalled = errors.New(
+		"process defaults are already installed by another yggdrasil app",
 	)
 )
 
@@ -130,6 +137,7 @@ type App struct {
 	preparedFoundationSnapshot *Snapshot
 	tracerShutdown             func(context.Context) error
 	meterShutdown              func(context.Context) error
+	processDefaultsLease       *processDefaultsLease
 
 	runtime            Runtime
 	lastPlanResult     *yassembly.Result
@@ -139,6 +147,8 @@ type App struct {
 	assemblyErrors     assemblyErrorState
 	assemblySpec       *yassembly.Spec
 	runtimeAssembly    *preparedAssembly
+	identity           internalidentity.Identity
+	identityResolved   bool
 
 	explicitBundleInstalled bool
 	installedRPCServices    map[string]struct{}
@@ -169,6 +179,9 @@ func New(appName string, ops ...Option) (*App, error) {
 
 func (a *App) buildLifecycleOptions() []lifecycleOption {
 	out := a.opts.buildLifecycleOptions()
+	if a.identityResolved {
+		out = append(out, withLifecycleIdentity(a.identity))
+	}
 	out = append(
 		out,
 		withLifecycleCleanup("runtime_adapters", a.shutdownRuntimeAdapters),
@@ -334,6 +347,11 @@ func (a *App) initializeLocked(ctx context.Context) (err error) {
 	case lifecycleStateStopped:
 		return errRestartUnsupported
 	}
+	if a.opts != nil && a.opts.processDefaults && a.processDefaultsLease == nil {
+		if _, err = acquireProcessDefaultsLease(a); err != nil {
+			return err
+		}
+	}
 	cleanupNeeded := true
 	defer func() {
 		if !cleanupNeeded || err == nil {
@@ -381,7 +399,6 @@ func (a *App) initializeLocked(ctx context.Context) (err error) {
 		err = wrapAssemblyStageError("prepare", err)
 		return err
 	}
-	initInstanceInfo(a.name, effectiveResolved(planResult, a.opts.resolvedSettings))
 	if err = a.applyRuntimeAdapters(a.currentRuntimeSnapshot()); err != nil {
 		err = wrapAssemblyStageError("prepare", err)
 		return err
@@ -454,10 +471,6 @@ func (a *App) initHub(ctx context.Context) error {
 		}),
 	)
 	return nil
-}
-
-func initInstanceInfo(appName string, resolved settings.Resolved) {
-	instance.InitInstanceInfo(appName, resolved.Admin.Application)
 }
 
 func initGovernor(opts *options) error {

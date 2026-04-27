@@ -14,7 +14,21 @@
 
 package otel
 
-import "github.com/codesjoy/yggdrasil/v3/observability/stats"
+import (
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/codesjoy/yggdrasil/v3/observability/stats"
+)
+
+// HandlerRuntime contains App-local OTel dependencies for the built-in stats
+// handler.
+type HandlerRuntime struct {
+	TracerProvider trace.TracerProvider
+	MeterProvider  metric.MeterProvider
+	Propagator     propagation.TextMapPropagator
+}
 
 // BuiltinHandlerBuilder returns the built-in otel stats builder.
 func BuiltinHandlerBuilder() stats.HandlerBuilder {
@@ -23,11 +37,20 @@ func BuiltinHandlerBuilder() stats.HandlerBuilder {
 
 // BuiltinHandlerBuilderWithConfig returns the built-in otel stats builder bound to one explicit config.
 func BuiltinHandlerBuilderWithConfig(cfg Config) stats.HandlerBuilder {
+	return BuiltinHandlerBuilderWithRuntime(cfg, HandlerRuntime{})
+}
+
+// BuiltinHandlerBuilderWithRuntime returns the built-in otel stats builder
+// bound to explicit config and App-local OTel dependencies.
+func BuiltinHandlerBuilderWithRuntime(
+	cfg Config,
+	runtime HandlerRuntime,
+) stats.HandlerBuilder {
 	return func(isServer bool) stats.Handler {
 		if isServer {
-			return newSvrHandlerWithConfig(&cfg)
+			return newSvrHandlerWithRuntime(&cfg, runtime)
 		}
-		return newCliHandlerWithConfig(&cfg)
+		return newCliHandlerWithRuntime(&cfg, runtime)
 	}
 }
 

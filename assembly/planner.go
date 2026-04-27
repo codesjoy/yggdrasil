@@ -93,6 +93,9 @@ func (p *planner) build() (*Result, error) {
 	if err := p.resolveModules(); err != nil {
 		return nil, err
 	}
+	if err := p.validateModuleIsolation(); err != nil {
+		return nil, err
+	}
 	p.collectProviders()
 	if err := p.resolveDefaults(); err != nil {
 		return nil, err
@@ -127,6 +130,34 @@ func (p *planner) build() (*Result, error) {
 		DefaultCandidates:     cloneDefaultCandidateMap(p.defaultCandidates),
 		Hash:                  hash,
 	}, nil
+}
+
+func (p *planner) validateModuleIsolation() error {
+	for _, mod := range p.modules {
+		reporter, ok := mod.(module.IsolationReporter)
+		if !ok || reporter.IsolationMode() != module.IsolationModeRequiresProcessDefaults ||
+			p.input.ProcessDefaults {
+			continue
+		}
+		warning := Warning{
+			Code: "ModuleRequiresProcessDefaults",
+			Message: fmt.Sprintf(
+				"module %q declares process-default dependencies but process defaults are disabled",
+				mod.Name(),
+			),
+		}
+		p.warnings = append(p.warnings, warning)
+		if p.input.Resolved.Admin.Validation.Strict {
+			return newError(
+				ErrIsolationRequiresProcessDefaults,
+				stagePlan,
+				warning.Message,
+				nil,
+				map[string]string{"module": mod.Name()},
+			)
+		}
+	}
+	return nil
 }
 
 func (p *planner) resolveMode() error {

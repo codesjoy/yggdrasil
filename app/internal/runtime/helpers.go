@@ -24,6 +24,10 @@ import (
 
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 	"github.com/codesjoy/yggdrasil/v3/module"
@@ -198,6 +202,31 @@ func BindStatsHandlerBuilders(
 		cfg := statsotel.Config{}
 		_ = settings.DecodePayload(&cfg, resolved.Telemetry.Stats.Providers.OTel)
 		out["otel"] = statsotel.BuiltinHandlerBuilderWithConfig(cfg)
+	}
+	return out
+}
+
+// BindStatsHandlerBuildersWithRuntime applies builtin stats config bindings
+// and injects App-local OTel runtime dependencies.
+func BindStatsHandlerBuildersWithRuntime(
+	resolved settings.Resolved,
+	builders map[string]stats.HandlerBuilder,
+	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
+	propagator propagation.TextMapPropagator,
+) map[string]stats.HandlerBuilder {
+	out := cloneMap(builders)
+	if _, ok := out["otel"]; ok {
+		cfg := statsotel.Config{}
+		_ = settings.DecodePayload(&cfg, resolved.Telemetry.Stats.Providers.OTel)
+		out["otel"] = statsotel.BuiltinHandlerBuilderWithRuntime(
+			cfg,
+			statsotel.HandlerRuntime{
+				TracerProvider: tracerProvider,
+				MeterProvider:  meterProvider,
+				Propagator:     propagator,
+			},
+		)
 	}
 	return out
 }

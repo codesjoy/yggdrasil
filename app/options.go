@@ -57,6 +57,7 @@ type options struct {
 	configSourceCleanupRegistered bool
 	configFileLoaded              bool
 	managedConfigSourcesClosed    bool
+	processDefaults               bool
 	resolvedSettings              settings.Resolved
 	modules                       []module.Module
 	capabilityRegistrations       []CapabilityRegistration
@@ -124,6 +125,16 @@ func WithCleanup(name string, fn func(context.Context) error) Option {
 func WithConfigManager(manager *config.Manager) Option {
 	return func(opts *options) error {
 		opts.configManager = manager
+		return nil
+	}
+}
+
+// WithProcessDefaults controls whether this App installs process-global
+// compatibility defaults such as slog.Default, OTel globals, and legacy
+// instance facade state.
+func WithProcessDefaults(enabled bool) Option {
+	return func(opts *options) error {
+		opts.processDefaults = enabled
 		return nil
 	}
 }

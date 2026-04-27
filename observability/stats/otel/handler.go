@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
+	"go.opentelemetry.io/otel/propagation"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/genproto/googleapis/rpc/code"
@@ -58,6 +59,7 @@ type handler struct {
 	rpcResponseSize    metric.Int64Histogram
 	rpcRequestsPerRPC  metric.Int64Histogram
 	rpcResponsesPerRPC metric.Int64Histogram
+	propagator         propagation.TextMapPropagator
 
 	handleRPC func(context.Context, stats.RPCStats, bool)
 }
@@ -68,18 +70,35 @@ func newHandler(isSvr bool) handler {
 }
 
 func newHandlerWithConfig(cfg *Config, isSvr bool) handler {
+	return newHandlerWithRuntime(cfg, isSvr, HandlerRuntime{})
+}
+
+func newHandlerWithRuntime(cfg *Config, isSvr bool, runtime HandlerRuntime) handler {
 	if cfg == nil {
 		cfg = &Config{}
 	}
-	tracer := otel.Tracer(
+	tracerProvider := runtime.TracerProvider
+	if tracerProvider == nil {
+		tracerProvider = otel.GetTracerProvider()
+	}
+	meterProvider := runtime.MeterProvider
+	if meterProvider == nil {
+		meterProvider = otel.GetMeterProvider()
+	}
+	propagator := runtime.Propagator
+	if propagator == nil {
+		propagator = otel.GetTextMapPropagator()
+	}
+	tracer := tracerProvider.Tracer(
 		"github.com/codesjoy/yggdrasil/v3",
 		trace.WithInstrumentationVersion("yggdrasil"),
 	)
 	h := handler{
-		cfg:    cfg,
-		tracer: tracer,
+		cfg:        cfg,
+		tracer:     tracer,
+		propagator: propagator,
 	}
-	meter := otel.Meter("github.com/codesjoy/yggdrasil/v3",
+	meter := meterProvider.Meter("github.com/codesjoy/yggdrasil/v3",
 		metric.WithInstrumentationVersion("yggdrasil"),
 		metric.WithSchemaURL(semconv.SchemaURL),
 	)
@@ -164,6 +183,16 @@ func newSvrHandlerWithConfig(cfg *Config) stats.Handler {
 
 func newCliHandlerWithConfig(cfg *Config) stats.Handler {
 	h := newHandlerWithConfig(cfg, false)
+	return &clientHandler{handler: h}
+}
+
+func newSvrHandlerWithRuntime(cfg *Config, runtime HandlerRuntime) stats.Handler {
+	h := newHandlerWithRuntime(cfg, true, runtime)
+	return &serverHandler{handler: h}
+}
+
+func newCliHandlerWithRuntime(cfg *Config, runtime HandlerRuntime) stats.Handler {
+	h := newHandlerWithRuntime(cfg, false, runtime)
 	return &clientHandler{handler: h}
 }
 

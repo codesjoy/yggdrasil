@@ -30,7 +30,13 @@ import (
 
 // IdentitySpec contains resolved app identity information.
 type IdentitySpec struct {
-	AppName string `json:"app_name" yaml:"app_name"`
+	AppName   string            `json:"app_name"            yaml:"app_name"`
+	Namespace string            `json:"namespace,omitempty" yaml:"namespace,omitempty"`
+	Version   string            `json:"version,omitempty"   yaml:"version,omitempty"`
+	Region    string            `json:"region,omitempty"    yaml:"region,omitempty"`
+	Zone      string            `json:"zone,omitempty"      yaml:"zone,omitempty"`
+	Campus    string            `json:"campus,omitempty"    yaml:"campus,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"  yaml:"metadata,omitempty"`
 }
 
 // Mode contains the final mode identity used for planning.
@@ -115,11 +121,12 @@ type DefaultCandidate struct {
 
 // Input is the immutable planner input.
 type Input struct {
-	Identity  IdentitySpec
-	Resolved  settings.Resolved
-	Snapshot  config.Snapshot
-	Modules   []module.Module
-	Overrides []Override
+	Identity        IdentitySpec
+	Resolved        settings.Resolved
+	Snapshot        config.Snapshot
+	Modules         []module.Module
+	Overrides       []Override
+	ProcessDefaults bool
 }
 
 // Result is the executable planner result used by App.Prepare and Reload.

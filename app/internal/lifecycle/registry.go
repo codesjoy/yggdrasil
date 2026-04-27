@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
-	"github.com/codesjoy/yggdrasil/v3/internal/instance"
 	yserver "github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
 
@@ -126,37 +125,37 @@ func (runner *Runner) beginDeregister() bool {
 
 // Region returns the instance region.
 func (runner *Runner) Region() string {
-	return instance.Region()
+	return runner.identity.Region
 }
 
 // Zone returns the instance zone.
 func (runner *Runner) Zone() string {
-	return instance.Zone()
+	return runner.identity.Zone
 }
 
 // Campus returns the instance campus.
 func (runner *Runner) Campus() string {
-	return instance.Campus()
+	return runner.identity.Campus
 }
 
 // Namespace returns the instance namespace.
 func (runner *Runner) Namespace() string {
-	return instance.Namespace()
+	return runner.identity.Namespace
 }
 
 // Name returns the instance name.
 func (runner *Runner) Name() string {
-	return instance.Name()
+	return runner.identity.AppName
 }
 
 // Version returns the instance version.
 func (runner *Runner) Version() string {
-	return instance.Version()
+	return runner.identity.Version
 }
 
 // Metadata returns the instance metadata.
 func (runner *Runner) Metadata() map[string]string {
-	return instance.Metadata()
+	return runner.identity.MetadataCopy()
 }
 
 // Endpoints returns the advertised service endpoints.

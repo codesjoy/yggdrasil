@@ -18,7 +18,6 @@ package otel
 import (
 	"context"
 
-	"go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
 
@@ -51,7 +50,7 @@ func (h *clientHandler) TagRPC(ctx context.Context, info stats.RPCTagInfo) conte
 		metricAttrs: attrs,
 	}
 
-	return inject(context.WithValue(ctx, rpcContextKey{}, &gctx), otel.GetTextMapPropagator())
+	return inject(context.WithValue(ctx, rpcContextKey{}, &gctx), h.propagator)
 }
 
 // HandleRPC handles the given RPC stats.

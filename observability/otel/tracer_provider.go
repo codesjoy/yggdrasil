@@ -20,11 +20,17 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// DefaultPropagator returns the framework default trace propagator.
+func DefaultPropagator() propagation.TextMapPropagator {
+	return propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	)
+}
+
 // ConfigureDefaultPropagator installs the default trace propagator.
 func ConfigureDefaultPropagator() {
-	otel.SetTextMapPropagator(
-		propagation.NewCompositeTextMapPropagator(
-			propagation.TraceContext{}, propagation.Baggage{}))
+	otel.SetTextMapPropagator(DefaultPropagator())
 }
 
 // TracerProviderBuilder is a function that returns a TracerProvider.
