@@ -6,7 +6,7 @@
 
 ## 1. Framework Positioning
 
-Yggdrasil is a Go microservice framework built around explicit runtime composition. The default application path is centered on an `App` instance and a Module Hub instead of process-wide business composition, and it is not tied to any specific dependency injection container.
+Yggdrasil is a Go microservice framework built around explicit runtime composition. The default application path is centered on an `App` instance and a Module Hub instead of process-wide business composition, and it is not tied to any specific dependency injection container. The kernel uses App-local runtime state; process-default logger, OTel provider, and legacy instance facades are optional compatibility entry points and must not be read implicitly by core runtime paths.
 
 Its core goals are to:
 
@@ -64,6 +64,7 @@ The architecture is built on two separations:
 
 1. **Plan versus instance**: `assembly.Spec` is the public declarative plan used for explain, diff, and hash. The prepared runtime assembly is an internal in-memory instance graph.
 2. **Framework kernel versus business graph**: modules and providers are registered in the Hub. Business service implementations, handlers, tasks, and hooks are installed through `BusinessBundle`, not registered as Hub modules.
+3. **App-local versus process-default**: `app.New` and `yggdrasil.New` leave process globals untouched by default. `yggdrasil.Run` targets a single-main-App program and may install compatibility process defaults. At most one App can own process defaults at a time.
 
 ## 3. Main Layers
 

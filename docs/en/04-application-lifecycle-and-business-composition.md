@@ -79,6 +79,7 @@ type Runtime interface {
     Logger() *slog.Logger
     TracerProvider() trace.TracerProvider
     MeterProvider() metric.MeterProvider
+    Identity() yggdrasil.Identity
     Lookup(target any) error
 }
 ```

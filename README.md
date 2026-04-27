@@ -10,7 +10,7 @@ Yggdrasil is designed for teams that want both a strict, diagnosable framework k
 yggdrasil.Run -> business.Compose -> Wait
 ```
 
-Yggdrasil's default bootstrap path is explicit: each application is composed through an `App` instance, a unified Module Hub, typed capabilities, and a planned runtime assembly model. Some lower-level subsystem packages still expose compatibility provider registries, but business applications should wire framework behavior through the root facade, `App` options, modules, and capability registrations instead of hidden `init()` side effects.
+Yggdrasil's default bootstrap path is explicit: each application is composed through an `App` instance, a unified Module Hub, typed capabilities, and a planned runtime assembly model. The core runtime is App-local by default; `yggdrasil.Run` may install process-default compatibility facades for main programs, while `yggdrasil.New` and `app.New` keep process globals untouched unless `WithProcessDefaults(true)` is set. Some lower-level subsystem packages still expose compatibility provider registries, but business applications should wire framework behavior through the root facade, `App` options, modules, and capability registrations instead of hidden `init()` side effects.
 
 ---
 
@@ -18,7 +18,7 @@ Yggdrasil's default bootstrap path is explicit: each application is composed thr
 
 Yggdrasil is useful when service runtime correctness matters as much as developer ergonomics.
 
-- **Explicit composition**: every service is assembled through an independent `App` instance.
+- **Explicit composition**: every service is assembled through an independent `App` instance with App-local runtime state by default.
 - **Unified module system**: logging, transport, registry, discovery, interceptors, and observability are managed by the `Hub`.
 - **Typed capability model**: capabilities are resolved through explicit contracts and cardinality rules, never by “take the first provider.”
 - **Deterministic auto assembly**: configuration, mode, overrides, and chain templates compile into a stable `assembly.Spec`.
@@ -54,7 +54,7 @@ flowchart TB
     subgraph AppLayer["Yggdrasil App"]
         App["App<br/>yggdrasil.Run / yggdrasil.New / app.New<br/>Prepare / ComposeAndInstall / Start / Wait / Stop"]
         Config["Config Manager<br/>Layered immutable snapshots"]
-        RuntimeSurface["Runtime Surface<br/>NewClient / Config / Logger / Tracer / Meter / Lookup"]
+        RuntimeSurface["Runtime Surface<br/>NewClient / Config / Logger / Tracer / Meter / Identity / Lookup"]
     end
 
     subgraph Planning["Bootstrap & Planning"]

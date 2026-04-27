@@ -18,6 +18,8 @@ func main() {
 }
 ```
 
+`yggdrasil.Run` targets a single-main-App program and may install process-default logger / OTel / legacy instance facades. Tests, multi-App, sidecar, and embedded scenarios should use `yggdrasil.New` / `app.New` and keep the default App-local runtime; set `WithProcessDefaults(true)` only when compatibility with global APIs is required.
+
 ### 1.2 Recommended business.Compose
 
 ```go
@@ -52,6 +54,7 @@ func Compose(rt yggdrasil.Runtime) (*yggdrasil.BusinessBundle, error) {
 - [ ] `Stop()` is idempotent, protected by `sync.Once` or atomic state.
 - [ ] Implement `Reloadable` when hot reload is supported, with clear prepare/commit/rollback semantics.
 - [ ] Capability exposure declares spec name, cardinality, and type.
+- [ ] Implement `IsolationReporter` and declare `IsolationModeRequiresProcessDefaults` when process globals are required.
 
 ### 2.2 Auto-assembly module
 
@@ -117,6 +120,7 @@ Constraints:
 | Anti-pattern | Problem | Recommended approach |
 | --- | --- | --- |
 | Registering global providers in package `init()` | Breaks App instance isolation | Use explicit module registration or auto assembly |
+| Reading slog/OTel/instance globals from module runtime paths | Depends on the process-default facade and cross-talks between Apps | Receive App-local dependencies through Runtime, capabilities, or constructor parameters |
 | Using `InitOrder` for hard dependency | Tie-breaker cannot guarantee dependency ordering | Use `DependsOn` |
 | Taking the first provider on capability conflict | Non-deterministic and not diagnosable | Use cardinality validation and explicit config |
 | Mutating server runtime directly in Compose | Bypasses install boundary | Return `BusinessBundle` |
