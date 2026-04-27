@@ -115,8 +115,8 @@ func (b *blockingAppServer) Endpoints() []yserver.Endpoint {
 }
 
 type runningAppServer struct {
-	stopCtx context.Context
-	stopCh  chan struct{}
+	stopCtx  context.Context
+	stopCh   chan struct{}
 	stopOnce sync.Once
 }
 
@@ -945,7 +945,11 @@ func TestApplication_Endpoints_Integration(t *testing.T) {
 
 	// The endpoints should be accessible since governor is initialized
 	assert.IsType(t, []registry.Endpoint{}, endpoints)
-	assert.Equal(t, string(constant.ServerKindGovernor), endpoints[0].Metadata()[registry.MDServerKind])
+	assert.Equal(
+		t,
+		string(constant.ServerKindGovernor),
+		endpoints[0].Metadata()[registry.MDServerKind],
+	)
 }
 
 func TestApplication_Endpoints_WithServerAndGovernor(t *testing.T) {
@@ -971,5 +975,9 @@ func TestApplication_Endpoints_WithServerAndGovernor(t *testing.T) {
 	require.Len(t, endpoints, 2)
 	assert.Equal(t, string(constant.ServerKindRPC), endpoints[0].Metadata()[registry.MDServerKind])
 	assert.Equal(t, "v1", endpoints[0].Metadata()["version"])
-	assert.Equal(t, string(constant.ServerKindGovernor), endpoints[1].Metadata()[registry.MDServerKind])
+	assert.Equal(
+		t,
+		string(constant.ServerKindGovernor),
+		endpoints[1].Metadata()[registry.MDServerKind],
+	)
 }

@@ -25,6 +25,10 @@ import (
 	"time"
 
 	"github.com/codesjoy/pkg/utils/xsync"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/code"
+	stpb "google.golang.org/genproto/googleapis/rpc/status"
+
 	"github.com/codesjoy/yggdrasil/v2/balancer"
 	"github.com/codesjoy/yggdrasil/v2/config"
 	"github.com/codesjoy/yggdrasil/v2/remote"
@@ -34,9 +38,6 @@ import (
 	"github.com/codesjoy/yggdrasil/v2/stats"
 	ygstatus "github.com/codesjoy/yggdrasil/v2/status"
 	"github.com/codesjoy/yggdrasil/v2/stream"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/genproto/googleapis/rpc/code"
-	stpb "google.golang.org/genproto/googleapis/rpc/status"
 )
 
 type controlledResolver struct {
@@ -96,7 +97,7 @@ func (r *controlledResolver) PushState(state resolver.State) {
 }
 
 type invokeStatusResult struct {
-	reply stpb.Status
+	reply *stpb.Status
 	err   error
 }
 
@@ -137,8 +138,14 @@ func grpcUnaryStatusHandle(ss remote.ServerStream) {
 func startGRPCTestServerAtAddr(t *testing.T, addr string) func() {
 	t.Helper()
 
-	require.NoError(t, config.Set(config.Join(config.KeyBase, "remote", "protocol", "grpc", "network"), "tcp"))
-	require.NoError(t, config.Set(config.Join(config.KeyBase, "remote", "protocol", "grpc", "address"), addr))
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "remote", "protocol", "grpc", "network"), "tcp"),
+	)
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "remote", "protocol", "grpc", "address"), addr),
+	)
 
 	builder := remote.GetServerBuilder("grpc")
 	require.NotNil(t, builder)
@@ -681,7 +688,10 @@ func TestNewStream_ResolverRemoteClientBuildFailureReturnsImmediateError(t *test
 		return r, nil
 	})
 
-	require.NoError(t, config.Set(config.Join(config.KeyBase, "resolver", resolverName, "type"), resolverType))
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "resolver", resolverName, "type"), resolverType),
+	)
 	require.NoError(t, setupConfig(appName, map[string]interface{}{
 		"resolver": resolverName,
 	}))
@@ -725,12 +735,16 @@ func TestNewClient_StaticGRPCLateDependencyStart_FailFastFalseRecovers(t *testin
 			&stpb.Status{Code: int32(code.Code_OK), Message: "ping"},
 			&reply,
 		)
-		resultCh <- invokeStatusResult{reply: reply, err: err}
+		resultCh <- invokeStatusResult{reply: &reply, err: err}
 	}()
 
 	select {
 	case result := <-resultCh:
-		t.Fatalf("expected invoke to wait for dependency recovery, got err=%v reply=%+v", result.err, result.reply)
+		t.Fatalf(
+			"expected invoke to wait for dependency recovery, got err=%v reply=%+v",
+			result.err,
+			result.reply,
+		)
 	case <-time.After(150 * time.Millisecond):
 	}
 
@@ -740,7 +754,7 @@ func TestNewClient_StaticGRPCLateDependencyStart_FailFastFalseRecovers(t *testin
 	select {
 	case result := <-resultCh:
 		require.NoError(t, result.err)
-		require.Equal(t, "ping:ok", result.reply.Message)
+		require.Equal(t, "ping:ok", result.reply.GetMessage())
 	case <-time.After(5 * time.Second):
 		t.Fatal("invoke did not recover after dependency started")
 	}
@@ -803,7 +817,10 @@ func TestNewStream_EmptyInitialResolverStateReturnsUnavailableUntilEndpointsArri
 	resolver.RegisterBuilder(resolverType, func(string) (resolver.Resolver, error) {
 		return ctrl, nil
 	})
-	require.NoError(t, config.Set(config.Join(config.KeyBase, "resolver", resolverName, "type"), resolverType))
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "resolver", resolverName, "type"), resolverType),
+	)
 	require.NoError(t, setupConfig(appName, map[string]interface{}{
 		"resolver": resolverName,
 		"fastFail": true,
@@ -848,7 +865,10 @@ func TestNewStream_EmptyInitialResolverStateReturnsUnavailableBeforeDeadline(t *
 	resolver.RegisterBuilder(resolverType, func(string) (resolver.Resolver, error) {
 		return ctrl, nil
 	})
-	require.NoError(t, config.Set(config.Join(config.KeyBase, "resolver", resolverName, "type"), resolverType))
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "resolver", resolverName, "type"), resolverType),
+	)
 	require.NoError(t, setupConfig(appName, map[string]interface{}{
 		"resolver": resolverName,
 		"fastFail": true,
@@ -1149,7 +1169,10 @@ func TestNewClient_AddWatchFailureCleansUp(t *testing.T) {
 		return failingResolver, nil
 	})
 
-	require.NoError(t, config.Set(config.Join(config.KeyBase, "resolver", resolverName, "type"), resolverType))
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "resolver", resolverName, "type"), resolverType),
+	)
 	require.NoError(
 		t,
 		setupConfig(appName, map[string]interface{}{

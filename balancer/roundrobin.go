@@ -286,9 +286,17 @@ func (b *rrBalancer) transientFailureErrorLocked() error {
 	hasTF := b.hasTransientFailureLocked()
 	switch {
 	case hasTF && b.lastConnectionErr != nil && b.resolverErr != nil:
-		return fmt.Errorf("last connection error: %v; last resolver error: %v", b.lastConnectionErr, b.resolverErr)
+		return fmt.Errorf(
+			"last connection error: %v; last resolver error: %v",
+			b.lastConnectionErr,
+			b.resolverErr,
+		)
 	case hasTF && b.lastConnectionErr != nil && b.buildErr != nil:
-		return fmt.Errorf("last connection error: %v; last build error: %v", b.lastConnectionErr, b.buildErr)
+		return fmt.Errorf(
+			"last connection error: %v; last build error: %v",
+			b.lastConnectionErr,
+			b.buildErr,
+		)
 	case hasTF && b.lastConnectionErr != nil:
 		return fmt.Errorf("last connection error: %v", b.lastConnectionErr)
 	case b.resolverErr != nil && b.buildErr != nil:
@@ -297,7 +305,10 @@ func (b *rrBalancer) transientFailureErrorLocked() error {
 			fmt.Sprintf("last resolver error: %v; last build error: %v", b.resolverErr, b.buildErr),
 		)
 	case b.resolverErr != nil:
-		return xerror.New(code.Code_UNAVAILABLE, fmt.Sprintf("last resolver error: %v", b.resolverErr))
+		return xerror.New(
+			code.Code_UNAVAILABLE,
+			fmt.Sprintf("last resolver error: %v", b.resolverErr),
+		)
 	case b.buildErr != nil:
 		return b.buildErr
 	default:

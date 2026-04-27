@@ -120,6 +120,7 @@ var (
 		(*Buffer)(nil), // 0: codec.perf.Buffer
 	}
 )
+
 var file_test_codec_perf_perf_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
 	0, // [0:0] is the sub-list for method input_type

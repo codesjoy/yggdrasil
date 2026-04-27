@@ -165,7 +165,10 @@ func NewClient(ctx context.Context, appName string) (_ Client, err error) {
 		}
 		if cli.remoteClientManager != nil {
 			if cleanupErr := cli.remoteClientManager.Close(); cleanupErr != nil {
-				slog.Error("failed to clean up remote client manager", slog.Any("error", cleanupErr))
+				slog.Error(
+					"failed to clean up remote client manager",
+					slog.Any("error", cleanupErr),
+				)
 			}
 		}
 		if cli.cancel != nil {

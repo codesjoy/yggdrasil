@@ -83,7 +83,9 @@ func TestGenerateFiles_NoServices(t *testing.T) {
 				Name:    proto.String("test.proto"),
 				Package: proto.String("test"),
 				Options: &descriptorpb.FileOptions{
-					GoPackage: proto.String("github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rpc;main"),
+					GoPackage: proto.String(
+						"github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rpc;main",
+					),
 				},
 			},
 		},
@@ -124,7 +126,11 @@ func TestGenerateFiles_ClientStreamOnly_HasCloseAndRecv(t *testing.T) {
 	assert.Contains(t, content, "type GreeterUploadClient interface {")
 	assert.Contains(t, content, "Send(*UploadRequest) error")
 	assert.Contains(t, content, "CloseAndRecv() (*UploadResponse, error)")
-	assert.Contains(t, content, "func (x *greeterUploadClient) CloseAndRecv() (*UploadResponse, error)")
+	assert.Contains(
+		t,
+		content,
+		"func (x *greeterUploadClient) CloseAndRecv() (*UploadResponse, error)",
+	)
 	assert.NotContains(t, content, "func (x *greeterUploadClient) Recv() (*UploadResponse, error)")
 }
 
@@ -186,7 +192,10 @@ func generateRPCContent(t *testing.T, services ...*descriptorpb.ServiceDescripto
 	return ""
 }
 
-func newTestPlugin(t *testing.T, services ...*descriptorpb.ServiceDescriptorProto) *protogen.Plugin {
+func newTestPlugin(
+	t *testing.T,
+	services ...*descriptorpb.ServiceDescriptorProto,
+) *protogen.Plugin {
 	t.Helper()
 
 	gen, err := protogen.Options{}.New(&pluginpb.CodeGeneratorRequest{
@@ -197,7 +206,9 @@ func newTestPlugin(t *testing.T, services ...*descriptorpb.ServiceDescriptorProt
 				Package:     proto.String("test"),
 				MessageType: collectMessageTypes(services...),
 				Options: &descriptorpb.FileOptions{
-					GoPackage: proto.String("github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rpc;main"),
+					GoPackage: proto.String(
+						"github.com/codesjoy/yggdrasil/v2/cmd/protoc-gen-yggdrasil-rpc;main",
+					),
 				},
 				Service: services,
 			},
@@ -207,7 +218,9 @@ func newTestPlugin(t *testing.T, services ...*descriptorpb.ServiceDescriptorProt
 	return gen
 }
 
-func collectMessageTypes(services ...*descriptorpb.ServiceDescriptorProto) []*descriptorpb.DescriptorProto {
+func collectMessageTypes(
+	services ...*descriptorpb.ServiceDescriptorProto,
+) []*descriptorpb.DescriptorProto {
 	names := make(map[string]struct{})
 	for _, service := range services {
 		for _, method := range service.Method {
@@ -246,7 +259,10 @@ func protoTypeName(full string) string {
 	return full[lastDot+1:]
 }
 
-func newService(name string, methods ...*descriptorpb.MethodDescriptorProto) *descriptorpb.ServiceDescriptorProto {
+func newService(
+	name string,
+	methods ...*descriptorpb.MethodDescriptorProto,
+) *descriptorpb.ServiceDescriptorProto {
 	return &descriptorpb.ServiceDescriptorProto{
 		Name:    proto.String(name),
 		Options: &descriptorpb.ServiceOptions{},

@@ -38,7 +38,12 @@ func (b *blockingServerTransport) WriteHeader(*transport2.Stream, metadata.MD) e
 	return nil
 }
 
-func (b *blockingServerTransport) Write(*transport2.Stream, []byte, []byte, *transport2.Options) error {
+func (b *blockingServerTransport) Write(
+	*transport2.Stream,
+	[]byte,
+	[]byte,
+	*transport2.Options,
+) error {
 	return nil
 }
 

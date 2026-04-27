@@ -226,7 +226,10 @@ func (app *application) register() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		if err := app.registry.Deregister(ctx, app); err != nil {
-			slog.Error("fault to deregister application after concurrent stop", slog.Any("error", err))
+			slog.Error(
+				"fault to deregister application after concurrent stop",
+				slog.Any("error", err),
+			)
 			return err
 		}
 		return nil
@@ -274,7 +277,10 @@ func (app *application) startServers() error {
 		stopOnce.Do(func() {
 			go func() {
 				if err := app.Stop(); err != nil {
-					slog.Error("fault to stop application after serve failure", slog.Any("error", err))
+					slog.Error(
+						"fault to stop application after serve failure",
+						slog.Any("error", err),
+					)
 				}
 			}()
 		})

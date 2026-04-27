@@ -72,7 +72,9 @@ func (c *localTC) Info() credentials.ProtocolInfo {
 // It returns an error if a connection is not local.
 func getSecurityLevel(addr net.Addr) (credentials.SecurityLevel, error) {
 	if addr == nil {
-		return credentials.InvalidSecurityLevel, fmt.Errorf("local credentials rejected nil remote address")
+		return credentials.InvalidSecurityLevel, fmt.Errorf(
+			"local credentials rejected nil remote address",
+		)
 	}
 	switch a := addr.(type) {
 	case *net.UnixAddr:

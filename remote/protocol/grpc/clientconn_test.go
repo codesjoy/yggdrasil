@@ -113,8 +113,14 @@ func lateStartTestMethodHandle(ss remote.ServerStream) {
 
 func TestClientConnReconnectsAfterExplicitReconnect(t *testing.T) {
 	addr := reserveClientConnTestAddr(t)
-	require.NoError(t, config.Set(config.Join(config.KeyBase, "remote", "protocol", scheme, "network"), "tcp"))
-	require.NoError(t, config.Set(config.Join(config.KeyBase, "remote", "protocol", scheme, "address"), addr))
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "remote", "protocol", scheme, "network"), "tcp"),
+	)
+	require.NoError(
+		t,
+		config.Set(config.Join(config.KeyBase, "remote", "protocol", scheme, "address"), addr),
+	)
 
 	cli, err := newClient(
 		context.Background(),

@@ -47,7 +47,10 @@ func buildConfiguredMarshaler(cfg *MarshalerConfig) (marshaler.Marshaler, error)
 	return marshaler.BuildMarshallerWithConfig(cfg.Type, cfg.Config)
 }
 
-func selectInboundMarshaler(configured marshaler.Marshaler, contentType string) marshaler.Marshaler {
+func selectInboundMarshaler(
+	configured marshaler.Marshaler,
+	contentType string,
+) marshaler.Marshaler {
 	if configured != nil {
 		return configured
 	}

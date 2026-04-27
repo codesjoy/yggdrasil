@@ -48,14 +48,16 @@ const (
 var (
 	errApplicationAlreadyRunning = errors.New("application is already running")
 	errApplicationNotInitialized = errors.New("please initialize yggdrasil before serve")
-	errRestartUnsupported        = errors.New("restarting yggdrasil in the same process is not supported")
+	errRestartUnsupported        = errors.New(
+		"restarting yggdrasil in the same process is not supported",
+	)
 )
 
 var (
-	app, _   = application.New()
-	initMu   sync.Mutex
-	state    = lifecycleStateNew
-	opts     = &options{
+	app, _ = application.New()
+	initMu sync.Mutex
+	state  = lifecycleStateNew
+	opts   = &options{
 		serviceDesc:     map[*server.ServiceDesc]interface{}{},
 		restServiceDesc: map[*server.RestServiceDesc]restServiceDesc{},
 	}

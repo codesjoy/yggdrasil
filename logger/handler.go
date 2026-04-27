@@ -31,8 +31,10 @@ func init() {
 // HandlerBuilder is the interface for building a slog.Handler.
 type HandlerBuilder func(writer string, val config.Value) (slog.Handler, error)
 
-var handlerBuilder = make(map[string]HandlerBuilder)
-var handlerBuilderMu sync.RWMutex
+var (
+	handlerBuilder   = make(map[string]HandlerBuilder)
+	handlerBuilderMu sync.RWMutex
+)
 
 // RegisterHandlerBuilder registers a handler builder for the given type.
 func RegisterHandlerBuilder(typeName string, f HandlerBuilder) {

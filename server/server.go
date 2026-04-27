@@ -525,7 +525,8 @@ func (s *server) serve(svr remote.Server, runtimeErrCh chan<- error) error {
 	s.serverWG.Add(1)
 	go func() {
 		defer s.serverWG.Done()
-		if handleErr := svr.Handle(); handleErr != nil && !errors.Is(handleErr, http.ErrServerClosed) {
+		if handleErr := svr.Handle(); handleErr != nil &&
+			!errors.Is(handleErr, http.ErrServerClosed) {
 			slog.Error(
 				"the server exits abnormally",
 				slog.String("protocol", svr.Info().Protocol),
@@ -553,9 +554,13 @@ func (s *server) restServe(runtimeErrCh chan<- error) error {
 	s.serverWG.Add(1)
 	go func() {
 		defer s.serverWG.Done()
-		if serveErr := s.restSvr.Serve(); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+		if serveErr := s.restSvr.Serve(); serveErr != nil &&
+			!errors.Is(serveErr, http.ErrServerClosed) {
 			slog.Error("fault to serve rest server", slog.Any("error", serveErr))
-			s.reportServeRuntimeError(runtimeErrCh, fmt.Errorf("rest server exited abnormally: %w", serveErr))
+			s.reportServeRuntimeError(
+				runtimeErrCh,
+				fmt.Errorf("rest server exited abnormally: %w", serveErr),
+			)
 		}
 	}()
 	return nil

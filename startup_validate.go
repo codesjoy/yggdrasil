@@ -143,7 +143,9 @@ func validateStartup(opts *options) error {
 		config.Join(config.KeyBase, "remote", "protocol", "grpc", "creds_proto"),
 	)
 	validateCredential(
-		config.GetString(config.Join(config.KeyBase, "remote", "protocol", "grpc", "transport", "creds_proto")),
+		config.GetString(
+			config.Join(config.KeyBase, "remote", "protocol", "grpc", "transport", "creds_proto"),
+		),
 		"",
 		true,
 		config.Join(config.KeyBase, "remote", "protocol", "grpc", "transport", "creds_proto"),
@@ -202,11 +204,27 @@ func validateStartup(opts *options) error {
 		}
 		validateCredential(
 			config.GetString(
-				config.Join(config.KeyBase, "client", appName, "protocol_config", "grpc", "transport", "creds_proto"),
+				config.Join(
+					config.KeyBase,
+					"client",
+					appName,
+					"protocol_config",
+					"grpc",
+					"transport",
+					"creds_proto",
+				),
 			),
 			appName,
 			true,
-			config.Join(config.KeyBase, "client", appName, "protocol_config", "grpc", "transport", "creds_proto"),
+			config.Join(
+				config.KeyBase,
+				"client",
+				appName,
+				"protocol_config",
+				"grpc",
+				"transport",
+				"creds_proto",
+			),
 		)
 		unaryNames := config.Get(config.Join(config.KeyBase, "client", appName, "interceptor", "unary")).
 			StringSlice()

@@ -106,7 +106,7 @@ func TestValidateStartup_Strict_FailsWhenRPCServiceHasNoProtocol(t *testing.T) {
 
 	err := validateStartup(&options{
 		serviceDesc: map[*server.ServiceDesc]interface{}{
-			&server.ServiceDesc{ServiceName: "test.service"}: struct{}{},
+			{ServiceName: "test.service"}: struct{}{},
 		},
 		restServiceDesc: map[*server.RestServiceDesc]restServiceDesc{},
 	})
@@ -127,7 +127,7 @@ func TestValidateStartup_Strict_FailsWhenRESTHandlersRegisteredButDisabled(t *te
 	err := validateStartup(&options{
 		serviceDesc: map[*server.ServiceDesc]interface{}{},
 		restServiceDesc: map[*server.RestServiceDesc]restServiceDesc{
-			&server.RestServiceDesc{}: {ss: struct{}{}},
+			{}: {ss: struct{}{}},
 		},
 	})
 	if err == nil {

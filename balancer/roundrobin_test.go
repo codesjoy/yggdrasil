@@ -23,11 +23,12 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"google.golang.org/genproto/googleapis/rpc/code"
+
 	"github.com/codesjoy/yggdrasil/v2/remote"
 	"github.com/codesjoy/yggdrasil/v2/resolver"
 	ygstatus "github.com/codesjoy/yggdrasil/v2/status"
 	"github.com/codesjoy/yggdrasil/v2/stream"
-	"google.golang.org/genproto/googleapis/rpc/code"
 )
 
 // mockRemoteClient is a mock implementation of remote.Client
@@ -336,7 +337,10 @@ func TestRRBalancer_UpdateState_AllRemoteClientBuildsFailPublishesErrorPicker(t 
 		t.Fatalf("expected endpoint2 error in %q", err.Error())
 	}
 	if cli.GetState().ConnectivityState != remote.TransientFailure {
-		t.Fatalf("expected transient failure connectivity state, got %v", cli.GetState().ConnectivityState)
+		t.Fatalf(
+			"expected transient failure connectivity state, got %v",
+			cli.GetState().ConnectivityState,
+		)
 	}
 }
 
@@ -521,7 +525,9 @@ func TestRRBalancer_UpdateRemoteClientState(t *testing.T) {
 	}
 }
 
-func TestRRBalancer_UpdateRemoteClientState_TransientFailureToIdleReconnectsWithoutPublishingState(t *testing.T) {
+func TestRRBalancer_UpdateRemoteClientState_TransientFailureToIdleReconnectsWithoutPublishingState(
+	t *testing.T,
+) {
 	cli := newMockBalancerClient()
 	balancer, _ := newRoundRobin("test", "default", cli)
 	rrBal := balancer.(*rrBalancer)
@@ -579,10 +585,13 @@ func TestRRBalancer_BuildPicker_OnlyReadyClients(t *testing.T) {
 	// Manually add clients with different states
 	rrBal.mu.Lock()
 	rrBal.remotesClient = map[string]*remoteClientState{
-		"ready1":     {client: newMockRemoteClient("ready1", remote.Ready), state: remote.Ready},
-		"ready2":     {client: newMockRemoteClient("ready2", remote.Ready), state: remote.Ready},
-		"idle":       {client: newMockRemoteClient("idle", remote.Idle), state: remote.Idle},
-		"connecting": {client: newMockRemoteClient("connecting", remote.Connecting), state: remote.Connecting},
+		"ready1": {client: newMockRemoteClient("ready1", remote.Ready), state: remote.Ready},
+		"ready2": {client: newMockRemoteClient("ready2", remote.Ready), state: remote.Ready},
+		"idle":   {client: newMockRemoteClient("idle", remote.Idle), state: remote.Idle},
+		"connecting": {
+			client: newMockRemoteClient("connecting", remote.Connecting),
+			state:  remote.Connecting,
+		},
 	}
 	picker := rrBal.buildPicker()
 	rrBal.mu.Unlock()
