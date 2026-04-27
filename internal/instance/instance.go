@@ -40,11 +40,8 @@ type Snapshot struct {
 	Config  Config
 }
 
-// InitInstanceInfo initializes the Instance information.
-//
-// Deprecated: this updates the process-default instance facade. Core runtime
-// code should use explicit App identity instead.
-func InitInstanceInfo(appName string, info Config) {
+// InstallProcessDefault installs process-default instance information.
+func InstallProcessDefault(appName string, info Config) {
 	if info.Metadata == nil {
 		info.Metadata = make(map[string]string)
 	}
@@ -61,10 +58,8 @@ func InitInstanceInfo(appName string, info Config) {
 	}
 }
 
-// Current returns a detached snapshot of the process-default instance facade.
-//
-// Deprecated: use explicit App identity in core paths.
-func Current() Snapshot {
+// ProcessDefaultSnapshot returns a detached process-default instance snapshot.
+func ProcessDefaultSnapshot() Snapshot {
 	i := current()
 	return Snapshot{
 		AppName: i.Name(),
@@ -79,67 +74,9 @@ func Current() Snapshot {
 	}
 }
 
-// Restore replaces the process-default instance facade with a previous snapshot.
-//
-// Deprecated: use explicit App identity in core paths.
-func Restore(snapshot Snapshot) {
-	InitInstanceInfo(snapshot.AppName, snapshot.Config)
-}
-
-// Namespace returns the namespace of the instance.
-//
-// Deprecated: this reads the process-default instance facade. Core runtime code
-// should use explicit App identity instead.
-func Namespace() string {
-	return current().Namespace()
-}
-
-// Name returns the name of the instance.
-//
-// Deprecated: this reads the process-default instance facade. Core runtime code
-// should use explicit App identity instead.
-func Name() string {
-	return current().Name()
-}
-
-// Version returns the version of the instance.
-//
-// Deprecated: this reads the process-default instance facade. Core runtime code
-// should use explicit App identity instead.
-func Version() string {
-	return current().Version()
-}
-
-// Region returns the region of the instance.
-//
-// Deprecated: this reads the process-default instance facade. Core runtime code
-// should use explicit App identity instead.
-func Region() string {
-	return current().Region()
-}
-
-// Zone returns the zone of the instance.
-//
-// Deprecated: this reads the process-default instance facade. Core runtime code
-// should use explicit App identity instead.
-func Zone() string {
-	return current().Zone()
-}
-
-// Campus returns the campus of the instance.
-//
-// Deprecated: this reads the process-default instance facade. Core runtime code
-// should use explicit App identity instead.
-func Campus() string {
-	return current().Campus()
-}
-
-// Metadata returns the metadata of the instance.
-//
-// Deprecated: this reads the process-default instance facade. Core runtime code
-// should use explicit App identity instead.
-func Metadata() map[string]string {
-	return current().Metadata()
+// RestoreProcessDefault restores process-default instance information.
+func RestoreProcessDefault(snapshot Snapshot) {
+	InstallProcessDefault(snapshot.AppName, snapshot.Config)
 }
 
 type instance struct {

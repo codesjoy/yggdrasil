@@ -257,34 +257,6 @@ func TestWarnOnExposedRoutesWithoutAuth(t *testing.T) {
 	assert.Contains(t, logOutput, "config_patch")
 }
 
-func TestCompatibilityHandleFunc(t *testing.T) {
-	s, err := NewServerWithConfig(Config{}, config.NewManager())
-	require.NoError(t, err)
-	HandleFunc("/compat", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
-	errCh := make(chan error, 1)
-	go func() { errCh <- s.Serve() }()
-	waitCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	require.NoError(t, s.WaitStarted(waitCtx))
-	t.Cleanup(func() {
-		_ = s.Stop()
-		select {
-		case err := <-errCh:
-			assert.NoError(t, err)
-		case <-time.After(2 * time.Second):
-			t.Fatal("governor serve goroutine did not exit")
-		}
-	})
-
-	resp, err := http.Get("http://" + s.Info().Address + "/compat")
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	_ = resp.Body.Close()
-}
-
 func TestWaitStartedReturnsServeError(t *testing.T) {
 	s, err := NewServerWithConfig(Config{Bind: "999.999.999.999"}, config.NewManager())
 	require.NoError(t, err)

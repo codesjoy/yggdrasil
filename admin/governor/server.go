@@ -93,7 +93,6 @@ func NewServerWithConfig(cfg Config, manager *config.Manager) (*Server, error) {
 		Attr:    map[string]string{},
 	})
 	s.installDefaultRoutes()
-	setCompatServer(s)
 	return s, nil
 }
 

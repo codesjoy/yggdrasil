@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/codesjoy/yggdrasil/v3/config"
 )
 
 const (
@@ -139,8 +137,3 @@ func normalizeGovernorBind(bind, host string) string {
 		return next
 	}
 }
-
-// Configure is deprecated and no longer used by framework runtime.
-//
-// Deprecated: use NewServerWithConfig instead.
-func Configure(_ Config, _ *config.Manager) {}

@@ -99,14 +99,13 @@ func telemetryConfig(namespace string) map[string]any {
 	return cfg
 }
 
-//nolint:staticcheck // This test intentionally verifies deprecated process-default facade isolation.
 func TestAppLocalRuntimeDoesNotMutateProcessGlobals(t *testing.T) {
 	oldLogger := slog.Default()
 	oldTracer := otel.GetTracerProvider()
 	oldMeter := otel.GetMeterProvider()
 	oldPropagator := otel.GetTextMapPropagator()
 	oldRemote := remotelog.Logger()
-	oldInstance := instance.Current()
+	oldInstance := instance.ProcessDefaultSnapshot()
 
 	tracerA := tracenoop.NewTracerProvider()
 	meterA := metricnoop.NewMeterProvider()
@@ -138,7 +137,7 @@ func TestAppLocalRuntimeDoesNotMutateProcessGlobals(t *testing.T) {
 	assert.Same(t, oldMeter, otel.GetMeterProvider())
 	assert.Same(t, oldPropagator, otel.GetTextMapPropagator())
 	assert.Same(t, oldRemote, remotelog.Logger())
-	assert.Equal(t, oldInstance, instance.Current())
+	assert.Equal(t, oldInstance, instance.ProcessDefaultSnapshot())
 
 	rtA := appA.Runtime()
 	rtB := appB.Runtime()
@@ -205,7 +204,6 @@ func TestProcessDefaultsLeaseConflictDoesNotStopLosingApp(t *testing.T) {
 	require.NoError(t, appB.Prepare(context.Background()))
 }
 
-//nolint:staticcheck // This test intentionally verifies deprecated process-default facade restoration.
 func TestProcessDefaultsRestoreGlobalsAndReleaseGuardOnShutdownError(t *testing.T) {
 	oldLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	oldTracer := tracenoop.NewTracerProvider()
@@ -225,14 +223,14 @@ func TestProcessDefaultsRestoreGlobalsAndReleaseGuardOnShutdownError(t *testing.
 	prevMeter := otel.GetMeterProvider()
 	prevPropagator := otel.GetTextMapPropagator()
 	prevRemote := remotelog.Logger()
-	prevInstance := instance.Current()
+	prevInstance := instance.ProcessDefaultSnapshot()
 	t.Cleanup(func() {
 		slog.SetDefault(prevLogger)
 		otel.SetTracerProvider(prevTracer)
 		otel.SetMeterProvider(prevMeter)
 		otel.SetTextMapPropagator(prevPropagator)
 		remotelog.SetLogger(prevRemote)
-		instance.Restore(prevInstance)
+		instance.RestoreProcessDefault(prevInstance)
 	})
 
 	slog.SetDefault(oldLogger)
@@ -240,7 +238,7 @@ func TestProcessDefaultsRestoreGlobalsAndReleaseGuardOnShutdownError(t *testing.
 	otel.SetMeterProvider(oldMeter)
 	otel.SetTextMapPropagator(oldPropagator)
 	remotelog.SetLogger(oldRemote)
-	instance.Restore(oldInstance)
+	instance.RestoreProcessDefault(oldInstance)
 
 	var tracerShutdowns int32
 	tracerErr := errors.New("shutdown tracer")
@@ -261,7 +259,7 @@ func TestProcessDefaultsRestoreGlobalsAndReleaseGuardOnShutdownError(t *testing.
 
 	require.NoError(t, app.Prepare(context.Background()))
 	require.NotSame(t, oldLogger, slog.Default())
-	assert.Equal(t, "process-restore", instance.Name())
+	assert.Equal(t, "process-restore", instance.ProcessDefaultSnapshot().AppName)
 
 	err := app.Stop(context.Background())
 	require.ErrorIs(t, err, tracerErr)
@@ -271,7 +269,7 @@ func TestProcessDefaultsRestoreGlobalsAndReleaseGuardOnShutdownError(t *testing.
 	assert.Equal(t, oldMeter, otel.GetMeterProvider())
 	assert.Equal(t, oldPropagator, otel.GetTextMapPropagator())
 	assert.Same(t, oldRemote, remotelog.Logger())
-	assert.Equal(t, oldInstance, instance.Current())
+	assert.Equal(t, oldInstance, instance.ProcessDefaultSnapshot())
 
 	next, _ := newTestAppWithConfig(
 		t,

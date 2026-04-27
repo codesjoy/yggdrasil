@@ -20,8 +20,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestInitInstanceInfoAndGetters(t *testing.T) {
-	InitInstanceInfo("demo-app", Config{
+func TestInstallProcessDefaultAndSnapshot(t *testing.T) {
+	prev := ProcessDefaultSnapshot()
+	t.Cleanup(func() {
+		RestoreProcessDefault(prev)
+	})
+
+	InstallProcessDefault("demo-app", Config{
 		Namespace: "ns-a",
 		Version:   "1.2.3",
 		Campus:    "campus-a",
@@ -30,27 +35,33 @@ func TestInitInstanceInfoAndGetters(t *testing.T) {
 		Metadata:  nil,
 	})
 
-	require.Equal(t, "ns-a", Namespace())
-	require.Equal(t, "demo-app", Name())
-	require.Equal(t, "1.2.3", Version())
-	require.Equal(t, "region-a", Region())
-	require.Equal(t, "zone-a", Zone())
-	require.Equal(t, "campus-a", Campus())
-	require.Empty(t, Metadata())
+	snapshot := ProcessDefaultSnapshot()
+	require.Equal(t, "demo-app", snapshot.AppName)
+	require.Equal(t, "ns-a", snapshot.Config.Namespace)
+	require.Equal(t, "1.2.3", snapshot.Config.Version)
+	require.Equal(t, "region-a", snapshot.Config.Region)
+	require.Equal(t, "zone-a", snapshot.Config.Zone)
+	require.Equal(t, "campus-a", snapshot.Config.Campus)
+	require.Empty(t, snapshot.Config.Metadata)
 }
 
 func TestMetadataReturnsCopyAndAddMetadata(t *testing.T) {
-	InitInstanceInfo("demo-app", Config{
+	prev := ProcessDefaultSnapshot()
+	t.Cleanup(func() {
+		RestoreProcessDefault(prev)
+	})
+
+	InstallProcessDefault("demo-app", Config{
 		Metadata: map[string]string{
 			"env": "test",
 		},
 	})
 
-	md := Metadata()
+	md := ProcessDefaultSnapshot().Config.Metadata
 	md["env"] = "changed"
 
-	require.Equal(t, "test", Metadata()["env"])
+	require.Equal(t, "test", ProcessDefaultSnapshot().Config.Metadata["env"])
 	require.True(t, global.AddMetadata("new", "1"))
 	require.False(t, global.AddMetadata("new", "2"))
-	require.Equal(t, "1", Metadata()["new"])
+	require.Equal(t, "1", ProcessDefaultSnapshot().Config.Metadata["new"])
 }

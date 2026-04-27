@@ -16,40 +16,8 @@
 package governor
 
 import (
-	"log/slog"
-	"net/http"
 	"net/http/pprof"
-	"sync"
 )
-
-var (
-	compatMu     sync.RWMutex
-	compatServer *Server
-)
-
-func setCompatServer(server *Server) {
-	compatMu.Lock()
-	defer compatMu.Unlock()
-	compatServer = server
-}
-
-// HandleFunc registers a new route with the default compatibility server.
-//
-// Deprecated: use (*Server).HandleFunc instead.
-func HandleFunc(pattern string, handler http.HandlerFunc) {
-	compatMu.RLock()
-	server := compatServer
-	compatMu.RUnlock()
-	if server == nil {
-		slog.Warn(
-			"governor compatibility HandleFunc ignored because no default server exists",
-			"pattern",
-			pattern,
-		)
-		return
-	}
-	server.HandleFunc(pattern, handler)
-}
 
 func (s *Server) installPprofRoutes() {
 	s.HandleFunc("/debug/pprof/", pprof.Index)

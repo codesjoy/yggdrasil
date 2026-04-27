@@ -66,7 +66,7 @@ func acquireProcessDefaultsLease(app *App) (*processDefaultsLease, error) {
 		oldMeter:      otel.GetMeterProvider(),
 		oldPropagator: otel.GetTextMapPropagator(),
 		oldRemote:     remotelog.Logger(),
-		oldInstance:   instance.Current(), //nolint:staticcheck // Process-default compatibility boundary.
+		oldInstance:   instance.ProcessDefaultSnapshot(),
 	}
 	processDefaultsOwner = app
 	if app != nil {
@@ -101,8 +101,7 @@ func (lease *processDefaultsLease) install(snapshot *Snapshot) {
 	}
 	if !snapshot.Identity.isZero() {
 		identity := snapshot.Identity.internal()
-		//nolint:staticcheck // Process-default compatibility boundary.
-		instance.InitInstanceInfo(identity.AppName, identity.InstanceConfig())
+		instance.InstallProcessDefault(identity.AppName, identity.InstanceConfig())
 	}
 	lease.installed = true
 }
@@ -143,8 +142,7 @@ func (lease *processDefaultsLease) release(context.Context) error {
 		if oldRemote != nil {
 			remotelog.SetLogger(oldRemote)
 		}
-		//nolint:staticcheck // Process-default compatibility boundary.
-		instance.Restore(oldInstance)
+		instance.RestoreProcessDefault(oldInstance)
 	}
 
 	processDefaultsMu.Lock()
