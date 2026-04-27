@@ -54,11 +54,11 @@ linters:
         linters:
           - revive
         text: "unused-parameter:"
-      - path: example/
+      - path: examples/
         linters:
           - revive
         text: "unused-parameter:"
-      - path: example/
+      - path: examples/
         linters:
           - errcheck
           - noctx
