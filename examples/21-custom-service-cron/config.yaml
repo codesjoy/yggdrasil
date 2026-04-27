@@ -1,0 +1,22 @@
+yggdrasil:
+  app:
+    name: "github.com.codesjoy.yggdrasil.example.21-custom-service-cron"
+  mode: dev
+
+  server:
+    transports:
+      - "grpc"
+
+  transports:
+    grpc:
+      server:
+        address: "127.0.0.1:56023"
+
+  admin:
+    governor:
+      port: 56024
+
+app:
+  custom_cron:
+    schedule: "@every 5s"
+    job_label: "cron-heartbeat"
