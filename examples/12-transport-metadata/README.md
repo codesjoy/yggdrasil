@@ -1,40 +1,40 @@
 # 12 Transport Metadata
 
-## 体现的框架能力
+## Framework capabilities demonstrated
 
-- 展示请求 metadata、响应 header、响应 trailer 在 Yggdrasil transport 层的传递方式。
-- 同时覆盖 unary 和 streaming 场景，让读者看到 metadata 行为如何附着在同一个 `RPCBinding` 上。
-- 保持示例重点在 transport context，而不是业务逻辑本身。
+- Show how request metadata, response headers, and response trailers flow through the Yggdrasil transport layer.
+- Cover both unary and streaming scenarios.
+- Keep the focus on transport context rather than business logic.
 
-## 启动方式
+## How to run
 
-服务端：
+Server:
 
 ```bash
-cd /Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/12-transport-metadata/server
+cd examples/12-transport-metadata/server
 go run .
 ```
 
-客户端：
+Client:
 
 ```bash
-cd /Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/12-transport-metadata/client
+cd examples/12-transport-metadata/client
 go run .
 ```
 
-## 观察点
+## What to observe
 
-- 服务端默认走 root `yggdrasil.Run(...)`；metadata 行为的正式安装边界仍然是 `server/business/compose.go`。
-- 客户端使用独立 `app.New(...)->NewClient(...)` bootstrap，然后在每次调用里显式读写 metadata context。
-- 这个例子最适合和 [11-rpc-streaming](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/11-rpc-streaming) 对照着看：两者共用同一套流式装配模型，只是关注点不同。
+- The server defaults to root `yggdrasil.Run(...)`; metadata behavior is installed through `server/business/compose.go`.
+- The client uses standalone `app.New(...)->NewClient(...)` bootstrap, then explicitly reads and writes metadata context in calls.
+- This example is best read alongside [11 RPC Streaming](../11-rpc-streaming/README.md).
 
-## 关键源码入口
+## Key source entry points
 
-- 生命周期入口：[server/main.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/12-transport-metadata/server/main.go)
-- bundle 组合：[server/business/compose.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/12-transport-metadata/server/business/compose.go)
-- 客户端入口：[client/main.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/12-transport-metadata/client/main.go)
+- Lifecycle entry: [server/main.go](server/main.go)
+- Bundle composition: [server/business/compose.go](server/business/compose.go)
+- Client entry: [client/main.go](client/main.go)
 
-## 下一步看什么
+## What to read next
 
-- 如果你关注 transport 行为之外的错误语义，看 [13-error-reason](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/13-error-reason)。
-- 如果你关注 `RESTBinding` 暴露出来的结构化接口，看 [10-rest-gateway](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/10-rest-gateway)。
+- For error semantics beyond transport behavior, read [13 Error Reason](../13-error-reason/README.md).
+- For the structured REST surface exposed by `RESTBinding`, read [10 REST Gateway](../10-rest-gateway/README.md).

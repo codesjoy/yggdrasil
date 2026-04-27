@@ -1,3 +1,10 @@
+---
+status: Design Baseline
+applies_to: Yggdrasil v3
+document_type: architecture documentation
+last_reviewed: TBD
+---
+
 # 05. Configuration, Declarative Assembly, and Hot Reload
 
 > This document describes Yggdrasil's layered configuration model, declarative assembly planner, spec diffing, and staged hot reload semantics.

@@ -1,3 +1,10 @@
+---
+status: Stable
+applies_to: Yggdrasil v3
+document_type: architecture documentation
+last_reviewed: TBD
+---
+
 # 02. 模块中心 Hub 与 Capability 模型
 
 
@@ -108,9 +115,18 @@ func (m *myModule) Stop(ctx context.Context) error {
 
 Reload 使用两阶段协议：
 
-```text
-idle -> preparing -> committing -> idle
-              \-> rollback -> degraded
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Preparing: 触发 Reload
+    Preparing --> Committing: 全部 PrepareReload 成功
+    Preparing --> Rollback: prepare 失败
+    Rollback --> Idle: rollback 成功
+    Rollback --> Degraded: rollback 失败
+    Committing --> Idle: 全部 Commit 成功
+    Committing --> Rollback: commit 失败
+    Committing --> Degraded: rollback 失败
+    Degraded --> [*]: 需要外部重启
 ```
 
 - Prepare 阶段：所有受影响模块先准备新状态。

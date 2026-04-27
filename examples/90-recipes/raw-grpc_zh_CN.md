@@ -1,8 +1,8 @@
 # Raw gRPC Recipe
 
-This is a transport-level recipe, not the recommended bootstrap path for the main examples. To understand the `App -> Runtime -> BusinessBundle` mainline first, read [02 Runtime Bundle](../02-runtime-bundle/README.md). For provider-only extension, compare with [20 Capability Registration](../20-capability-registration/README.md).
+这是一个 transport-level recipe，不是 examples 主线里的 bootstrap 推荐路径。先理解 `App -> Runtime -> BusinessBundle` 主线时，优先阅读 [02-runtime-bundle](../02-runtime-bundle/README_zh_CN.md)；如果你在看 provider-only 扩展，再对照 [20-capability-registration](../20-capability-registration/README_zh_CN.md)。
 
-When you need to send and receive `[]byte` directly over the gRPC transport, use the `raw` content subtype through a per-call codec.
+当你需要在 gRPC transport 上直接收发 `[]byte`，可以通过 per-call codec 走 `raw` content subtype。
 
 ## Client
 
@@ -45,6 +45,6 @@ func handleRaw(ss remote.ServerStream) {
 
 ## Notes
 
-- The content type is `application/grpc+raw`.
-- Payloads do not go through protobuf encoding/decoding.
-- Existing gRPC transport compression and connection management are still reused.
+- content type 是 `application/grpc+raw`
+- payload 不经过 protobuf 编解码
+- 仍然可以复用现有 gRPC transport 的压缩与连接管理

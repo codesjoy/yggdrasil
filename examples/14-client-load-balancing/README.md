@@ -1,50 +1,50 @@
 # 14 Client Load Balancing
 
-## 体现的框架能力
+## Framework capabilities demonstrated
 
-- 展示一个 client service target 对应多个 endpoint 时的请求分发行为。
-- 展示 direct endpoint 配置如何进入 client runtime，而不是依赖额外的服务发现系统。
-- 展示同一个 `RPCBinding` 安装结果如何被多个后端实例共同承载。
+- Show request distribution when one client service target maps to multiple endpoints.
+- Show how direct endpoint configuration enters client runtime without an additional service discovery system.
+- Show that multiple backend instances can serve the same `RPCBinding` installation result.
 
-## 启动方式
+## How to run
 
-三个服务端分别运行：
+Run three servers:
 
 ```bash
-cd /Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/14-client-load-balancing/server
+cd examples/14-client-load-balancing/server
 go run . --port 55884
 ```
 
 ```bash
-cd /Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/14-client-load-balancing/server
+cd examples/14-client-load-balancing/server
 go run . --port 55885
 ```
 
 ```bash
-cd /Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/14-client-load-balancing/server
+cd examples/14-client-load-balancing/server
 go run . --port 55886
 ```
 
-客户端：
+Run the client:
 
 ```bash
-cd /Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/14-client-load-balancing/client
+cd examples/14-client-load-balancing/client
 go run .
 ```
 
-## 观察点
+## What to observe
 
-- [client/config.yaml](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/14-client-load-balancing/client/config.yaml) 在一个 service target 下配置了三个 endpoint，这是这个例子真正要证明的 client runtime 行为。
-- [server/config.yaml](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/14-client-load-balancing/server/config.yaml) 只描述基础 server 形态；`server/main.go` 再通过 `--port` 驱动的 config override 覆盖实际 grpc listen address。
-- `client/main.go` 使用独立 `app.New(...)->NewClient(...)` bootstrap，并通过 trailer 中的 `server` 字段观察请求最终落到哪个后端实例。
+- `client/config.yaml` configures three endpoints under one service target. This is the key client runtime behavior demonstrated by the example.
+- `server/config.yaml` describes the base server shape; `server/main.go` uses the `--port` config override to set the actual gRPC listen address.
+- `client/main.go` uses standalone `app.New(...)->NewClient(...)` bootstrap and observes the selected backend through the `server` trailer field.
 
-## 关键源码入口
+## Key source entry points
 
-- 生命周期入口：[server/main.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/14-client-load-balancing/server/main.go)
-- bundle 组合：[server/business/compose.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/14-client-load-balancing/server/business/compose.go)
-- client endpoint 配置：[client/config.yaml](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/14-client-load-balancing/client/config.yaml)
+- Lifecycle entry: [server/main.go](server/main.go)
+- Bundle composition: [server/business/compose.go](server/business/compose.go)
+- Client endpoint config: [client/config.yaml](client/config.yaml)
 
-## 下一步看什么
+## What to read next
 
-- 如果你先想理解 client service target 是怎样被 canonical mainline app 使用的，回看 [01-quickstart](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/01-quickstart)。
-- 如果你想继续看 provider-only 扩展如何进入 planner/runtime，读 [20-capability-registration](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/20-capability-registration)。
+- For the basic client service target path, revisit [01 Quickstart](../01-quickstart/README.md).
+- To see provider-only extension entering planner/runtime, read [20 Capability Registration](../20-capability-registration/README.md).

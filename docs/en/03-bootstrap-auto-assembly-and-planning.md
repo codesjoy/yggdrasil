@@ -1,3 +1,10 @@
+---
+status: Design Baseline
+applies_to: Yggdrasil v3
+document_type: architecture documentation
+last_reviewed: TBD
+---
+
 # 03. Bootstrap, Auto Assembly, and Planning
 
 > This document describes the Bootstrap / Auto Assembly / Compose / Install layer built on top of the Yggdrasil v3 modular kernel.

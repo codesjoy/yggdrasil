@@ -300,6 +300,7 @@ Changes that affect the business graph, module set, or non-reloadable modules ar
 ### English
 
 - [Documentation index](docs/en/README.md)
+- [Glossary](docs/en/00-glossary.md)
 - [Architecture Overview and Design Principles](docs/en/01-architecture-overview-and-design-principles.md)
 - [Module Hub and Capability Model](docs/en/02-module-hub-and-capability-model.md)
 - [Bootstrap, Auto Assembly, and Planning](docs/en/03-bootstrap-auto-assembly-and-planning.md)
@@ -307,6 +308,7 @@ Changes that affect the business graph, module set, or non-reloadable modules ar
 - [Configuration, Declarative Assembly, and Hot Reload](docs/en/05-configuration-declarative-assembly-and-hot-reload.md)
 - [Transport, Service Discovery, and Observability](docs/en/06-transport-discovery-and-observability.md)
 - [Developer Practices and Extension Guide](docs/en/07-developer-practices-and-extension-guide.md)
+- [Implementation Boundaries and Optimization Notes](docs/en/08-implementation-boundaries-and-optimization-notes.md)
 
 ### Chinese
 

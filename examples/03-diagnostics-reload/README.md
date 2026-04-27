@@ -1,19 +1,19 @@
 # 03 Diagnostics Reload
 
-## 体现的框架能力
+## Framework capabilities demonstrated
 
-- 使用 watchable config source 触发自动 reload，而不是手工重启示例。
-- 通过 governor 的 `/diagnostics` 和 `/module-hub` 观察 `AssemblySpec`、plan hash、spec diff 和 reload 错误。
-- 用一个最小示例演示业务 bundle 已安装时，配置变化为什么会被分类成 `restart-required`。
+- Use a watchable config source to trigger reload automatically instead of manually restarting the example.
+- Use governor `/diagnostics` and `/module-hub` to observe `AssemblySpec`, plan hash, spec diff, and reload errors.
+- Demonstrate why config changes can be classified as `restart-required` when a business bundle is already installed.
 
-## 启动方式
+## How to run
 
 ```bash
-cd /Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/03-diagnostics-reload
+cd examples/03-diagnostics-reload
 go run .
 ```
 
-触发一次可观察的 reload：
+Trigger one observable reload:
 
 ```bash
 perl -0pi -e 's/mode: dev/mode: prod-grpc/' reload.yaml
@@ -21,19 +21,19 @@ curl http://127.0.0.1:56032/diagnostics?pretty=true
 curl http://127.0.0.1:56032/module-hub?pretty=true
 ```
 
-## 观察点
+## What to observe
 
-- `main.go` 仍走 root `yggdrasil.Run(...)`，只是额外通过 `yggdrasil.WithConfigSource(...)` 注入了可 watch 的 `reload.yaml`。
-- `config.yaml` 是基础配置，`reload.yaml` 作为附加 layer 加载并 watch。
-- 当 `reload.yaml` 把 `mode` 从 `dev` 改到 `prod-grpc` 时，framework 会重新规划 assembly，并在 diagnostics 中记录新的 spec hash 与 diff。
+- `main.go` still uses root `yggdrasil.Run(...)`, with a watchable `reload.yaml` injected through `yggdrasil.WithConfigSource(...)`.
+- `config.yaml` is the base configuration; `reload.yaml` is loaded and watched as an additional layer.
+- When `reload.yaml` changes `mode` from `dev` to `prod-grpc`, the framework replans the assembly and records the new spec hash and diff in diagnostics.
 
-## 关键源码入口
+## Key source entry points
 
-- 生命周期入口：[main.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/03-diagnostics-reload/main.go)
-- 业务组合：[business/compose.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/03-diagnostics-reload/business/compose.go)
-- reload smoke test：[smoke_test.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/03-diagnostics-reload/smoke_test.go)
+- Lifecycle entry: [main.go](main.go)
+- Business composition: [business/compose.go](business/compose.go)
+- Reload smoke test: [smoke_test.go](smoke_test.go)
 
-## 下一步看什么
+## What to read next
 
-- 如果你要看更聚焦的 REST 行为，读 [10-rest-gateway](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/10-rest-gateway)。
-- 如果你要看 capability provider-only 扩展，读 [20-capability-registration](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/20-capability-registration)。
+- For focused REST behavior, read [10 REST Gateway](../10-rest-gateway/README.md).
+- For provider-only capability extension, read [20 Capability Registration](../20-capability-registration/README.md).

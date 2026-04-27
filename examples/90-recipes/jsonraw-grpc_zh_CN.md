@@ -1,8 +1,8 @@
 # JSON Raw gRPC Recipe
 
-This is a transport-level recipe, not the recommended bootstrap path for the main examples. Read [02 Runtime Bundle](../02-runtime-bundle/README.md) first. For custom provider integration, compare with [20 Capability Registration](../20-capability-registration/README.md).
+这是一个 transport-level recipe，不是 examples 主线里的 bootstrap 推荐路径。要先把当前框架模型看清楚，优先读 [02-runtime-bundle](../02-runtime-bundle/README_zh_CN.md)；如果你在看自定义 provider 接入，再对照 [20-capability-registration](../20-capability-registration/README_zh_CN.md)。
 
-Use the `jsonraw` content subtype when the payload should remain JSON text bytes and the transport layer should not perform structured JSON decoding.
+当你希望 payload 仍然是 JSON 文本字节，但 transport 层不做结构化 JSON 解码时，可以使用 `jsonraw` content subtype。
 
 ## Client
 
@@ -45,6 +45,6 @@ func handleJSONRaw(ss remote.ServerStream) {
 
 ## Notes
 
-- The content type is `application/grpc+jsonraw`.
-- Payloads are treated as JSON text bytes, but the framework does not validate JSON syntax.
-- Generated proto code and the default protobuf call path are unaffected.
+- content type 是 `application/grpc+jsonraw`
+- payload 被视为 JSON 文本字节，但框架不校验 JSON 合法性
+- proto 生成代码和默认 protobuf 调用方式不受影响

@@ -1,3 +1,10 @@
+---
+status: Design Baseline
+applies_to: Yggdrasil v3
+document_type: architecture documentation
+last_reviewed: TBD
+---
+
 # 03. Bootstrap 自动装配与规划系统
 
 
@@ -8,7 +15,7 @@
 
 ## 1. 背景
 
-Yggdrasil 的模块化内核非常严格，但日常业务接入如果完全手工选择模块、provider、capability 默认实现和 interceptor 链，会带来较高使用成本。因此 v1.2.2 设计在内核之上增加 Bootstrap / Auto Assembly / Compose / Install 层。
+Yggdrasil 的模块化内核非常严格，但日常业务接入如果完全手工选择模块、provider、capability 默认实现和 interceptor 链，会带来较高使用成本。因此，Yggdrasil v3 在内核之上提供 Bootstrap / Auto Assembly / Compose / Install 层。
 
 这层的目标不是削弱显式内核，而是把常见配置驱动场景编译成一个显式、可解释、可比较、可 hash 的计划。
 
@@ -109,15 +116,15 @@ type AutoRule interface {
 
 ## 5. 自动装配流水线
 
-```text
-resolveMode
-  -> resolveModules
-  -> collectProviders
-  -> resolveDefaults
-  -> resolveChains
-  -> buildEffectiveResolved
-  -> compileCapabilityBindings
-  -> validateBindings
+```mermaid
+flowchart LR
+    A["resolveMode"] --> B["resolveModules"]
+    B --> C["collectProviders"]
+    C --> D["resolveDefaults"]
+    D --> E["resolveChains"]
+    E --> F["buildEffectiveResolved"]
+    F --> G["compileCapabilityBindings"]
+    G --> H["validateBindings"]
 ```
 
 说明：

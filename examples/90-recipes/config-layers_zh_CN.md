@@ -1,10 +1,10 @@
 # Config Layers Recipe
 
-## When to use
+## 何时使用
 
-Use this recipe when you want to demonstrate configuration layers, typed sections, and watchable sources without maintaining a full runnable app.
+当你只想演示配置分层、typed section、watchable source，而不想再维护一个完整 runnable app 时，用这个 recipe 即可。
 
-## Core pattern
+## 核心模式
 
 ```go
 manager := config.NewManager()
@@ -34,9 +34,9 @@ var cfg AppConfig
 _ = manager.Section("app").Decode(&cfg)
 ```
 
-## Watchable overlay
+## Watchable Overlay
 
-If the source supports watching, load it as a higher-priority layer:
+如果 source 自己支持 watch，可以直接把它作为高优先级 layer：
 
 ```go
 _ = manager.LoadLayer(
@@ -46,7 +46,7 @@ _ = manager.LoadLayer(
 )
 ```
 
-Then subscribe to a typed section:
+然后再订阅 typed section：
 
 ```go
 cancel := config.Bind[AppConfig](manager, "app").Watch(func(next AppConfig, err error) {
@@ -55,7 +55,7 @@ cancel := config.Bind[AppConfig](manager, "app").Watch(func(next AppConfig, err 
 defer cancel()
 ```
 
-## Related examples
+## 相关示例
 
-- [02 Runtime Bundle](../02-runtime-bundle/README.md)
-- [03 Diagnostics Reload](../03-diagnostics-reload/README.md)
+- [02-runtime-bundle](../02-runtime-bundle/README_zh_CN.md)
+- [03-diagnostics-reload](../03-diagnostics-reload/README_zh_CN.md)

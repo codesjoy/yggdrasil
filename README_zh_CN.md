@@ -300,6 +300,7 @@ stateDiagram-v2
 ### 中文
 
 - [中文文档索引](docs/zh_CN/README.md)
+- [术语表](docs/zh_CN/00-术语表.md)
 - [架构总览与设计原则](docs/zh_CN/01-架构总览与设计原则.md)
 - [模块中心 Hub 与 Capability 模型](docs/zh_CN/02-模块中心Hub与Capability模型.md)
 - [Bootstrap 自动装配与规划系统](docs/zh_CN/03-Bootstrap自动装配与规划系统.md)
@@ -307,6 +308,7 @@ stateDiagram-v2
 - [配置、声明式装配与热重载](docs/zh_CN/05-配置声明式装配与热重载.md)
 - [传输、服务发现与可观测性](docs/zh_CN/06-传输服务发现与可观测性.md)
 - [开发者实践与扩展指南](docs/zh_CN/07-开发者实践与扩展指南.md)
+- [实施边界与优化补充](docs/zh_CN/08-实施边界与优化补充.md)
 
 ### English
 
@@ -314,11 +316,11 @@ stateDiagram-v2
 
 ### 示例与参考
 
-- [可运行示例](examples/README.md)
+- [可运行示例](examples/README_zh_CN.md)
 - [Module Hub diagnostics schema](docs/schemas/module-hub-diagnostics.schema.json)
-- [配置分层 recipe](examples/90-recipes/config-layers.md)
-- [Raw gRPC recipe](examples/90-recipes/raw-grpc.md)
-- [JSON raw gRPC recipe](examples/90-recipes/jsonraw-grpc.md)
+- [配置分层 recipe](examples/90-recipes/config-layers_zh_CN.md)
+- [Raw gRPC recipe](examples/90-recipes/raw-grpc_zh_CN.md)
+- [JSON raw gRPC recipe](examples/90-recipes/jsonraw-grpc_zh_CN.md)
 
 ---
 

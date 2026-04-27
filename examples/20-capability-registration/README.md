@@ -1,40 +1,40 @@
 # 20 Capability Registration
 
-## 体现的框架能力
+## Framework capabilities demonstrated
 
-- 展示 provider-only capability registration，而不是完整 `module.Module` 扩展。
-- 展示 `WithCapabilityRegistrations(...)` 如何进入 root server 启动路径，以及 standalone client bootstrap。
-- 展示自定义协议名、配置路径、capability provider 名三者必须对齐，planner/runtime 才能选中这组 provider。
+- Show provider-only capability registration instead of a full `module.Module` extension.
+- Show how `WithCapabilityRegistrations(...)` enters both the root server path and standalone client bootstrap.
+- Show that custom protocol name, config path, and capability provider name must align for the planner/runtime to select the provider.
 
-## 启动方式
+## How to run
 
-服务端：
+Server:
 
 ```bash
-cd /Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/20-capability-registration/server
+cd examples/20-capability-registration/server
 go run .
 ```
 
-客户端：
+Client:
 
 ```bash
-cd /Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/20-capability-registration/client
+cd examples/20-capability-registration/client
 go run .
 ```
 
-## 观察点
+## What to observe
 
-- 服务端走 `yggdrasil.Run(..., yggdrasil.WithCapabilityRegistrations(...))`，这样 registration 会和普通业务 bundle 一起进入当前 root app。
-- 客户端走 `app.New(..., WithCapabilityRegistrations(...))->NewClient(...)`，因为 standalone client bootstrap 仍然属于高级入口。
-- 扩展点只发生在 `grpcx` transport provider 层，业务侧仍然只是普通的 `GreeterService` 安装。
+- The server uses `yggdrasil.Run(..., yggdrasil.WithCapabilityRegistrations(...))`, so the registration enters the current root app together with the business bundle.
+- The client uses `app.New(..., WithCapabilityRegistrations(...))->NewClient(...)`, because standalone client bootstrap is still an advanced entry.
+- The extension point is limited to the `grpcx` transport provider layer; the business side still installs a normal `GreeterService`.
 
-## 关键源码入口
+## Key source entry points
 
-- registration 定义：[grpcx/registration.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/20-capability-registration/grpcx/registration.go)
-- 服务端入口：[server/main.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/20-capability-registration/server/main.go)
-- 客户端入口：[client/main.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/20-capability-registration/client/main.go)
+- Registration definition: [grpcx/registration.go](grpcx/registration.go)
+- Server entry: [server/main.go](server/main.go)
+- Client entry: [client/main.go](client/main.go)
 
-## 下一步看什么
+## What to read next
 
-- 如果你想回到更基础的 `Runtime` / `BusinessBundle` 视角，读 [02-runtime-bundle](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/02-runtime-bundle)。
-- 如果你想看更低层的 transport recipe，而不是完整 app 接入，读 [90-recipes/raw-grpc.md](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/90-recipes/raw-grpc.md) 和 [90-recipes/jsonraw-grpc.md](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/90-recipes/jsonraw-grpc.md)。
+- For the basic `Runtime` / `BusinessBundle` view, read [02 Runtime Bundle](../02-runtime-bundle/README.md).
+- For lower-level transport recipes, read [Raw gRPC](../90-recipes/raw-grpc.md) and [JSON Raw gRPC](../90-recipes/jsonraw-grpc.md).

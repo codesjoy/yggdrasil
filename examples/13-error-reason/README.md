@@ -1,40 +1,40 @@
 # 13 Error Reason
 
-## 体现的框架能力
+## Framework capabilities demonstrated
 
-- 展示基于 proto reason enum 的结构化错误返回与客户端解析。
-- 展示 reason 到 gRPC code / HTTP code 的映射，以及 metadata 如何随错误一起透传。
-- 展示错误语义仍然是业务安装边界的一部分，而不是 transport 之外的附加层。
+- Show structured error responses and client parsing based on proto reason enums.
+- Show reason-to-gRPC-code / HTTP-code mapping and metadata propagation with errors.
+- Show that error semantics remain part of the business installation boundary.
 
-## 启动方式
+## How to run
 
-服务端：
+Server:
 
 ```bash
-cd /Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/13-error-reason/server
+cd examples/13-error-reason/server
 go run .
 ```
 
-客户端：
+Client:
 
 ```bash
-cd /Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/13-error-reason/client
+cd examples/13-error-reason/client
 go run .
 ```
 
-## 观察点
+## What to observe
 
-- 服务端主入口已经收敛到 root `yggdrasil.Run(...)`，而错误语义服务仍然是通过 `BusinessBundle` 正式安装的。
-- 为了把各种错误场景放在一个文件里对照，`server/main.go` 同时保留了 service 实现和 `composeBundle(...)` 入口。
-- 客户端使用独立 `app.New(...)->NewClient(...)` bootstrap，因为这个例子要把注意力集中在 `status.FromError(...)`、`Code()`、`HTTPCode()` 和 `ErrorInfo()` 的读取方式上。
+- The server entry uses root `yggdrasil.Run(...)`; the error semantics service is installed through `BusinessBundle`.
+- `server/main.go` keeps service implementation and `composeBundle(...)` together so error cases are easy to compare.
+- The client uses standalone `app.New(...)->NewClient(...)` bootstrap and focuses on `status.FromError(...)`, `Code()`, `HTTPCode()`, and `ErrorInfo()`.
 
-## 关键源码入口
+## Key source entry points
 
-- 生命周期入口与错误场景：[server/main.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/13-error-reason/server/main.go)
-- bundle 测试：[server/compose_test.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/13-error-reason/server/compose_test.go)
-- 客户端入口：[client/main.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/13-error-reason/client/main.go)
+- Lifecycle entry and error cases: [server/main.go](server/main.go)
+- Bundle test: [server/compose_test.go](server/compose_test.go)
+- Client entry: [client/main.go](client/main.go)
 
-## 下一步看什么
+## What to read next
 
-- 如果你想先看 `BusinessBundle` 的安装边界，再回来看错误语义，读 [02-runtime-bundle](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/02-runtime-bundle)。
-- 如果你想看多 endpoint 调用路径下的 client runtime 行为，读 [14-client-load-balancing](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/14-client-load-balancing)。
+- To review the `BusinessBundle` installation boundary first, read [02 Runtime Bundle](../02-runtime-bundle/README.md).
+- To see client runtime behavior across multiple endpoints, read [14 Client Load Balancing](../14-client-load-balancing/README.md).

@@ -1,3 +1,10 @@
+---
+status: Stable
+applies_to: Yggdrasil v3
+document_type: architecture documentation
+last_reviewed: TBD
+---
+
 # 02. Module Hub and Capability Model
 
 > This document describes the Yggdrasil Module Hub, module lifecycle, dependency ordering, capability model, scope boundary, and diagnostics contract.

@@ -1,40 +1,40 @@
 # 10 REST Gateway
 
-## 体现的框架能力
+## Framework capabilities demonstrated
 
-- 展示 proto 生成的 `RESTBinding` 如何和 `RPCBinding` 一起进入同一个 `BusinessBundle`。
-- 展示 REST route 的正式安装边界仍然是业务 bundle，而不是框架外维护一套路由表。
-- 展示一个“框架外调用者”如何直接验证 bundle 暴露出来的 HTTP/JSON 接口。
+- Show how generated `RESTBinding` enters the same `BusinessBundle` as `RPCBinding`.
+- Show that REST route installation is still a formal business bundle boundary, not a separate route table maintained outside the framework.
+- Use an external HTTP caller to validate the exposed HTTP/JSON interface.
 
-## 启动方式
+## How to run
 
-服务端：
+Server:
 
 ```bash
-cd /Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/10-rest-gateway/server
+cd examples/10-rest-gateway/server
 go run .
 ```
 
-客户端：
+Client:
 
 ```bash
-cd /Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/10-rest-gateway/client
+cd examples/10-rest-gateway/client
 go run .
 ```
 
-## 观察点
+## What to observe
 
-- 服务端主入口已经收敛到 root `yggdrasil.Run(...)`，而 `RESTBinding` 何时安装仍然完全由 `server/business/compose.go` 决定。
-- `server/business/compose.go` 同时返回 `LibraryServiceServiceDesc` 和 `LibraryServiceRestServiceDesc`，这是这个例子的核心边界。
-- `client/main.go` 不是 Yggdrasil client，而是一个普通 HTTP 调用者；它的职责是从框架外确认 REST route、JSON 编解码和状态码是否符合预期。
+- The server entry is centralized on root `yggdrasil.Run(...)`; `RESTBinding` installation is decided by `server/business/compose.go`.
+- `server/business/compose.go` returns both `LibraryServiceServiceDesc` and `LibraryServiceRestServiceDesc`.
+- `client/main.go` is not a Yggdrasil client. It is a plain HTTP caller used to validate route exposure, JSON encoding/decoding, and status codes from outside the framework.
 
-## 关键源码入口
+## Key source entry points
 
-- 生命周期入口：[server/main.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/10-rest-gateway/server/main.go)
-- bundle 组合：[server/business/compose.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/10-rest-gateway/server/business/compose.go)
-- 外部 HTTP 调用者：[client/main.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/10-rest-gateway/client/main.go)
+- Lifecycle entry: [server/main.go](server/main.go)
+- Bundle composition: [server/business/compose.go](server/business/compose.go)
+- External HTTP caller: [client/main.go](client/main.go)
 
-## 下一步看什么
+## What to read next
 
-- 如果你想先理解 `RESTBinding` 只是 `BusinessBundle` 的一个安装面，看 [02-runtime-bundle](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/02-runtime-bundle)。
-- 如果你想继续看 transport 上下文如何在调用链里流动，看 [12-transport-metadata](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/12-transport-metadata)。
+- To understand `RESTBinding` as one installation surface of `BusinessBundle`, read [02 Runtime Bundle](../02-runtime-bundle/README.md).
+- To see transport context propagation in the call path, read [12 Transport Metadata](../12-transport-metadata/README.md).

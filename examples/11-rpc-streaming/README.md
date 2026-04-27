@@ -1,40 +1,40 @@
 # 11 RPC Streaming
 
-## 体现的框架能力
+## Framework capabilities demonstrated
 
-- 展示一个 `RPCBinding` 如何同时承载 unary、client-streaming、server-streaming 和 bidirectional-streaming。
-- 展示流式形态的重点仍然是业务 bundle 安装，而不是额外的 framework entrypoint 差异。
-- 保留最小实现，让读者把注意力放在 Yggdrasil 下的 client/server 装配方式。
+- Show one `RPCBinding` carrying unary, client-streaming, server-streaming, and bidirectional-streaming methods.
+- Show that streaming is still installed through the business bundle, not a separate framework entrypoint.
+- Keep implementation minimal so readers can focus on Yggdrasil client/server assembly.
 
-## 启动方式
+## How to run
 
-服务端：
+Server:
 
 ```bash
-cd /Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/11-rpc-streaming/server
+cd examples/11-rpc-streaming/server
 go run .
 ```
 
-客户端：
+Client:
 
 ```bash
-cd /Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/11-rpc-streaming/client
+cd examples/11-rpc-streaming/client
 go run .
 ```
 
-## 观察点
+## What to observe
 
-- `server/main.go` 已经统一到 root `yggdrasil.Run(...)`，正式安装边界仍然在 `server/business/compose.go`。
-- `client/main.go` 使用独立 `app.New(...)->NewClient(...)` bootstrap，因为 root facade 不负责 standalone client 启动。
-- 配置里的 service target 已切到 `github.com.codesjoy.yggdrasil.example.11-rpc-streaming`，方便和 `12`、`14` 形成连续阅读路径。
+- `server/main.go` uses root `yggdrasil.Run(...)`; the formal installation boundary remains `server/business/compose.go`.
+- `client/main.go` uses standalone `app.New(...)->NewClient(...)` bootstrap because the root facade does not own standalone client startup.
+- The service target aligns with examples 12 and 14 for a continuous reading path.
 
-## 关键源码入口
+## Key source entry points
 
-- 生命周期入口：[server/main.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/11-rpc-streaming/server/main.go)
-- bundle 组合：[server/business/compose.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/11-rpc-streaming/server/business/compose.go)
-- 客户端入口：[client/main.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/11-rpc-streaming/client/main.go)
+- Lifecycle entry: [server/main.go](server/main.go)
+- Bundle composition: [server/business/compose.go](server/business/compose.go)
+- Client entry: [client/main.go](client/main.go)
 
-## 下一步看什么
+## What to read next
 
-- 如果你要看 stream 上下文里的 metadata/header/trailer 怎么传，读 [12-transport-metadata](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/12-transport-metadata)。
-- 如果你要看同一个 client service target 如何跨多个 endpoint 分发，读 [14-client-load-balancing](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/14-client-load-balancing)。
+- To see metadata/header/trailer in stream context, read [12 Transport Metadata](../12-transport-metadata/README.md).
+- To see one client service target distributed across endpoints, read [14 Client Load Balancing](../14-client-load-balancing/README.md).

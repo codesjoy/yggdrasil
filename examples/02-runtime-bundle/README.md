@@ -1,19 +1,19 @@
 # 02 Runtime Bundle
 
-## 体现的框架能力
+## Framework capabilities demonstrated
 
-- 展示 `Runtime` 可安全暴露的能力：`Config()`、`Logger()`、`TracerProvider()`、`MeterProvider()` 和 `Lookup(...)`。
-- 展示 `BusinessBundle` 的安装边界：`RPCBindings`、`RESTBindings`、`RawHTTP`、`Tasks`、`Hooks`、`Diagnostics`。
-- 展示业务代码如何在 `business.Compose(...)` 里读取框架与业务配置，再统一返回一个 bundle。
+- Show the safe `Runtime` surface: `Config()`, `Logger()`, `TracerProvider()`, `MeterProvider()`, and `Lookup(...)`.
+- Show the `BusinessBundle` installation boundary: `RPCBindings`, `RESTBindings`, `RawHTTP`, `Tasks`, `Hooks`, and `Diagnostics`.
+- Show how business code reads framework and business configuration in `business.Compose(...)`, then returns one bundle.
 
-## 启动方式
+## How to run
 
 ```bash
-cd /Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/02-runtime-bundle
+cd examples/02-runtime-bundle
 go run .
 ```
 
-可选观察：
+Optional checks:
 
 ```bash
 curl http://127.0.0.1:56021/healthz
@@ -21,19 +21,19 @@ curl http://127.0.0.1:56021/v1/shelves/runtime-bundle
 curl http://127.0.0.1:56022/diagnostics?pretty=true
 ```
 
-## 观察点
+## What to observe
 
-- `main.go` 只保留 root `yggdrasil.Run(...)`，bundle 组合逻辑全部收敛在 `business.Compose`。
-- `/healthz` 由 `RawHTTPBinding` 提供；`/v1/shelves/runtime-bundle` 由 `RESTBinding` 提供；gRPC 则走 `RPCBinding`。
-- governor 的 `/diagnostics` 会带上 `BusinessBundle.Diagnostics`，便于确认 bundle 安装结果。
+- `main.go` keeps only root `yggdrasil.Run(...)`; bundle composition is centralized in `business.Compose`.
+- `/healthz` comes from `RawHTTPBinding`; `/v1/shelves/runtime-bundle` comes from `RESTBinding`; gRPC comes from `RPCBinding`.
+- Governor `/diagnostics` includes `BusinessBundle.Diagnostics`, which helps confirm the installed bundle.
 
-## 关键源码入口
+## Key source entry points
 
-- 生命周期入口：[main.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/02-runtime-bundle/main.go)
-- bundle 组合：[business/compose.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/02-runtime-bundle/business/compose.go)
-- bundle 测试：[business/compose_test.go](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/02-runtime-bundle/business/compose_test.go)
+- Lifecycle entry: [main.go](main.go)
+- Bundle composition: [business/compose.go](business/compose.go)
+- Bundle test: [business/compose_test.go](business/compose_test.go)
 
-## 下一步看什么
+## What to read next
 
-- 如果你想看 watchable config、reload 和 spec diff 怎么联动，看 [03-diagnostics-reload](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/03-diagnostics-reload)。
-- 如果你想看 REST 专项，而不是 bundle 总览，看 [10-rest-gateway](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/10-rest-gateway)。
+- For watchable config, reload, and spec diff, read [03 Diagnostics Reload](../03-diagnostics-reload/README.md).
+- For a focused REST example, read [10 REST Gateway](../10-rest-gateway/README.md).

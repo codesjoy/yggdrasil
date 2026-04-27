@@ -1,40 +1,37 @@
-# Examples
+# Yggdrasil Examples Documentation
 
-Yggdrasil examples follow a learning path instead of `sample/advanced` buckets.
+This directory contains the English optimized documentation for Yggdrasil v3 examples. Examples follow a learning path instead of simple sample / advanced buckets.
 
-`01-03` are the root-facade onboarding path. Service-side examples default to `yggdrasil.Run(...)`; `app` is kept for standalone client bootstrap or capability-heavy scenarios that need lower-level control.
+## Reading path
 
-## Start Here
+### Onboarding path
 
-1. [01-quickstart](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/01-quickstart): the shortest end-to-end path using root `yggdrasil.Run(...)` plus a standalone `app.New(...)->NewClient(...)` client.
-2. [02-runtime-bundle](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/02-runtime-bundle): the `Runtime` + `BusinessBundle` installation surface behind the root facade.
-3. [03-diagnostics-reload](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/03-diagnostics-reload): watchable config, diagnostics, spec hash/diff, and restart-required reload behavior.
+1. [01 Quickstart](01-quickstart/README.md): the shortest end-to-end path. The server uses `yggdrasil.Run(...)`; the client uses standalone `app.New(...)->NewClient(...)`.
+2. [02 Runtime Bundle](02-runtime-bundle/README.md): understand the `Runtime` and `BusinessBundle` installation surface behind the root facade.
+3. [03 Diagnostics Reload](03-diagnostics-reload/README.md): observe watchable config, diagnostics, spec hash/diff, and restart-required reload behavior.
 
-## Feature Examples
+### Feature examples
 
-- [10-rest-gateway](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/10-rest-gateway): generated `RESTBinding` installation via the root facade, plus an external HTTP caller that validates the exposed REST surface.
-- [11-rpc-streaming](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/11-rpc-streaming): unary and streaming RPC shapes with a root-facade server and a standalone client bootstrap.
-- [12-transport-metadata](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/12-transport-metadata): transport metadata propagation, header/trailer observation, and stream metadata handling.
-- [13-error-reason](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/13-error-reason): structured reason/status mapping and client-side parsing.
-- [14-client-load-balancing](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/14-client-load-balancing): client-side endpoint selection and request distribution over split server/client config.
+- [10 REST Gateway](10-rest-gateway/README.md): install HTTP/JSON APIs through `RESTBinding`.
+- [11 RPC Streaming](11-rpc-streaming/README.md): unary, client-streaming, server-streaming, and bidirectional-streaming.
+- [12 Transport Metadata](12-transport-metadata/README.md): metadata, headers, and trailers.
+- [13 Error Reason](13-error-reason/README.md): structured reason, gRPC code, HTTP code, and metadata.
+- [14 Client Load Balancing](14-client-load-balancing/README.md): distribute requests from one service target to multiple endpoints.
 
-## Extension Example
+### Extension examples
 
-- [20-capability-registration](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/20-capability-registration): `WithCapabilityRegistrations(...)` on the root server path plus the same registration on a standalone client bootstrap.
+- [20 Capability Registration](20-capability-registration/README.md): provider-only capability registration.
+- [21 Custom Service Cron](21-custom-service-cron/README.md): custom business-side `BusinessInstallable` for a third-party background scheduler.
 
-## Recipes
+### Recipes
 
-- [90-recipes/config-layers.md](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/90-recipes/config-layers.md)
-- [90-recipes/raw-grpc.md](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/90-recipes/raw-grpc.md)
-- [90-recipes/jsonraw-grpc.md](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/examples/90-recipes/jsonraw-grpc.md)
+- [Config Layers Recipe](90-recipes/config-layers.md): config layering, typed sections, and watchable overlays.
+- [Raw gRPC Recipe](90-recipes/raw-grpc.md): send and receive `[]byte` directly with the `raw` content subtype.
+- [JSON Raw gRPC Recipe](90-recipes/jsonraw-grpc.md): pass JSON text bytes with the `jsonraw` content subtype.
 
-## Shared Assets
+## Documentation conventions
 
-- `examples/proto`: shared protobuf sources.
-- `examples/protogen`: generated Go code imported by the runnable examples.
-- `examples/go.mod`: the standalone module used to compile and run all examples.
-
-## Related Docs
-
-- [README.md](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/README.md)
-- [README_zh_CN.md](/Users/zhangwei/go/src/github.com/codesjoy/yggdrasil/README_zh_CN.md)
+- Server-side examples prefer root `yggdrasil.Run(...)`.
+- Standalone clients, provider-heavy scenarios, or lower-level control paths use `app.New(...)`.
+- The formal business installation boundary is always `BusinessBundle`.
+- All links use repository-relative paths instead of local absolute paths.

@@ -1,3 +1,10 @@
+---
+status: Design Baseline
+applies_to: Yggdrasil v3
+document_type: architecture documentation
+last_reviewed: TBD
+---
+
 # 06. Transport, Service Discovery, and Observability
 
 > This document describes the protocol-agnostic transport model, REST gateway, security profiles, registry, resolver, balancer, interceptors, middleware, and observability integration.

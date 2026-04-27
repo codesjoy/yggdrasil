@@ -1,3 +1,10 @@
+---
+status: Design Baseline
+applies_to: Yggdrasil v3
+document_type: architecture documentation
+last_reviewed: TBD
+---
+
 # 04. Application Lifecycle and Business Composition
 
 > This document describes the App lifecycle, Runtime surface, BusinessBundle model, installation flow, and graceful shutdown semantics.

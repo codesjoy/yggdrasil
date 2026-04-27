@@ -1,3 +1,10 @@
+---
+status: Guide
+applies_to: Yggdrasil v3
+document_type: architecture documentation
+last_reviewed: TBD
+---
+
 # 07. Developer Practices and Extension Guide
 
 > This document provides practical templates and checklists for application developers, module authors, provider authors, configuration authors, and operators.
