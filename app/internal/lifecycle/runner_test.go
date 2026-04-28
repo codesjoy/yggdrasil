@@ -17,9 +17,7 @@ package lifecycle
 import (
 	"context"
 	"errors"
-	"os"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -129,14 +127,14 @@ func TestLifecycleWithHookInvalidStage(t *testing.T) {
 	assert.Contains(t, err.Error(), "hook stage not found")
 }
 
-func TestLifecycleSignalShutdownTimeoutUsesDefaultMinimum(t *testing.T) {
+func TestLifecycleStopTimeout(t *testing.T) {
 	tests := []struct {
 		name     string
 		timeout  time.Duration
 		expected time.Duration
 	}{
 		{name: "zero", timeout: 0, expected: defaultShutdownTimeout},
-		{name: "smaller", timeout: 10 * time.Second, expected: defaultShutdownTimeout},
+		{name: "smaller", timeout: 10 * time.Second, expected: 10 * time.Second},
 		{name: "equal", timeout: defaultShutdownTimeout, expected: defaultShutdownTimeout},
 		{name: "larger", timeout: 45 * time.Second, expected: 45 * time.Second},
 	}
@@ -145,7 +143,7 @@ func TestLifecycleSignalShutdownTimeoutUsesDefaultMinimum(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			runner, err := New(WithShutdownTimeout(tt.timeout))
 			require.NoError(t, err)
-			assert.Equal(t, tt.expected, runner.signalShutdownTimeout())
+			assert.Equal(t, tt.expected, runner.stopTimeout())
 		})
 	}
 }
@@ -432,7 +430,7 @@ func TestLifecycleRunRequiresGovernor(t *testing.T) {
 	runner, err := New()
 	require.NoError(t, err)
 
-	err = runner.Run()
+	err = runner.Run(context.Background())
 	require.ErrorIs(t, err, errGovernorRequired)
 }
 
@@ -445,11 +443,11 @@ func TestLifecycleRunStopIntegration(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- runner.Run()
+		done <- runner.Run(context.Background())
 	}()
 
 	time.Sleep(10 * time.Millisecond)
-	require.NoError(t, runner.Stop())
+	require.NoError(t, runner.Stop(context.Background()))
 
 	select {
 	case runErr := <-done:
@@ -473,7 +471,7 @@ func TestLifecycleRunInternalServerFailureTriggersStop(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	err = runner.Run()
+	err = runner.Run(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "internal server")
 	if assert.NotNil(t, mainServer.stopCtx) {
@@ -493,7 +491,7 @@ func TestLifecycleStopUsesShutdownTimeout(t *testing.T) {
 	require.NoError(t, err)
 
 	start := time.Now()
-	err = runner.Stop()
+	err = runner.Stop(context.Background())
 	elapsed := time.Since(start)
 
 	require.Error(t, err)
@@ -528,36 +526,8 @@ func TestLifecycleStopRunsHooks(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	require.NoError(t, runner.Stop())
+	require.NoError(t, runner.Stop(context.Background()))
 	assert.True(t, beforeStopCalled)
 	assert.True(t, cleanupCalled)
 	assert.True(t, afterStopCalled)
-}
-
-func TestShutdownSignals(t *testing.T) {
-	assert.NotEmpty(t, shutdownSignals)
-	assert.Contains(t, shutdownSignals, os.Interrupt)
-	if len(shutdownSignals) >= 3 {
-		assert.Contains(t, shutdownSignals, syscall.SIGTERM)
-	}
-}
-
-func TestLifecycleWaitSignalsSetup(t *testing.T) {
-	runner, err := New(WithShutdownTimeout(100 * time.Millisecond))
-	require.NoError(t, err)
-
-	cleanup := runner.waitSignals()
-	defer cleanup()
-
-	time.Sleep(10 * time.Millisecond)
-}
-
-func TestLifecycleWaitSignalsMultipleSetup(t *testing.T) {
-	runner, err := New(WithShutdownTimeout(50 * time.Millisecond))
-	require.NoError(t, err)
-
-	cleanup := runner.waitSignals()
-	defer cleanup()
-
-	time.Sleep(5 * time.Millisecond)
 }

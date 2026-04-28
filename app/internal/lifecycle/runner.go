@@ -19,10 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"os/signal"
 	"sync"
-	"syscall"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -237,17 +234,27 @@ func (runner *Runner) Init(opts ...Option) error {
 }
 
 // Stop stops the lifecycle exactly once.
-func (runner *Runner) Stop() error {
+func (runner *Runner) Stop(ctx context.Context) error {
 	var err error
 	runner.stopOnce.Do(func() {
 		runner.setRunning(false)
 
-		ctx, cancel := context.WithTimeout(context.Background(), runner.stopTimeout())
+		ctx, cancel := runner.withStopTimeout(ctx)
 		defer cancel()
 
 		err = runner.runStopSequence(ctx)
 	})
 	return err
+}
+
+func (runner *Runner) withStopTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, ok := ctx.Deadline(); ok {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, runner.stopTimeout())
 }
 
 func (runner *Runner) runStopSequence(ctx context.Context) error {
@@ -261,19 +268,19 @@ func (runner *Runner) runStopSequence(ctx context.Context) error {
 }
 
 // Run starts the configured lifecycle.
-func (runner *Runner) Run() error {
+func (runner *Runner) Run(ctx context.Context) error {
 	if runner.governor == nil {
 		return errGovernorRequired
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	var err error
 	runner.runOnce.Do(func() {
-		cleanupSignals := runner.waitSignals()
-		defer cleanupSignals()
-
 		runner.setRunning(true)
 
-		if err = runner.startServers(); err != nil {
+		if err = runner.startServers(ctx); err != nil {
 			return
 		}
 		slog.Info("app shutdown")
@@ -295,7 +302,7 @@ func (runner *Runner) newStopAsyncOnFailure() func() {
 	return func() {
 		stopOnce.Do(func() {
 			go func() {
-				if err := runner.Stop(); err != nil {
+				if err := runner.Stop(context.Background()); err != nil {
 					slog.Error(
 						"fault to stop application after serve failure",
 						slog.Any("error", err),
@@ -341,11 +348,11 @@ func (runner *Runner) registerAfterStartup(
 	return nil
 }
 
-func (runner *Runner) startServers() error {
+func (runner *Runner) startServers(ctx context.Context) error {
 	if runner.governor == nil {
 		return errGovernorRequired
 	}
-	if err := runner.runHooks(context.Background(), StageBeforeStart); err != nil {
+	if err := runner.runHooks(ctx, StageBeforeStart); err != nil {
 		return err
 	}
 
@@ -442,53 +449,4 @@ func (runner *Runner) stopTimeout() time.Duration {
 		return defaultShutdownTimeout
 	}
 	return runner.shutdownTimeout
-}
-
-func (runner *Runner) signalShutdownTimeout() time.Duration {
-	if runner.shutdownTimeout < defaultShutdownTimeout {
-		return defaultShutdownTimeout
-	}
-	return runner.shutdownTimeout
-}
-
-func (runner *Runner) waitSignals() func() {
-	signalsCh := make(chan os.Signal, 2)
-	done := make(chan struct{})
-	var cleanupOnce sync.Once
-	signal.Notify(signalsCh, shutdownSignals...)
-
-	cleanup := func() {
-		cleanupOnce.Do(func() {
-			signal.Stop(signalsCh)
-			close(done)
-		})
-	}
-
-	go func() {
-		select {
-		case <-done:
-			return
-		case sig := <-signalsCh:
-			go func() {
-				if err := runner.Stop(); err != nil {
-					slog.Error("fault to stop", slog.Any("error", err))
-				}
-			}()
-
-			timer := time.NewTimer(runner.signalShutdownTimeout())
-			defer timer.Stop()
-
-			select {
-			case <-done:
-				return
-			case <-timer.C:
-				if signalValue, ok := sig.(syscall.Signal); ok {
-					os.Exit(128 + int(signalValue))
-				}
-				os.Exit(1)
-			}
-		}
-	}()
-
-	return cleanup
 }

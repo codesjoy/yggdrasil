@@ -252,10 +252,13 @@ func (a *App) finishRun(err error) {
 	a.mu.Unlock()
 }
 
-func (a *App) stopResources() error {
+func (a *App) stopResources(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	var err error
-	err = errors.Join(err, a.lifecycle.Stop())
-	err = errors.Join(err, a.shutdownRuntimeAdapters(context.Background()))
+	err = errors.Join(err, a.lifecycle.Stop(ctx))
+	err = errors.Join(err, a.shutdownRuntimeAdapters(ctx))
 	if a.opts != nil {
 		err = errors.Join(err, closeManagedConfigSources(a.opts))
 	}
@@ -283,7 +286,7 @@ func (a *App) Start(ctx context.Context) (err error) {
 
 	go func(waitDone chan struct{}) {
 		_ = waitDone
-		runErr := a.lifecycle.Run()
+		runErr := a.lifecycle.Run(ctx)
 		a.finishRun(runErr)
 	}(done)
 	return nil
@@ -307,13 +310,13 @@ func (a *App) Wait() error {
 }
 
 // Stop stops the application.
-func (a *App) Stop(_ context.Context) error {
+func (a *App) Stop(ctx context.Context) error {
 	a.mu.Lock()
 	a.stopConfigWatchLocked()
 	a.setStoppedLocked()
 	a.mu.Unlock()
 
-	return a.stopResources()
+	return a.stopResources(ctx)
 }
 
 // NewClient creates a client for target service.
@@ -363,7 +366,7 @@ func (a *App) initializeLocked(ctx context.Context) (err error) {
 			return
 		}
 		a.state = lifecycleStateStopped
-		if cleanupErr := a.stopResources(); cleanupErr != nil {
+		if cleanupErr := a.stopResources(context.Background()); cleanupErr != nil {
 			wrapped := yassembly.NewError(
 				yassembly.ErrPreparedRuntimeRollbackFailed,
 				"prepare",
@@ -424,8 +427,7 @@ func (a *App) initializeLocked(ctx context.Context) (err error) {
 		Runtime: a.runtime,
 		Server:  a.opts.server,
 		CloseFunc: func(ctx context.Context) error {
-			_ = ctx
-			return a.stopResources()
+			return a.stopResources(ctx)
 		},
 	}
 	a.installDiagnosticsRoutes()

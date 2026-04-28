@@ -55,7 +55,7 @@ func TestBuildLifecycleOptionsIncludesAppCleanup(t *testing.T) {
 	app.stopWatch = func() { watchStops++ }
 
 	require.NoError(t, app.lifecycle.Init(app.buildLifecycleOptions()...))
-	require.NoError(t, app.lifecycle.Stop())
+	require.NoError(t, app.lifecycle.Stop(context.Background()))
 	require.NoError(t, app.shutdownRuntimeAdapters(context.Background()))
 	assert.Equal(t, 1, tracerShutdowns)
 	assert.Equal(t, 1, meterShutdowns)
@@ -300,7 +300,7 @@ func TestApp_StopResources(t *testing.T) {
 	t.Run("initialized app returns nil", func(t *testing.T) {
 		data := minimalV3Config("grpc")
 		app, _ := newInitializedAppWithConfig(t, "test-app", data)
-		err := app.stopResources()
+		err := app.stopResources(context.Background())
 		require.NoError(t, err)
 	})
 }

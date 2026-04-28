@@ -155,7 +155,7 @@ func (a *App) failBeforeStart(err error, stage string, code yassembly.ErrorCode)
 	a.stopConfigWatchLocked()
 	a.setStoppedLocked()
 	a.mu.Unlock()
-	cleanupErr := a.stopResources()
+	cleanupErr := a.stopResources(context.Background())
 	if cleanupErr == nil {
 		return err
 	}
