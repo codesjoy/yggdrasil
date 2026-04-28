@@ -30,6 +30,7 @@ type env struct {
 	name             string
 	prefixes         []string
 	strippedPrefixes []string
+	ignoredKeys      map[string]struct{}
 	parseArray       bool
 	arraySep         string
 	delimiter        string
@@ -54,6 +55,9 @@ func (e *env) Read() (source.Data, error) {
 		pair := strings.SplitN(envVar, "=", 2)
 		value := pair[1]
 		key := strings.ToLower(pair[0])
+		if _, ignored := e.ignoredKeys[key]; ignored {
+			continue
+		}
 		if len(e.prefixes) > 0 || len(e.strippedPrefixes) > 0 {
 			notFound := true
 			if _, ok := e.matchPrefix(e.prefixes, key); ok {
@@ -132,7 +136,15 @@ func NewSource(pre, sp []string, opts ...Option) source.Source {
 	for i, item := range sp {
 		sp[i] = strings.ToLower(item)
 	}
-	e := &env{prefixes: pre, strippedPrefixes: sp, delimiter: "_", name: strings.Join(pre, "_")}
+	e := &env{
+		prefixes:         pre,
+		strippedPrefixes: sp,
+		ignoredKeys: map[string]struct{}{
+			"yggdrasil_config_sources": {},
+		},
+		delimiter: "_",
+		name:      strings.Join(pre, "_"),
+	}
 	for _, opt := range opts {
 		opt(e)
 	}

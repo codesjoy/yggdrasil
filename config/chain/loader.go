@@ -69,6 +69,7 @@ func (l *Loader) LoadFile(
 		return nil, false, err
 	}
 	loaded = append(loaded, configFileSource)
+	buildCtx := BuildContext{Snapshot: manager.Snapshot()}
 
 	specs := make([]SourceSpec, 0)
 	if err := manager.Section("yggdrasil", "config", "sources").Decode(&specs); err != nil {
@@ -78,7 +79,7 @@ func (l *Loader) LoadFile(
 		if spec.Enabled != nil && !*spec.Enabled {
 			continue
 		}
-		src, priority, err := l.registry.Build(spec)
+		src, priority, err := l.registry.BuildWithContext(buildCtx, spec)
 		if err != nil {
 			return nil, false, fmt.Errorf("config source[%d]: %w", i, err)
 		}

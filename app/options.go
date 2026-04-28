@@ -23,6 +23,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/admin/governor"
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/config"
+	configchain "github.com/codesjoy/yggdrasil/v3/config/chain"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
@@ -52,6 +53,7 @@ type options struct {
 	configManager    *config.Manager
 	configPath       string
 	configSources    []configLayerSource
+	configBuilders   map[string]configchain.ContextBuilder
 
 	managedConfigSources          []source.Source
 	configSourceCleanupRegistered bool
@@ -192,6 +194,20 @@ func WithConfigSource(name string, priority config.Priority, src source.Source) 
 			Priority: priority,
 			Source:   src,
 		})
+		return nil
+	}
+}
+
+// WithConfigSourceBuilder registers a declarative config source builder.
+func WithConfigSourceBuilder(kind string, builder configchain.ContextBuilder) Option {
+	return func(opts *options) error {
+		if builder == nil {
+			return nil
+		}
+		if opts.configBuilders == nil {
+			opts.configBuilders = map[string]configchain.ContextBuilder{}
+		}
+		opts.configBuilders[kind] = builder
 		return nil
 	}
 }

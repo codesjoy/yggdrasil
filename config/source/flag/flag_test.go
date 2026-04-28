@@ -42,9 +42,17 @@ func TestFlagReadParsesArgsInMultiplePasses(t *testing.T) {
 	fs := flag2.NewFlagSet("flag-test", flag2.ContinueOnError)
 	_ = fs.String("app-server-port", "8080", "")
 	_ = fs.String("service_name", "default", "")
+	_ = fs.String("yggdrasil.server.transports", "", "")
 
 	oldArgs := os.Args
-	os.Args = []string{"flag-test", "--app-server-port=7001", "sub", "--service_name=demo"}
+	os.Args = []string{
+		"flag-test",
+		"--app-server-port=7001",
+		"sub",
+		"--service_name=demo",
+		"--unknown=value",
+		"--yggdrasil.server.transports=grpc",
+	}
 	t.Cleanup(func() { os.Args = oldArgs })
 
 	src := NewSource(fs)
@@ -55,9 +63,33 @@ func TestFlagReadParsesArgsInMultiplePasses(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data.Bytes(), &out))
 	require.Equal(t, "7001", out["app"].(map[string]any)["server"].(map[string]any)["port"])
 	require.Equal(t, "demo", out["service"].(map[string]any)["name"])
+	require.Equal(
+		t,
+		"grpc",
+		out["yggdrasil"].(map[string]any)["server"].(map[string]any)["transports"],
+	)
 	require.Equal(t, "flag-test", src.Name())
 	require.Equal(t, "flag", src.Kind())
 	require.NoError(t, src.Close())
+}
+
+func TestFlagReadIgnoresNames(t *testing.T) {
+	fs := flag2.NewFlagSet("flag-test", flag2.ContinueOnError)
+	_ = fs.String("yggdrasil-config", "", "")
+	_ = fs.String("app-name", "demo", "")
+
+	oldArgs := os.Args
+	os.Args = []string{"flag-test", "--yggdrasil-config=./config.yaml", "--app-name=ok"}
+	t.Cleanup(func() { os.Args = oldArgs })
+
+	src := NewSourceWithOptions(fs, WithIgnoredNames("yggdrasil-config"))
+	data, err := src.Read()
+	require.NoError(t, err)
+
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(data.Bytes(), &out))
+	require.Equal(t, "ok", out["app"].(map[string]any)["name"])
+	require.NotContains(t, out, "yggdrasil")
 }
 
 func TestFlagNameWithNilFlagSet(t *testing.T) {

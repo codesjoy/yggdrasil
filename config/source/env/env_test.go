@@ -44,6 +44,7 @@ func TestEnvReadWithOptions(t *testing.T) {
 	t.Setenv("APP__SERVER__PORT", "9090")
 	t.Setenv("APP__FEATURES", "a,b,3,true")
 	t.Setenv("RAW__PORT", "8081")
+	t.Setenv("APP__IGNORED", "nope")
 
 	src := NewSource(
 		[]string{"APP"},
@@ -51,6 +52,7 @@ func TestEnvReadWithOptions(t *testing.T) {
 		SetKeyDelimiter("__"),
 		WithParseArray(","),
 		WithName("custom-env"),
+		WithIgnoredKeys("APP__IGNORED"),
 	)
 	data, err := src.Read()
 	require.NoError(t, err)
@@ -59,11 +61,23 @@ func TestEnvReadWithOptions(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data.Bytes(), &out))
 	require.Equal(t, float64(9090), out["app"].(map[string]any)["server"].(map[string]any)["port"])
 	require.Equal(t, []any{"a", "b", float64(3), true}, out["app"].(map[string]any)["features"])
+	require.NotContains(t, out["app"].(map[string]any), "ignored")
 	require.Equal(t, float64(8081), out["port"])
 
 	require.Equal(t, "custom-env", src.Name())
 	require.Equal(t, "env", src.Kind())
 	require.NoError(t, src.Close())
+}
+
+func TestEnvReadIgnoresConfigSourcesControlVariableByDefault(t *testing.T) {
+	t.Setenv("YGGDRASIL_CONFIG_SOURCES", "env:APP:env")
+	src := NewSource([]string{"YGGDRASIL"}, nil)
+	data, err := src.Read()
+	require.NoError(t, err)
+
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(data.Bytes(), &out))
+	require.Empty(t, out)
 }
 
 func TestOptionFallbacks(t *testing.T) {

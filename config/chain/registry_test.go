@@ -50,6 +50,38 @@ func TestRegistryBuildAndRegister(t *testing.T) {
 	require.Equal(t, config.PriorityOverride, priority)
 }
 
+func TestRegistryBuildWithContext(t *testing.T) {
+	registry := NewRegistry()
+	registry.RegisterContext(
+		"custom",
+		func(ctx BuildContext, spec SourceSpec) (source.Source, config.Priority, error) {
+			var cfg struct {
+				Value string `mapstructure:"value"`
+			}
+			if err := ctx.Snapshot.Section("bootstrap").Decode(&cfg); err != nil {
+				return nil, 0, err
+			}
+			require.Equal(t, "base", cfg.Value)
+			require.Equal(t, "from-spec", spec.Config["marker"])
+			return nil, config.PriorityRemote, nil
+		},
+	)
+
+	_, priority, err := registry.BuildWithContext(
+		BuildContext{
+			Snapshot: config.NewSnapshot(map[string]any{
+				"bootstrap": map[string]any{"value": "base"},
+			}),
+		},
+		SourceSpec{
+			Kind:   "custom",
+			Config: map[string]any{"marker": "from-spec"},
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, config.PriorityRemote, priority)
+}
+
 func TestParsePriority(t *testing.T) {
 	cases := []struct {
 		input string
@@ -72,6 +104,45 @@ func TestParsePriority(t *testing.T) {
 
 	_, err := parsePriority("invalid", config.PriorityFile)
 	require.Error(t, err)
+}
+
+func TestParseSourceSpecs(t *testing.T) {
+	t.Run("compact env and flag", func(t *testing.T) {
+		specs, err := ParseSourceSpecs("env:APP:env,flag::flag")
+		require.NoError(t, err)
+		require.Len(t, specs, 2)
+		require.Equal(t, "env", specs[0].Kind)
+		require.Equal(t, "APP", specs[0].Name)
+		require.Equal(t, "env", specs[0].Priority)
+		require.Equal(t, []string{"APP"}, specs[0].Config["prefixes"])
+		require.Equal(t, "flag", specs[1].Kind)
+		require.Equal(t, "flag", specs[1].Priority)
+	})
+
+	t.Run("json object", func(t *testing.T) {
+		specs, err := ParseSourceSpecs(`{"kind":"env","priority":"env"}`)
+		require.NoError(t, err)
+		require.Len(t, specs, 1)
+		require.Equal(t, "env", specs[0].Kind)
+		require.NotNil(t, specs[0].Config)
+	})
+
+	t.Run("json array", func(t *testing.T) {
+		specs, err := ParseSourceSpecs(`[{"kind":"flag","priority":"flag"}]`)
+		require.NoError(t, err)
+		require.Len(t, specs, 1)
+		require.Equal(t, "flag", specs[0].Kind)
+	})
+
+	t.Run("malformed json returns error", func(t *testing.T) {
+		_, err := ParseSourceSpecs(`[{"kind":`)
+		require.Error(t, err)
+	})
+
+	t.Run("malformed compact returns error", func(t *testing.T) {
+		_, err := ParseSourceSpecs("env:a:b:c")
+		require.Error(t, err)
+	})
 }
 
 func TestBuildFileSourceAndEnvAndFlag(t *testing.T) {

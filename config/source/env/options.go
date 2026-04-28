@@ -14,6 +14,8 @@
 
 package env
 
+import "strings"
+
 // Option is the option for env
 type Option func(*env)
 
@@ -42,5 +44,21 @@ func SetKeyDelimiter(delimiter string) Option {
 func WithName(name string) Option {
 	return func(e *env) {
 		e.name = name
+	}
+}
+
+// WithIgnoredKeys skips exact environment variable names.
+func WithIgnoredKeys(keys ...string) Option {
+	return func(e *env) {
+		if e.ignoredKeys == nil {
+			e.ignoredKeys = map[string]struct{}{}
+		}
+		for _, key := range keys {
+			key = strings.ToLower(strings.TrimSpace(key))
+			if key == "" {
+				continue
+			}
+			e.ignoredKeys[key] = struct{}{}
+		}
 	}
 }

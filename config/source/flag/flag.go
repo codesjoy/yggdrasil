@@ -26,18 +26,21 @@ import (
 )
 
 type flag struct {
-	fs *flag2.FlagSet
+	fs           *flag2.FlagSet
+	ignoredNames map[string]struct{}
 }
 
 func (fs *flag) Read() (source.Data, error) {
 	if !fs.fs.Parsed() {
-		_ = fs.fs.Parse(os.Args[1:])
-		for len(fs.fs.Args()) != 0 {
-			_ = fs.fs.Parse(fs.fs.Args()[1:])
+		if err := fs.parseKnownArgs(os.Args[1:]); err != nil {
+			return nil, err
 		}
 	}
 	result := make(map[string]any)
 	visitFn := func(f *flag2.Flag) {
+		if fs.ignored(f.Name) {
+			return
+		}
 		n := strings.ToLower(f.Name)
 		keys := strings.FieldsFunc(n, split)
 		reverse(keys)
@@ -61,8 +64,62 @@ func (fs *flag) Read() (source.Data, error) {
 	return source.NewMapData(result), nil
 }
 
+func (fs *flag) parseKnownArgs(args []string) error {
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		if arg == "" || arg == "--" {
+			continue
+		}
+		if !strings.HasPrefix(arg, "-") || arg == "-" {
+			continue
+		}
+		nameValue := strings.TrimLeft(arg, "-")
+		if nameValue == "" {
+			continue
+		}
+		name, value, hasValue := strings.Cut(nameValue, "=")
+		name = strings.TrimSpace(name)
+		if name == "" || fs.ignored(name) {
+			continue
+		}
+		item := fs.fs.Lookup(name)
+		if item == nil {
+			continue
+		}
+		if !hasValue {
+			if boolValue, ok := item.Value.(boolFlag); ok && boolValue.IsBoolFlag() {
+				value = "true"
+				hasValue = true
+			} else if i+1 < len(args) {
+				i++
+				value = args[i]
+				hasValue = true
+			}
+		}
+		if !hasValue {
+			continue
+		}
+		if err := fs.fs.Set(name, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (fs *flag) ignored(name string) bool {
+	if fs == nil || len(fs.ignoredNames) == 0 {
+		return false
+	}
+	_, ok := fs.ignoredNames[strings.ToLower(strings.TrimSpace(name))]
+	return ok
+}
+
+type boolFlag interface {
+	IsBoolFlag() bool
+}
+
 func split(r rune) bool {
-	return r == '-' || r == '_'
+	return r == '-' || r == '_' || r == '.'
 }
 
 func reverse(ss []string) {
@@ -90,7 +147,38 @@ func (fs *flag) Close() error {
 // NewSource creates a new flag source.
 func NewSource(fs ...*flag2.FlagSet) source.Source {
 	if len(fs) == 0 || fs[0] == nil {
-		return &flag{fs: flag2.CommandLine}
+		return NewSourceWithOptions(flag2.CommandLine)
 	}
-	return &flag{fs: fs[0]}
+	return NewSourceWithOptions(fs[0])
+}
+
+// Option customizes a flag source.
+type Option func(*flag)
+
+// WithIgnoredNames skips exact flag names.
+func WithIgnoredNames(names ...string) Option {
+	return func(f *flag) {
+		if f.ignoredNames == nil {
+			f.ignoredNames = map[string]struct{}{}
+		}
+		for _, name := range names {
+			name = strings.ToLower(strings.TrimSpace(name))
+			if name == "" {
+				continue
+			}
+			f.ignoredNames[name] = struct{}{}
+		}
+	}
+}
+
+// NewSourceWithOptions creates a new flag source with custom options.
+func NewSourceWithOptions(fs *flag2.FlagSet, opts ...Option) source.Source {
+	if fs == nil {
+		fs = flag2.CommandLine
+	}
+	src := &flag{fs: fs}
+	for _, opt := range opts {
+		opt(src)
+	}
+	return src
 }

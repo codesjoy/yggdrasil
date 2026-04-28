@@ -24,6 +24,7 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
+	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
 )
 
 type failingSource struct {
@@ -88,6 +89,50 @@ func TestLoaderLoadFileSuccessAndDisabledSourceSkipped(t *testing.T) {
 	}
 	require.NoError(t, manager.Section("app").Decode(&out))
 	require.Equal(t, "override", out.Name)
+}
+
+func TestLoaderContextBuilderReadsBaseSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+
+	require.NoError(t, os.WriteFile(configPath, []byte(
+		"bootstrap:\n  source_name: dynamic\n"+
+			"app:\n  name: base\n"+
+			"yggdrasil:\n"+
+			"  config:\n"+
+			"    sources:\n"+
+			"      - kind: custom\n"+
+			"        config:\n"+
+			"          value: remote\n",
+	), 0o600))
+
+	registry := NewRegistry()
+	registry.RegisterContext(
+		"custom",
+		func(ctx BuildContext, spec SourceSpec) (source.Source, config.Priority, error) {
+			var bootstrap struct {
+				SourceName string `mapstructure:"source_name"`
+			}
+			if err := ctx.Snapshot.Section("bootstrap").Decode(&bootstrap); err != nil {
+				return nil, 0, err
+			}
+			return memory.NewSource(bootstrap.SourceName, map[string]any{
+				"app": map[string]any{"name": spec.Config["value"]},
+			}), config.PriorityRemote, nil
+		},
+	)
+
+	manager := config.NewManager()
+	loaded, ok, err := NewLoader(registry).LoadFile(manager, configPath, true)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Len(t, loaded, 2)
+
+	var out struct {
+		Name string `mapstructure:"name"`
+	}
+	require.NoError(t, manager.Section("app").Decode(&out))
+	require.Equal(t, "remote", out.Name)
 }
 
 func TestLoaderLoadFileBuildAndLoadErrors(t *testing.T) {

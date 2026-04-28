@@ -31,11 +31,11 @@ import (
 
 // SourceSpec describes a declarative config source.
 type SourceSpec struct {
-	Kind     string         `mapstructure:"kind"`
-	Name     string         `mapstructure:"name"`
-	Enabled  *bool          `mapstructure:"enabled"`
-	Priority string         `mapstructure:"priority"`
-	Config   map[string]any `mapstructure:"config"`
+	Kind     string         `mapstructure:"kind"     json:"kind"`
+	Name     string         `mapstructure:"name"     json:"name"`
+	Enabled  *bool          `mapstructure:"enabled"  json:"enabled"`
+	Priority string         `mapstructure:"priority" json:"priority"`
+	Config   map[string]any `mapstructure:"config"   json:"config"`
 }
 
 // Settings is the config section shape under yggdrasil.config.
@@ -43,18 +43,27 @@ type Settings struct {
 	Sources []SourceSpec `mapstructure:"sources"`
 }
 
+// BuildContext contains state already loaded before building a declarative
+// config source.
+type BuildContext struct {
+	Snapshot config.Snapshot
+}
+
 // Builder creates a source and resolves its load priority.
 type Builder func(spec SourceSpec) (source.Source, config.Priority, error)
+
+// ContextBuilder creates a source using the already loaded base config.
+type ContextBuilder func(ctx BuildContext, spec SourceSpec) (source.Source, config.Priority, error)
 
 // Registry contains declarative config source builders.
 type Registry struct {
 	mu       sync.RWMutex
-	builders map[string]Builder
+	builders map[string]ContextBuilder
 }
 
 // NewRegistry creates a registry with the built-in source kinds.
 func NewRegistry() *Registry {
-	r := &Registry{builders: map[string]Builder{}}
+	r := &Registry{builders: map[string]ContextBuilder{}}
 	r.Register("file", buildFileSource)
 	r.Register("env", buildEnvSource)
 	r.Register("flag", buildFlagSource)
@@ -66,6 +75,19 @@ func (r *Registry) Register(kind string, builder Builder) {
 	if strings.TrimSpace(kind) == "" || builder == nil {
 		return
 	}
+	r.RegisterContext(
+		kind,
+		func(_ BuildContext, spec SourceSpec) (source.Source, config.Priority, error) {
+			return builder(spec)
+		},
+	)
+}
+
+// RegisterContext registers a source builder that can inspect the base config.
+func (r *Registry) RegisterContext(kind string, builder ContextBuilder) {
+	if strings.TrimSpace(kind) == "" || builder == nil {
+		return
+	}
 	r.mu.Lock()
 	r.builders[strings.ToLower(strings.TrimSpace(kind))] = builder
 	r.mu.Unlock()
@@ -73,6 +95,14 @@ func (r *Registry) Register(kind string, builder Builder) {
 
 // Build creates a source from a declarative spec.
 func (r *Registry) Build(spec SourceSpec) (source.Source, config.Priority, error) {
+	return r.BuildWithContext(BuildContext{}, spec)
+}
+
+// BuildWithContext creates a source from a declarative spec and base config.
+func (r *Registry) BuildWithContext(
+	ctx BuildContext,
+	spec SourceSpec,
+) (source.Source, config.Priority, error) {
 	kind := strings.ToLower(strings.TrimSpace(spec.Kind))
 	if kind == "" {
 		return nil, 0, errors.New("config source kind is required")
@@ -83,10 +113,15 @@ func (r *Registry) Build(spec SourceSpec) (source.Source, config.Priority, error
 	if builder == nil {
 		return nil, 0, fmt.Errorf("config source kind %q not supported", kind)
 	}
-	return builder(spec)
+	return builder(ctx, spec)
 }
 
 func parsePriority(text string, fallback config.Priority) (config.Priority, error) {
+	return ParsePriority(text, fallback)
+}
+
+// ParsePriority resolves a config source priority name.
+func ParsePriority(text string, fallback config.Priority) (config.Priority, error) {
 	switch strings.ToLower(strings.TrimSpace(text)) {
 	case "":
 		return fallback, nil
@@ -142,6 +177,7 @@ type envConfig struct {
 	ParseArray       bool     `mapstructure:"parse_array"`
 	ArraySep         string   `mapstructure:"array_sep"`
 	Name             string   `mapstructure:"name"`
+	IgnoredVars      []string `mapstructure:"ignored_vars"`
 }
 
 func buildEnvSource(spec SourceSpec) (source.Source, config.Priority, error) {
@@ -163,13 +199,28 @@ func buildEnvSource(spec SourceSpec) (source.Source, config.Priority, error) {
 	if cfg.Name != "" {
 		opts = append(opts, envsource.WithName(cfg.Name))
 	}
+	if len(cfg.IgnoredVars) > 0 {
+		opts = append(opts, envsource.WithIgnoredKeys(cfg.IgnoredVars...))
+	}
 	return envsource.NewSource(cfg.Prefixes, cfg.StrippedPrefixes, opts...), priority, nil
 }
 
+type flagConfig struct {
+	IgnoredNames []string `mapstructure:"ignored_names"`
+}
+
 func buildFlagSource(spec SourceSpec) (source.Source, config.Priority, error) {
+	var cfg flagConfig
+	if err := mapstructure.Decode(spec.Config, &cfg); err != nil {
+		return nil, 0, err
+	}
 	priority, err := parsePriority(spec.Priority, config.PriorityFlag)
 	if err != nil {
 		return nil, 0, err
 	}
-	return flagsource.NewSource(), priority, nil
+	ignored := append([]string{"yggdrasil-config", "yggdrasil-config-sources"}, cfg.IgnoredNames...)
+	return flagsource.NewSourceWithOptions(
+		nil,
+		flagsource.WithIgnoredNames(ignored...),
+	), priority, nil
 }

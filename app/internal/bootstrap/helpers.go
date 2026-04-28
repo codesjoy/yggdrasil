@@ -30,8 +30,10 @@ import (
 
 // Config flag and default path constants.
 const (
-	ConfigFlagName    = "yggdrasil-config"
-	DefaultConfigPath = "./config.yaml"
+	ConfigFlagName        = "yggdrasil-config"
+	ConfigSourcesEnvName  = "YGGDRASIL_CONFIG_SOURCES"
+	ConfigSourcesFlagName = "yggdrasil-config-sources"
+	DefaultConfigPath     = "./config.yaml"
 )
 
 // ResolveConfigPath returns the config path and whether it was set explicitly.
@@ -86,6 +88,7 @@ func LoadConfigFile(
 	manager *config.Manager,
 	path string,
 	explicit bool,
+	registry *configchain.Registry,
 ) ([]source.Source, bool, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -118,7 +121,7 @@ func LoadConfigFile(
 		}
 		return nil, false, fmt.Errorf("stat config file %q: %w", path, err)
 	}
-	loader := configchain.NewLoader(nil)
+	loader := configchain.NewLoader(registry)
 	sources, loaded, err := loader.LoadFile(manager, path, explicit)
 	if err != nil {
 		return nil, false, err

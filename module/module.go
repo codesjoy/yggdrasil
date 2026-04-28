@@ -20,6 +20,7 @@ import (
 	"errors"
 
 	"github.com/codesjoy/yggdrasil/v3/config"
+	configchain "github.com/codesjoy/yggdrasil/v3/config/chain"
 )
 
 // Module is the minimum abstraction unit managed by Hub.
@@ -59,6 +60,11 @@ type Ordered interface {
 // Configurable declares the config view path consumed by this module.
 type Configurable interface {
 	ConfigPath() string
+}
+
+// ConfigSourceProvider optionally contributes declarative config source builders.
+type ConfigSourceProvider interface {
+	ConfigSourceBuilders() map[string]configchain.ContextBuilder
 }
 
 // Initializable initializes long-lived resources.
