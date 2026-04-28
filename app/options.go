@@ -38,7 +38,6 @@ type configLayerSource struct {
 }
 
 type options struct {
-	appName          string
 	mode             string
 	planOverrides    []yassembly.Override
 	server           server.Server
@@ -137,14 +136,6 @@ func WithConfigManager(manager *config.Manager) Option {
 func WithProcessDefaults(enabled bool) Option {
 	return func(opts *options) error {
 		opts.processDefaults = enabled
-		return nil
-	}
-}
-
-// WithAppName overrides the app name resolved by New.
-func WithAppName(name string) Option {
-	return func(opts *options) error {
-		opts.appName = name
 		return nil
 	}
 }

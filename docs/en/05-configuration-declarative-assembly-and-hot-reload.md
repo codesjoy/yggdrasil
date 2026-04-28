@@ -26,6 +26,37 @@ Priorities from lowest to highest:
 
 Merge order: priority ascending, then insertion order ascending. Higher-priority values override lower-priority values; maps are deep-merged.
 
+### 1.1 Source Loading
+
+Configuration layers can come from explicit files, declarative sources, environment variables, flags, and programmatic overrides. File-based bootstrap starts from `WithConfigPath(...)` or the bootstrap config flag. If no config file, bootstrap source, or programmatic config source is loaded, the App installs default sources:
+
+- an environment source with `YGGDRASIL` prefix, array parsing with `,`, and priority `PriorityEnv`;
+- a command-line flag source with priority `PriorityFlag`.
+
+Application identity is not part of the configuration tree. Pass it explicitly to `yggdrasil.Run(ctx, appName, ...)`, `yggdrasil.New(appName, ...)`, or `app.New(appName, ...)`.
+
+### 1.2 Declarative Config Sources
+
+Config sources can be declared in a config file under `yggdrasil.config.sources`, or during bootstrap with `YGGDRASIL_CONFIG_SOURCES` / `--yggdrasil-config-sources`. Bootstrap declarations are useful when the config file location or remote source itself must be discovered from env or flags.
+
+Bootstrap source declarations accept:
+
+- a JSON object: `{"kind":"env","priority":"env","config":{"prefixes":["APP"]}}`;
+- a JSON array of source specs;
+- a compact list: `env:APP:env,flag::flag`.
+
+Built-in source kinds:
+
+| Kind | Purpose | Notable config |
+| --- | --- | --- |
+| `file` | Load YAML/JSON/TOML config files | path and priority |
+| `env` | Load environment variables | `prefixes`, `stripped_prefixes`, `parse_array`, `array_sep`, `ignored_vars` |
+| `flag` | Load command-line flags | `ignored_names` |
+
+The built-in env source ignores `YGGDRASIL_CONFIG_SOURCES` by default. The built-in flag source ignores bootstrap flags such as `yggdrasil-config` and `yggdrasil-config-sources` by default, so bootstrap controls do not leak into the application config snapshot.
+
+Custom declarative sources can be registered with `WithConfigSourceBuilder(kind, builder)` or by modules implementing `module.ConfigSourceProvider`. Context-aware builders receive the snapshot loaded before the source is built, which lets a source use base config to locate credentials, endpoints, or namespaces.
+
 ## 2. Snapshot and View
 
 A snapshot is immutable:
@@ -228,8 +259,6 @@ The system should mark restart-required when:
 ```yaml
 yggdrasil:
   mode: prod-grpc
-  app:
-    name: order-service
   server:
     transports:
       - "grpc"

@@ -1,6 +1,4 @@
 yggdrasil:
-  app:
-    name: "github.com.codesjoy.yggdrasil.example.21-custom-service-cron"
   mode: dev
 
   server:

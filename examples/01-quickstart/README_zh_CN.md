@@ -2,8 +2,8 @@
 
 ## 体现的框架能力
 
-- 使用 root `yggdrasil.Run(...)` 走完服务端默认接入路径。
-- 使用 `app.New(...)->NewClient(...)` 做独立 client bootstrap，而不是依赖全局状态。
+- 使用 root `yggdrasil.Run(ctx, appName, ...)` 走完服务端默认接入路径。
+- 使用 `app.New(appName, ...)->NewClient(...)` 做独立 client bootstrap，而不是依赖全局状态。
 - 保持示例最小化，只展示一个最短可运行的 gRPC 端到端路径。
 
 ## 启动方式
@@ -25,7 +25,7 @@ go run .
 ## 观察点
 
 - `server/main.go` 只保留 root facade 和退出控制，正式业务安装边界在 `server/business/compose.go`。
-- `client/main.go` 通过 `config.yaml` 里的 app identity 和 service target 启动一个独立 client app，然后调用一次 `SayHello`。
+- `client/main.go` 使用显式 app name 启动独立 client app，并从 `config.yaml` 读取 service target，然后调用一次 `SayHello`。
 - governor 诊断入口固定为 `http://127.0.0.1:56011/diagnostics?pretty=true`。
 
 ## 关键源码入口

@@ -24,8 +24,8 @@ go run .
 
 ## 观察点
 
-- 服务端默认走 root `yggdrasil.Run(...)`；metadata 行为的正式安装边界仍然是 `server/business/compose.go`。
-- 客户端使用独立 `app.New(...)->NewClient(...)` bootstrap，然后在每次调用里显式读写 metadata context。
+- 服务端默认走 root `yggdrasil.Run(ctx, appName, ...)`；metadata 行为的正式安装边界仍然是 `server/business/compose.go`。
+- 客户端使用独立 `app.New(appName, ...)->NewClient(...)` bootstrap，然后在每次调用里显式读写 metadata context。
 - 这个例子最适合和 [11-rpc-streaming](../11-rpc-streaming/README_zh_CN.md) 对照着看：两者共用同一套流式装配模型，只是关注点不同。
 
 ## 关键源码入口

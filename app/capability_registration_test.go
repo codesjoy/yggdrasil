@@ -68,10 +68,8 @@ func TestCapabilityRegistrationInitReceivesRootViewWhenConfigPathEmpty(t *testin
 	})
 	var gotPath string
 	var hasRoot bool
-	app, err := New("",
-		WithConfigManager(manager),
-		WithAppName("registration-root-view"),
-		WithCapabilityRegistrations(CapabilityRegistration{
+	app, err := New("registration-root-view",
+		WithConfigManager(manager), WithCapabilityRegistrations(CapabilityRegistration{
 			Name: "capability.test.root-view",
 			Init: func(_ context.Context, view config.View) error {
 				gotPath = view.Path()
@@ -98,9 +96,11 @@ func TestCapabilityRegistrationInitReceivesRootViewWhenConfigPathEmpty(t *testin
 func TestCapabilityRegistrationPrepareExposesTransportProvider(t *testing.T) {
 	recorder := newTransportRecorder()
 	manager := newTestManager(t, assemblyTestConfig(false))
-	app, err := New("",
-		WithConfigManager(manager),
-		WithAppName("registration-provider"),
+	app, err := New(
+		"registration-provider",
+		WithConfigManager(
+			manager,
+		),
 		WithCapabilityRegistrations(testServerTransportRegistration("test", recorder)),
 	)
 	require.NoError(t, err)
@@ -115,10 +115,8 @@ func TestCapabilityRegistrationPrepareExposesTransportProvider(t *testing.T) {
 
 func TestCapabilityRegistrationDuplicateNameRejected(t *testing.T) {
 	manager := newTestManager(t, nil)
-	app, err := New("",
-		WithConfigManager(manager),
-		WithAppName("registration-duplicate"),
-		WithCapabilityRegistrations(
+	app, err := New("registration-duplicate",
+		WithConfigManager(manager), WithCapabilityRegistrations(
 			CapabilityRegistration{
 				Name:         "capability.test.duplicate",
 				Capabilities: func() []module.Capability { return nil },
@@ -136,10 +134,8 @@ func TestCapabilityRegistrationDuplicateNameRejected(t *testing.T) {
 
 func TestCapabilityRegistrationConflictsWithModuleName(t *testing.T) {
 	manager := newTestManager(t, nil)
-	app, err := New("",
-		WithConfigManager(manager),
-		WithAppName("registration-module-conflict"),
-		WithModules(&stubModule{name: "capability.test.conflict"}),
+	app, err := New("registration-module-conflict",
+		WithConfigManager(manager), WithModules(&stubModule{name: "capability.test.conflict"}),
 		WithCapabilityRegistrations(CapabilityRegistration{
 			Name:         "capability.test.conflict",
 			Capabilities: func() []module.Capability { return nil },
@@ -154,10 +150,8 @@ func TestCapabilityRegistrationCapabilitiesRunBeforeInit(t *testing.T) {
 	manager := newTestManager(t, nil)
 	var capCalls atomic.Int32
 	var sawCapabilitiesBeforeInit atomic.Bool
-	app, err := New("",
-		WithConfigManager(manager),
-		WithAppName("registration-order"),
-		WithCapabilityRegistrations(CapabilityRegistration{
+	app, err := New("registration-order",
+		WithConfigManager(manager), WithCapabilityRegistrations(CapabilityRegistration{
 			Name: "capability.test.order",
 			Init: func(context.Context, config.View) error {
 				if capCalls.Load() > 0 {
@@ -241,10 +235,8 @@ func TestCapabilityRegistrationLazyProviderCanUseInitializedState(t *testing.T) 
 		},
 	}
 
-	app, err := New("",
-		WithConfigManager(manager),
-		WithAppName("registration-lazy"),
-		WithCapabilityRegistrations(reg),
+	app, err := New("registration-lazy",
+		WithConfigManager(manager), WithCapabilityRegistrations(reg),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })

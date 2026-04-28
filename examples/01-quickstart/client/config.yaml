@@ -1,6 +1,4 @@
 yggdrasil:
-  app:
-    name: "github.com.codesjoy.yggdrasil.example.01-quickstart.client"
   mode: dev
   clients:
     services:

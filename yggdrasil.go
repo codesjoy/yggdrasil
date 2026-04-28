@@ -17,9 +17,13 @@ package yggdrasil
 import (
 	"context"
 	"errors"
+	"os"
+	"os/signal"
+	"strings"
 
 	yapp "github.com/codesjoy/yggdrasil/v3/app"
 	"github.com/codesjoy/yggdrasil/v3/config"
+	configchain "github.com/codesjoy/yggdrasil/v3/config/chain"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
 	"github.com/codesjoy/yggdrasil/v3/module"
 )
@@ -80,11 +84,13 @@ type configLayerSource struct {
 }
 
 type options struct {
-	appName                 string
 	configPath              string
 	mode                    string
 	processDefaults         *bool
+	signalHandling          *bool
+	shutdownSignals         []os.Signal
 	configSources           []configLayerSource
+	configBuilders          map[string]configchain.ContextBuilder
 	modules                 []module.Module
 	capabilityRegistrations []yapp.CapabilityRegistration
 }
@@ -95,14 +101,6 @@ type Option func(*options) error
 // ErrProcessDefaultsAlreadyInstalled is returned when another active App owns
 // process-global compatibility defaults.
 var ErrProcessDefaultsAlreadyInstalled = yapp.ErrProcessDefaultsAlreadyInstalled
-
-// WithAppName overrides the app name resolved by New.
-func WithAppName(name string) Option {
-	return func(opts *options) error {
-		opts.appName = name
-		return nil
-	}
-}
 
 // WithConfigPath overrides the config file path.
 func WithConfigPath(path string) Option {
@@ -127,10 +125,40 @@ func WithConfigSource(name string, priority config.Priority, src source.Source) 
 	}
 }
 
+// WithConfigSourceBuilder registers one declarative config source builder.
+func WithConfigSourceBuilder(kind string, builder configchain.ContextBuilder) Option {
+	return func(opts *options) error {
+		if builder == nil {
+			return nil
+		}
+		if opts.configBuilders == nil {
+			opts.configBuilders = map[string]configchain.ContextBuilder{}
+		}
+		opts.configBuilders[kind] = builder
+		return nil
+	}
+}
+
 // WithMode overrides the mode resolved by New.
 func WithMode(mode string) Option {
 	return func(opts *options) error {
 		opts.mode = mode
+		return nil
+	}
+}
+
+// WithSignalHandling controls whether Run installs default OS signal handling.
+func WithSignalHandling(enabled bool) Option {
+	return func(opts *options) error {
+		opts.signalHandling = &enabled
+		return nil
+	}
+}
+
+// WithShutdownSignals customizes the OS signals handled by Run.
+func WithShutdownSignals(signals ...os.Signal) Option {
+	return func(opts *options) error {
+		opts.shutdownSignals = append([]os.Signal(nil), signals...)
 		return nil
 	}
 }
@@ -172,12 +200,16 @@ type App struct {
 }
 
 // New creates one App ready for the bootstrap flow.
-func New(opts ...Option) (*App, error) {
+func New(appName string, opts ...Option) (*App, error) {
+	appName = strings.TrimSpace(appName)
+	if appName == "" {
+		return nil, errors.New("app name is required")
+	}
 	appOpts, err := convertOptions(opts...)
 	if err != nil {
 		return nil, err
 	}
-	inner, err := yapp.New("", appOpts...)
+	inner, err := yapp.New(appName, appOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -185,9 +217,13 @@ func New(opts ...Option) (*App, error) {
 }
 
 // Run executes the default business bootstrap flow.
-func Run(ctx context.Context, fn ComposeFunc, opts ...Option) error {
+func Run(ctx context.Context, appName string, fn ComposeFunc, opts ...Option) error {
 	if ctx == nil {
 		return errors.New("run context is nil")
+	}
+	appName = strings.TrimSpace(appName)
+	if appName == "" {
+		return errors.New("app name is required")
 	}
 	rootOpts, err := collectOptions(opts...)
 	if err != nil {
@@ -197,23 +233,26 @@ func Run(ctx context.Context, fn ComposeFunc, opts ...Option) error {
 		enabled := true
 		rootOpts.processDefaults = &enabled
 	}
-	app, err := newFromOptions(rootOpts)
+	runCtx, stopSignals := rootOpts.runContext(ctx)
+	defer stopSignals()
+
+	app, err := newFromOptions(appName, rootOpts)
 	if err != nil {
 		return err
 	}
-	if err := app.ComposeAndInstall(ctx, fn); err != nil {
-		_ = app.Stop(ctx)
+	if err := app.ComposeAndInstall(runCtx, fn); err != nil {
+		_ = app.Stop(context.Background())
 		return err
 	}
-	if err := app.Start(ctx); err != nil {
-		_ = app.Stop(ctx)
+	if err := app.Start(runCtx); err != nil {
+		_ = app.Stop(context.Background())
 		return err
 	}
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
 		select {
-		case <-ctx.Done():
+		case <-runCtx.Done():
 			_ = app.Stop(context.Background())
 		case <-done:
 		}
@@ -282,9 +321,9 @@ func collectOptions(opts ...Option) (options, error) {
 	return rootOpts, nil
 }
 
-func newFromOptions(rootOpts options) (*App, error) {
+func newFromOptions(appName string, rootOpts options) (*App, error) {
 	appOpts := rootOpts.appOptions()
-	inner, err := yapp.New("", appOpts...)
+	inner, err := yapp.New(appName, appOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -293,9 +332,6 @@ func newFromOptions(rootOpts options) (*App, error) {
 
 func (rootOpts options) appOptions() []yapp.Option {
 	appOpts := make([]yapp.Option, 0, 6+len(rootOpts.configSources))
-	if rootOpts.appName != "" {
-		appOpts = append(appOpts, yapp.WithAppName(rootOpts.appName))
-	}
 	if rootOpts.configPath != "" {
 		appOpts = append(appOpts, yapp.WithConfigPath(rootOpts.configPath))
 	}
@@ -308,6 +344,9 @@ func (rootOpts options) appOptions() []yapp.Option {
 	for _, item := range rootOpts.configSources {
 		appOpts = append(appOpts, yapp.WithConfigSource(item.name, item.priority, item.source))
 	}
+	for kind, builder := range rootOpts.configBuilders {
+		appOpts = append(appOpts, yapp.WithConfigSourceBuilder(kind, builder))
+	}
 	if len(rootOpts.modules) > 0 {
 		appOpts = append(appOpts, yapp.WithModules(rootOpts.modules...))
 	}
@@ -318,4 +357,19 @@ func (rootOpts options) appOptions() []yapp.Option {
 		)
 	}
 	return appOpts
+}
+
+func (rootOpts options) runContext(parent context.Context) (context.Context, context.CancelFunc) {
+	enabled := true
+	if rootOpts.signalHandling != nil {
+		enabled = *rootOpts.signalHandling
+	}
+	if !enabled {
+		return parent, func() {}
+	}
+	signals := rootOpts.shutdownSignals
+	if len(signals) == 0 {
+		signals = defaultShutdownSignals
+	}
+	return signal.NotifyContext(parent, signals...)
 }

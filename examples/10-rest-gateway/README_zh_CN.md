@@ -24,7 +24,7 @@ go run .
 
 ## 观察点
 
-- 服务端主入口已经收敛到 root `yggdrasil.Run(...)`，而 `RESTBinding` 何时安装仍然完全由 `server/business/compose.go` 决定。
+- 服务端主入口已经收敛到 root `yggdrasil.Run(ctx, appName, ...)`，而 `RESTBinding` 何时安装仍然完全由 `server/business/compose.go` 决定。
 - `server/business/compose.go` 同时返回 `LibraryServiceServiceDesc` 和 `LibraryServiceRestServiceDesc`，这是这个例子的核心边界。
 - `client/main.go` 不是 Yggdrasil client，而是一个普通 HTTP 调用者；它的职责是从框架外确认 REST route、JSON 编解码和状态码是否符合预期。
 

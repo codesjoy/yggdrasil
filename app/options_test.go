@@ -109,24 +109,6 @@ func TestWithConfigManager(t *testing.T) {
 	})
 }
 
-// --- WithAppName ---
-
-func TestWithAppName(t *testing.T) {
-	t.Run("sets app name", func(t *testing.T) {
-		opts := &options{}
-		err := WithAppName("my-app")(opts)
-		require.NoError(t, err)
-		assert.Equal(t, "my-app", opts.appName)
-	})
-
-	t.Run("empty name is allowed", func(t *testing.T) {
-		opts := &options{}
-		err := WithAppName("")(opts)
-		require.NoError(t, err)
-		assert.Equal(t, "", opts.appName)
-	})
-}
-
 // --- WithMode ---
 
 func TestWithMode(t *testing.T) {
@@ -262,11 +244,9 @@ func TestApplyOptions(t *testing.T) {
 	t.Run("applies all options", func(t *testing.T) {
 		opts := &options{}
 		err := applyOptions(opts,
-			WithAppName("test"),
 			WithMode("dev"),
 		)
 		require.NoError(t, err)
-		assert.Equal(t, "test", opts.appName)
 		assert.Equal(t, "dev", opts.mode)
 	})
 
@@ -274,12 +254,10 @@ func TestApplyOptions(t *testing.T) {
 		opts := &options{}
 		expected := errors.New("boom")
 		err := applyOptions(opts,
-			WithAppName("test"),
 			func(o *options) error { return expected },
 			WithMode("should-not-apply"),
 		)
 		require.ErrorIs(t, err, expected)
-		assert.Equal(t, "test", opts.appName)
 		assert.Equal(t, "", opts.mode)
 	})
 }
@@ -288,10 +266,18 @@ func TestApplyOptions(t *testing.T) {
 
 func TestNew(t *testing.T) {
 	t.Run("creates app with options", func(t *testing.T) {
-		app, err := New("", WithAppName("open-test"))
+		app, err := New("open-test", WithMode("dev"))
 		require.NoError(t, err)
 		require.NotNil(t, app)
-		assert.Equal(t, "open-test", app.opts.appName)
+		assert.Equal(t, "open-test", app.name)
+		assert.Equal(t, "dev", app.opts.mode)
+	})
+
+	t.Run("empty app name fails", func(t *testing.T) {
+		app, err := New("")
+		require.Error(t, err)
+		assert.Nil(t, app)
+		assert.Contains(t, err.Error(), "app name is required")
 	})
 }
 

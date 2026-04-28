@@ -17,6 +17,7 @@ last_reviewed: TBD
 func main() {
     if err := yggdrasil.Run(
         context.Background(),
+        "order-service",
         business.Compose,
         yggdrasil.WithConfigPath("app.yaml"),
     ); err != nil {
@@ -25,7 +26,7 @@ func main() {
 }
 ```
 
-`yggdrasil.Run` targets a single-main-App program and may install process-default logger / OTel / legacy instance facades. Tests, multi-App, sidecar, and embedded scenarios should use `yggdrasil.New` / `app.New` and keep the default App-local runtime; set `WithProcessDefaults(true)` only when compatibility with global APIs is required.
+`yggdrasil.Run` targets a single-main-App program and may install process-default logger / OTel / legacy instance facades. `appName` is required and is not read from configuration. Tests, multi-App, sidecar, and embedded scenarios should use `yggdrasil.New(appName, ...)` / `app.New(appName, ...)` and keep the default App-local runtime; set `WithProcessDefaults(true)` only when compatibility with global APIs is required.
 
 ### 1.2 Recommended business.Compose
 
@@ -93,11 +94,21 @@ Constraints:
 - When capability values depend on configuration, return lazy providers/factories and defer reading shared state until runtime objects are actually built.
 - `CapabilityRegistration` does not support `Reloadable`; if provider behavior must be rebuilt on config change, use a full module instead.
 
+### 3.2 Config Source Extensions
+
+- Use `WithConfigSourceBuilder(kind, builder)` when an application owns one custom declarative config source.
+- Implement `module.ConfigSourceProvider` when a module contributes reusable source kinds.
+- Builders should be deterministic and validate their `SourceSpec` eagerly.
+- Context-aware builders may inspect the already loaded base snapshot, but should not mutate global state or assume later sources are present.
+
 ## 4. Configuration Author Checklist
 
 - [ ] Use `yggdrasil.mode` to express environment and bundle mode.
+- [ ] Pass app identity in code through `Run` / `New`; do not configure it in YAML.
 - [ ] When defaults are not desired, prefer explicit configuration or `force_defaults`.
 - [ ] Prefer versioned templates for chain extensions.
+- [ ] Use `YGGDRASIL_CONFIG_SOURCES` or `--yggdrasil-config-sources` only for bootstrap source discovery.
+- [ ] Use source `ignored_vars` / `ignored_names` to keep bootstrap-only controls out of the application snapshot.
 - [ ] Configure high-risk components such as auth, retry, and circuit-breaker explicitly; do not rely on default templates.
 - [ ] When `AmbiguousDefault` occurs, do not reorder module registration; explicitly choose a provider or disable candidates.
 

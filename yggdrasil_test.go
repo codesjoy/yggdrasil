@@ -17,14 +17,16 @@ package yggdrasil
 import (
 	"context"
 	"errors"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/codesjoy/yggdrasil/v3/module"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codesjoy/yggdrasil/v3/module"
 
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
@@ -83,7 +85,7 @@ func TestOpenComposeAndInstallStartStop(t *testing.T) {
 	useTestManager()
 
 	app, err := New(
-		WithAppName("root-open"),
+		"root-open",
 		WithConfigSource("root", config.PriorityOverride, rootConfigSource()),
 	)
 	require.NoError(t, err)
@@ -114,7 +116,7 @@ func TestComposeAndInstallFailureStopsFacade(t *testing.T) {
 	useTestManager()
 
 	app, err := New(
-		WithAppName("root-compose-failure"),
+		"root-compose-failure",
 		WithConfigSource("root", config.PriorityOverride, rootConfigSource()),
 	)
 	require.NoError(t, err)
@@ -141,12 +143,12 @@ func TestRunHappyPathStopsOnContextCancel(t *testing.T) {
 
 	err := Run(
 		ctx,
+		"root-run",
 		func(Runtime) (*BusinessBundle, error) {
 			return &BusinessBundle{
 				Tasks: []BackgroundTask{task},
 			}, nil
 		},
-		WithAppName("root-run"),
 		WithConfigSource("root", config.PriorityOverride, rootConfigSource()),
 	)
 	require.NoError(t, err)
@@ -156,7 +158,7 @@ func TestWaitPropagatesServeFailure(t *testing.T) {
 	useTestManager()
 
 	app, err := New(
-		WithAppName("root-wait-error"),
+		"root-wait-error",
 		WithConfigSource("root", config.PriorityOverride, rootConfigSource()),
 	)
 	require.NoError(t, err)
@@ -193,18 +195,23 @@ func TestAppNilReceiver(t *testing.T) {
 
 func TestRunWithNilContext(t *testing.T) {
 	//nolint:staticcheck // intentional: testing nil context validation
-	err := Run(nil, nil)
+	err := Run(nil, "test-app", nil)
 	require.Equal(t, "run context is nil", err.Error())
 }
 
-func TestWithOptions(t *testing.T) {
-	t.Run("WithAppName", func(t *testing.T) {
-		opts := options{}
-		err := WithAppName("test-app")(&opts)
-		require.NoError(t, err)
-		assert.Equal(t, "test-app", opts.appName)
-	})
+func TestRunWithEmptyAppName(t *testing.T) {
+	err := Run(context.Background(), "", nil)
+	require.Equal(t, "app name is required", err.Error())
+}
 
+func TestNewWithEmptyAppName(t *testing.T) {
+	app, err := New("")
+	require.Error(t, err)
+	assert.Nil(t, app)
+	assert.Contains(t, err.Error(), "app name is required")
+}
+
+func TestWithOptions(t *testing.T) {
 	t.Run("WithConfigPath", func(t *testing.T) {
 		opts := options{}
 		err := WithConfigPath("/etc/config.yaml")(&opts)
@@ -217,6 +224,21 @@ func TestWithOptions(t *testing.T) {
 		err := WithMode("debug")(&opts)
 		require.NoError(t, err)
 		assert.Equal(t, "debug", opts.mode)
+	})
+
+	t.Run("WithSignalHandling", func(t *testing.T) {
+		opts := options{}
+		err := WithSignalHandling(false)(&opts)
+		require.NoError(t, err)
+		require.NotNil(t, opts.signalHandling)
+		assert.False(t, *opts.signalHandling)
+	})
+
+	t.Run("WithShutdownSignals", func(t *testing.T) {
+		opts := options{}
+		err := WithShutdownSignals(os.Interrupt)(&opts)
+		require.NoError(t, err)
+		assert.Equal(t, []os.Signal{os.Interrupt}, opts.shutdownSignals)
 	})
 
 	t.Run("WithConfigSource nil source is skipped", func(t *testing.T) {
@@ -236,7 +258,7 @@ func TestWithOptions(t *testing.T) {
 	})
 
 	t.Run("nil Option is skipped in convertOptions", func(t *testing.T) {
-		appOpts, err := convertOptions(nil, WithAppName("test"))
+		appOpts, err := convertOptions(nil, WithMode("test"))
 		require.NoError(t, err)
 		assert.NotEmpty(t, appOpts)
 	})
@@ -271,12 +293,24 @@ func TestWithOptions(t *testing.T) {
 	})
 }
 
+func TestRunContextSignalHandlingDisabled(t *testing.T) {
+	parent, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	opts := options{}
+	require.NoError(t, WithSignalHandling(false)(&opts))
+	ctx, cleanup := opts.runContext(parent)
+	defer cleanup()
+
+	assert.Same(t, parent, ctx)
+}
+
 func TestRootWithModulesPassThrough(t *testing.T) {
 	useTestManager()
 
 	var initCalled atomic.Bool
 	app, err := New(
-		WithAppName("root-modules-pass-through"),
+		"root-modules-pass-through",
 		WithConfigSource("root", config.PriorityOverride, rootConfigSource()),
 		WithModules(&rootInitModule{
 			name: "root.test.module",
@@ -303,7 +337,7 @@ func TestRootWithCapabilityRegistrationsPassThrough(t *testing.T) {
 
 	var initCalled atomic.Bool
 	app, err := New(
-		WithAppName("root-registrations-pass-through"),
+		"root-registrations-pass-through",
 		WithConfigSource("root", config.PriorityOverride, rootConfigSource()),
 		WithCapabilityRegistrations(CapabilityRegistration{
 			Name: "capability.root.pass-through",

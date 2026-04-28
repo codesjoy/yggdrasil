@@ -24,8 +24,8 @@ go run .
 
 ## What to observe
 
-- The server uses `yggdrasil.Run(..., yggdrasil.WithCapabilityRegistrations(...))`, so the registration enters the current root app together with the business bundle.
-- The client uses `app.New(..., WithCapabilityRegistrations(...))->NewClient(...)`, because standalone client bootstrap is still an advanced entry.
+- The server uses `yggdrasil.Run(ctx, appName, ..., yggdrasil.WithCapabilityRegistrations(...))`, so the registration enters the current root app together with the business bundle.
+- The client uses `app.New(appName, ..., WithCapabilityRegistrations(...))->NewClient(...)`, because standalone client bootstrap is still an advanced entry.
 - The extension point is limited to the `grpcx` transport provider layer; the business side still installs a normal `GreeterService`.
 
 ## Key source entry points

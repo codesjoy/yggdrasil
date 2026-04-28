@@ -45,6 +45,7 @@ func composeBundle(rt yggdrasil.Runtime) (*yggdrasil.BusinessBundle, error) {
 func main() {
 	if err := yggdrasil.Run(
 		context.Background(),
+		"github.com.codesjoy.yggdrasil.example.20-capability-registration",
 		composeBundle,
 		yggdrasil.WithConfigPath("config.yaml"),
 		yggdrasil.WithCapabilityRegistrations(grpcx.NewRegistration()),

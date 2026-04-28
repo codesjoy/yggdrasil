@@ -24,8 +24,8 @@ go run .
 
 ## What to observe
 
-- `server/main.go` uses root `yggdrasil.Run(...)`; the formal installation boundary remains `server/business/compose.go`.
-- `client/main.go` uses standalone `app.New(...)->NewClient(...)` bootstrap because the root facade does not own standalone client startup.
+- `server/main.go` uses root `yggdrasil.Run(ctx, appName, ...)`; the formal installation boundary remains `server/business/compose.go`.
+- `client/main.go` uses standalone `app.New(appName, ...)->NewClient(...)` bootstrap because the root facade does not own standalone client startup.
 - The service target aligns with examples 12 and 14 for a continuous reading path.
 
 ## Key source entry points

@@ -15,6 +15,7 @@ func main() {
 	slog.Info("start custom service cron example", "diagnostics", diagnosticsURL)
 	if err := yggdrasil.Run(
 		context.Background(),
+		business.AppName,
 		business.Compose,
 		yggdrasil.WithConfigPath("config.yaml"),
 	); err != nil {

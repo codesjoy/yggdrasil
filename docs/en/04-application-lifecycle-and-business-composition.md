@@ -41,7 +41,7 @@ New -> Planned -> InfraInitialized -> Initialized -> BusinessInstalled -> Servin
 
 ### 2.1 Default service entry
 
-`yggdrasil.Run(ctx, compose, opts...)` is the recommended default onboarding path for services because it keeps business-facing entrypoints at the root facade while preserving the same `BusinessBundle` installation boundary underneath:
+`yggdrasil.Run(ctx, appName, compose, opts...)` is the recommended default onboarding path for services because it keeps business-facing entrypoints at the root facade while preserving the same `BusinessBundle` installation boundary underneath:
 
 ```text
 yggdrasil.Run -> ComposeAndInstall -> Start -> Wait
@@ -49,9 +49,11 @@ yggdrasil.Run -> ComposeAndInstall -> Start -> Wait
 
 This is the path application teams should see first.
 
+`appName` is a required code-level identity. It must be passed to `Run` / `New` and is no longer resolved from configuration.
+
 ### 2.2 Advanced lifecycle and client entry
 
-`app.New(appName, ...)` remains the advanced control path when you need explicit `Prepare`, `Compose`, `Install`, `Start`, `Wait`, `Stop`, or a standalone client bootstrap such as `app.New(...)->NewClient(...)`.
+`yggdrasil.New(appName, ...)` and `app.New(appName, ...)` remain the advanced control paths when you need explicit `Prepare`, `Compose`, `Install`, `Start`, `Wait`, `Stop`, or a standalone client bootstrap such as `app.New(appName, ...)->NewClient(...)`.
 
 ## 3. Prepare Phase
 
@@ -227,6 +229,8 @@ BeforeStop hooks
 ```
 
 The default shutdown timeout is 30 seconds and can be changed with `WithShutdownTimeout`.
+
+The root `yggdrasil.Run` entry installs default OS signal handling and derives the run context from the parent context plus shutdown signals. Use `WithSignalHandling(false)` when the host process owns signal handling, or `WithShutdownSignals(...)` to customize the signal set. The lower-level lifecycle runner receives contexts for both `Run` and `Stop`; `Stop` respects an existing context deadline and otherwise wraps the shutdown sequence with the configured timeout.
 
 ## 10. Compose / Install Failure Compensation
 

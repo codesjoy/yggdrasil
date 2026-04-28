@@ -41,11 +41,6 @@ type Root struct {
 	Yggdrasil Framework `mapstructure:"yggdrasil"`
 }
 
-// Application contains high-level app identity settings.
-type Application struct {
-	Name string `mapstructure:"name"`
-}
-
 // Overrides contains planner-facing assembly override settings.
 type Overrides struct {
 	DisableModules []string          `mapstructure:"disable_modules"`
@@ -56,7 +51,6 @@ type Overrides struct {
 
 // Framework contains the framework-owned configuration tree.
 type Framework struct {
-	App           Application          `mapstructure:"app"`
 	Mode          string               `mapstructure:"mode"`
 	Overrides     Overrides            `mapstructure:"overrides"`
 	Config        configchain.Settings `mapstructure:"config"`
@@ -261,7 +255,6 @@ type Admin struct {
 // Resolved contains normalized settings ready for module configuration.
 type Resolved struct {
 	Root       Root
-	App        Application
 	Mode       string
 	Overrides  Overrides
 	Server     server.Settings

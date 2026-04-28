@@ -461,6 +461,7 @@ func composeBundle(
 func main() {
 	if err := yggdrasil.Run(
 		context.Background(),
+		"github.com.codesjoy.yggdrasil.example.13-error-reason",
 		composeBundle(NewLibraryServer()),
 		yggdrasil.WithConfigPath("config.yaml"),
 	); err != nil {

@@ -6,7 +6,7 @@
 
 ### 入门主线
 
-1. [01 快速开始](01-quickstart/README_zh_CN.md)：最短端到端路径，服务端使用 `yggdrasil.Run(...)`，客户端使用 standalone `app.New(...)->NewClient(...)`。
+1. [01 快速开始](01-quickstart/README_zh_CN.md)：最短端到端路径，服务端使用 `yggdrasil.Run(ctx, appName, ...)`，客户端使用 standalone `app.New(appName, ...)->NewClient(...)`。
 2. [02 Runtime Bundle](02-runtime-bundle/README_zh_CN.md)：理解 root facade 背后的 `Runtime` 与 `BusinessBundle` 安装面。
 3. [03 Diagnostics Reload](03-diagnostics-reload/README_zh_CN.md)：观察 watchable config、diagnostics、spec hash/diff 与 restart-required reload 行为。
 
@@ -31,7 +31,7 @@
 
 ## 文档约定
 
-- 服务端示例优先使用 root `yggdrasil.Run(...)`。
-- standalone client、provider-heavy 或需要低层控制的场景使用 `app.New(...)`。
+- 服务端示例优先使用 root `yggdrasil.Run(ctx, appName, ...)`。
+- standalone client、provider-heavy 或需要低层控制的场景使用 `app.New(appName, ...)`。
 - 正式业务安装边界始终是 `BusinessBundle`。
 - 所有链接使用仓库相对路径，不使用本地机器绝对路径。

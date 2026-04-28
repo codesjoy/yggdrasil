@@ -1,6 +1,4 @@
 yggdrasil:
-  app:
-    name: "github.com.codesjoy.yggdrasil.example.02-runtime-bundle"
   mode: dev
 
   server:

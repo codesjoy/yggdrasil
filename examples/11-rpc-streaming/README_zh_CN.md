@@ -24,8 +24,8 @@ go run .
 
 ## 观察点
 
-- `server/main.go` 已经统一到 root `yggdrasil.Run(...)`，正式安装边界仍然在 `server/business/compose.go`。
-- `client/main.go` 使用独立 `app.New(...)->NewClient(...)` bootstrap，因为 root facade 不负责 standalone client 启动。
+- `server/main.go` 已经统一到 root `yggdrasil.Run(ctx, appName, ...)`，正式安装边界仍然在 `server/business/compose.go`。
+- `client/main.go` 使用独立 `app.New(appName, ...)->NewClient(...)` bootstrap，因为 root facade 不负责 standalone client 启动。
 - 配置里的 service target 已切到 `github.com.codesjoy.yggdrasil.example.11-rpc-streaming`，方便和 `12`、`14` 形成连续阅读路径。
 
 ## 关键源码入口

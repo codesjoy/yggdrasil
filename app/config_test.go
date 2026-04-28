@@ -474,13 +474,6 @@ func TestAddManagedConfigSource(t *testing.T) {
 // --- resolveIdentityLocked ---
 
 func TestResolveIdentityLocked(t *testing.T) {
-	t.Run("name from opts", func(t *testing.T) {
-		app := &App{opts: &options{appName: "from-opts"}}
-		err := app.resolveIdentityLocked()
-		require.NoError(t, err)
-		assert.Equal(t, "from-opts", app.name)
-	})
-
 	t.Run("name already set", func(t *testing.T) {
 		app := &App{
 			name: "already-set",
@@ -489,6 +482,16 @@ func TestResolveIdentityLocked(t *testing.T) {
 		err := app.resolveIdentityLocked()
 		require.NoError(t, err)
 		assert.Equal(t, "already-set", app.name)
+	})
+
+	t.Run("name is trimmed", func(t *testing.T) {
+		app := &App{
+			name: "  trimmed  ",
+			opts: &options{},
+		}
+		err := app.resolveIdentityLocked()
+		require.NoError(t, err)
+		assert.Equal(t, "trimmed", app.name)
 	})
 
 	t.Run("nil app returns error", func(t *testing.T) {

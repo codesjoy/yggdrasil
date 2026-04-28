@@ -149,6 +149,7 @@ import (
 func main() {
     if err := yggdrasil.Run(
         context.Background(),
+        "order-service",
         business.Compose,
         yggdrasil.WithConfigPath("app.yaml"),
     ); err != nil {
@@ -158,7 +159,7 @@ func main() {
 }
 ```
 
-Replace the `business` import with your service's package. The root `yggdrasil` facade is the default service entry. Use `app.New(...)->NewClient(...)` when you need a standalone client bootstrap or `app.New(...)->Start(...)` when you need explicit lifecycle control.
+Replace the `business` import with your service's package. The root `yggdrasil` facade is the default service entry. The app name is passed explicitly to `Run` / `New`; it is no longer read from configuration. Use `app.New(appName, ...)->NewClient(...)` when you need a standalone client bootstrap or `app.New(appName, ...)->Start(...)` when you need explicit lifecycle control.
 
 Runnable quickstart:
 
@@ -198,8 +199,6 @@ func Compose(rt yggdrasil.Runtime) (*yggdrasil.BusinessBundle, error) {
 ```yaml
 yggdrasil:
   mode: prod-grpc
-  app:
-    name: order-service
 
   server:
     transports:
@@ -242,6 +241,8 @@ yggdrasil:
 ```
 
 See [Configuration, Declarative Assembly, and Hot Reload](docs/en/05-configuration-declarative-assembly-and-hot-reload.md).
+
+Configuration can be layered from files, environment variables, flags, and programmatic sources. If no config file, bootstrap source, or programmatic config source is loaded, Yggdrasil installs default `YGGDRASIL` environment and command-line flag sources. Bootstrap config sources can be declared with `YGGDRASIL_CONFIG_SOURCES` or `--yggdrasil-config-sources` using JSON object/array syntax or the compact `kind:name:priority` form.
 
 ---
 

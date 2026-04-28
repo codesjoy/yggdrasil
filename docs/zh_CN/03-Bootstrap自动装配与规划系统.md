@@ -225,6 +225,7 @@ type ChainTemplate struct {
 ```go
 return yggdrasil.Run(
     ctx,
+    "order-service",
     business.Compose,
     yggdrasil.WithConfigPath("app.yaml"),
 )

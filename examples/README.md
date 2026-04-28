@@ -6,7 +6,7 @@ This directory contains the English optimized documentation for Yggdrasil v3 exa
 
 ### Onboarding path
 
-1. [01 Quickstart](01-quickstart/README.md): the shortest end-to-end path. The server uses `yggdrasil.Run(...)`; the client uses standalone `app.New(...)->NewClient(...)`.
+1. [01 Quickstart](01-quickstart/README.md): the shortest end-to-end path. The server uses `yggdrasil.Run(ctx, appName, ...)`; the client uses standalone `app.New(appName, ...)->NewClient(...)`.
 2. [02 Runtime Bundle](02-runtime-bundle/README.md): understand the `Runtime` and `BusinessBundle` installation surface behind the root facade.
 3. [03 Diagnostics Reload](03-diagnostics-reload/README.md): observe watchable config, diagnostics, spec hash/diff, and restart-required reload behavior.
 
@@ -31,7 +31,7 @@ This directory contains the English optimized documentation for Yggdrasil v3 exa
 
 ## Documentation conventions
 
-- Server-side examples prefer root `yggdrasil.Run(...)`.
-- Standalone clients, provider-heavy scenarios, or lower-level control paths use `app.New(...)`.
+- Server-side examples prefer root `yggdrasil.Run(ctx, appName, ...)`.
+- Standalone clients, provider-heavy scenarios, or lower-level control paths use `app.New(appName, ...)`.
 - The formal business installation boundary is always `BusinessBundle`.
 - All links use repository-relative paths instead of local absolute paths.

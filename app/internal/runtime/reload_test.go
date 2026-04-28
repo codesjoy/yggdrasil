@@ -179,7 +179,7 @@ func TestRootAsAny(t *testing.T) {
 	t.Run("valid root", func(t *testing.T) {
 		root := settings.Root{
 			Yggdrasil: settings.Framework{
-				App: settings.Application{Name: "test"},
+				Mode: "test",
 			},
 		}
 		result, err := rootAsAny(root)

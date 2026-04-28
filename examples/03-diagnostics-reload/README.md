@@ -23,7 +23,7 @@ curl http://127.0.0.1:56032/module-hub?pretty=true
 
 ## What to observe
 
-- `main.go` still uses root `yggdrasil.Run(...)`, with a watchable `reload.yaml` injected through `yggdrasil.WithConfigSource(...)`.
+- `main.go` still uses root `yggdrasil.Run(ctx, appName, ...)`, with a watchable `reload.yaml` injected through `yggdrasil.WithConfigSource(...)`.
 - `config.yaml` is the base configuration; `reload.yaml` is loaded and watched as an additional layer.
 - When `reload.yaml` changes `mode` from `dev` to `prod-grpc`, the framework replans the assembly and records the new spec hash and diff in diagnostics.
 

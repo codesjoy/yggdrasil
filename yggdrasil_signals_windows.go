@@ -12,26 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+//go:build windows
 
-import (
-	"context"
-	"log/slog"
-	"os"
+package yggdrasil
 
-	"github.com/codesjoy/yggdrasil/v3"
-	"github.com/codesjoy/yggdrasil/v3/examples/12-transport-metadata/server/business"
-)
+import "os"
 
-func main() {
-	err := yggdrasil.Run(
-		context.Background(),
-		business.AppName,
-		business.Compose,
-		yggdrasil.WithConfigPath("config.yaml"),
-	)
-	if err != nil {
-		slog.Error("run app", slog.Any("error", err))
-		os.Exit(1)
-	}
-}
+var defaultShutdownSignals = []os.Signal{os.Interrupt}

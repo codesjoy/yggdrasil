@@ -33,7 +33,7 @@ import (
 const serverName = "github.com.codesjoy.yggdrasil.example.13-error-reason"
 
 func main() {
-	app, err := yapp.New("", yapp.WithConfigPath("config.yaml"))
+	app, err := yapp.New("client", yapp.WithConfigPath("config.yaml"))
 	if err != nil {
 		os.Exit(1)
 	}

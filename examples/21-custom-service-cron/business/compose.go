@@ -6,8 +6,9 @@ import (
 	"log/slog"
 	"sync"
 
-	yapp "github.com/codesjoy/yggdrasil/v3/app"
 	"github.com/robfig/cron/v3"
+
+	yapp "github.com/codesjoy/yggdrasil/v3/app"
 )
 
 const AppName = "github.com.codesjoy.yggdrasil.example.21-custom-service-cron"

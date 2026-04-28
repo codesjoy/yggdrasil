@@ -363,8 +363,8 @@ func TestApp_StageCommitRollbackFoundationSnapshot(t *testing.T) {
 
 	t.Run("rollback different snapshot is no-op", func(t *testing.T) {
 		app := newTestApp(t, "test")
-		snap1 := &Snapshot{Resolved: settings.Resolved{App: settings.Application{Name: "1"}}}
-		snap2 := &Snapshot{Resolved: settings.Resolved{App: settings.Application{Name: "2"}}}
+		snap1 := &Snapshot{Resolved: settings.Resolved{Mode: "1"}}
+		snap2 := &Snapshot{Resolved: settings.Resolved{Mode: "2"}}
 
 		app.stageFoundationSnapshot(snap1)
 		app.rollbackFoundationSnapshot(snap2)
@@ -423,41 +423,41 @@ func TestApp_FoundationSnapshotForRuntime(t *testing.T) {
 	t.Run("prefers prepared snapshot", func(t *testing.T) {
 		app := newTestApp(t, "test")
 		prepared := &Snapshot{
-			Resolved: settings.Resolved{App: settings.Application{Name: "prepared"}},
+			Resolved: settings.Resolved{Mode: "prepared"},
 		}
 		foundation := &Snapshot{
-			Resolved: settings.Resolved{App: settings.Application{Name: "foundation"}},
+			Resolved: settings.Resolved{Mode: "foundation"},
 		}
 
 		app.stageFoundationSnapshot(prepared)
 		app.commitFoundationSnapshot(foundation)
 
 		result := app.foundationSnapshotForRuntime()
-		assert.Equal(t, "prepared", result.Resolved.App.Name)
+		assert.Equal(t, "prepared", result.Resolved.Mode)
 	})
 
 	t.Run("falls back to foundation snapshot", func(t *testing.T) {
 		app := newTestApp(t, "test")
 		foundation := &Snapshot{
-			Resolved: settings.Resolved{App: settings.Application{Name: "foundation"}},
+			Resolved: settings.Resolved{Mode: "foundation"},
 		}
 
 		app.commitFoundationSnapshot(foundation)
 
 		result := app.foundationSnapshotForRuntime()
-		assert.Equal(t, "foundation", result.Resolved.App.Name)
+		assert.Equal(t, "foundation", result.Resolved.Mode)
 	})
 
 	t.Run("falls back to runtime snapshot", func(t *testing.T) {
 		app := newTestApp(t, "test")
 		runtimeSnap := &Snapshot{
-			Resolved: settings.Resolved{App: settings.Application{Name: "runtime"}},
+			Resolved: settings.Resolved{Mode: "runtime"},
 		}
 
 		app.setRuntimeSnapshot(runtimeSnap)
 
 		result := app.foundationSnapshotForRuntime()
-		assert.Equal(t, "runtime", result.Resolved.App.Name)
+		assert.Equal(t, "runtime", result.Resolved.Mode)
 	})
 }
 

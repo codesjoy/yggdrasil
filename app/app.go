@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -158,6 +159,10 @@ type App struct {
 
 // New creates a new App.
 func New(appName string, ops ...Option) (*App, error) {
+	appName = strings.TrimSpace(appName)
+	if appName == "" {
+		return nil, errors.New("app name is required")
+	}
 	opts := &options{}
 	if err := applyOptions(opts, ops...); err != nil {
 		return nil, err

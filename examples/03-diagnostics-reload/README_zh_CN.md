@@ -23,7 +23,7 @@ curl http://127.0.0.1:56032/module-hub?pretty=true
 
 ## 观察点
 
-- `main.go` 仍走 root `yggdrasil.Run(...)`，只是额外通过 `yggdrasil.WithConfigSource(...)` 注入了可 watch 的 `reload.yaml`。
+- `main.go` 仍走 root `yggdrasil.Run(ctx, appName, ...)`，只是额外通过 `yggdrasil.WithConfigSource(...)` 注入了可 watch 的 `reload.yaml`。
 - `config.yaml` 是基础配置，`reload.yaml` 作为附加 layer 加载并 watch。
 - 当 `reload.yaml` 把 `mode` 从 `dev` 改到 `prod-grpc` 时，framework 会重新规划 assembly，并在 diagnostics 中记录新的 spec hash 与 diff。
 

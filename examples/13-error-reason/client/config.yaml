@@ -1,6 +1,4 @@
 yggdrasil:
-  app:
-    name: "github.com.codesjoy.yggdrasil.example.13-error-reason.client"
   admin:
     application:
       namespace: "dev"

@@ -217,6 +217,7 @@ Computes a SHA-256 hash over canonical JSON. Addresses, interface instances, and
 ```go
 return yggdrasil.Run(
     ctx,
+    "order-service",
     business.Compose,
     yggdrasil.WithConfigPath("app.yaml"),
 )

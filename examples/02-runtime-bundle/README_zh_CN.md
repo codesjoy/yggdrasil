@@ -23,7 +23,7 @@ curl http://127.0.0.1:56022/diagnostics?pretty=true
 
 ## 观察点
 
-- `main.go` 只保留 root `yggdrasil.Run(...)`，bundle 组合逻辑全部收敛在 `business.Compose`。
+- `main.go` 只保留 root `yggdrasil.Run(ctx, appName, ...)`，bundle 组合逻辑全部收敛在 `business.Compose`。
 - `/healthz` 由 `RawHTTPBinding` 提供；`/v1/shelves/runtime-bundle` 由 `RESTBinding` 提供；gRPC 则走 `RPCBinding`。
 - governor 的 `/diagnostics` 会带上 `BusinessBundle.Diagnostics`，便于确认 bundle 安装结果。
 

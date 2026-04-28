@@ -23,7 +23,7 @@ curl http://127.0.0.1:56022/diagnostics?pretty=true
 
 ## What to observe
 
-- `main.go` keeps only root `yggdrasil.Run(...)`; bundle composition is centralized in `business.Compose`.
+- `main.go` keeps only root `yggdrasil.Run(ctx, appName, ...)`; bundle composition is centralized in `business.Compose`.
 - `/healthz` comes from `RawHTTPBinding`; `/v1/shelves/runtime-bundle` comes from `RESTBinding`; gRPC comes from `RPCBinding`.
 - Governor `/diagnostics` includes `BusinessBundle.Diagnostics`, which helps confirm the installed bundle.
 

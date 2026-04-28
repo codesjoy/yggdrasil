@@ -21,7 +21,7 @@ func main() {
 	defer cancel()
 
 	app, err := yapp.New(
-		"",
+		"github.com.codesjoy.yggdrasil.example.20-capability-registration.client",
 		yapp.WithConfigPath("config.yaml"),
 		yapp.WithCapabilityRegistrations(grpcx.NewRegistration()),
 	)

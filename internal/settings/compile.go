@@ -34,7 +34,6 @@ func Compile(root Root) (Resolved, error) {
 	fw := root.Yggdrasil
 	resolved := Resolved{
 		Root:      root,
-		App:       fw.App,
 		Mode:      fw.Mode,
 		Overrides: fw.Overrides,
 		Server:    fw.Server,

@@ -149,6 +149,7 @@ import (
 func main() {
     if err := yggdrasil.Run(
         context.Background(),
+        "order-service",
         business.Compose,
         yggdrasil.WithConfigPath("app.yaml"),
     ); err != nil {
@@ -158,7 +159,7 @@ func main() {
 }
 ```
 
-将 `business` import 替换为你的服务包路径。root `yggdrasil` facade 是默认服务入口；需要独立 client bootstrap 时使用 `app.New(...)->NewClient(...)`，需要显式生命周期控制时再使用 `app.New(...)->Start(...)`。
+将 `business` import 替换为你的服务包路径。root `yggdrasil` facade 是默认服务入口；app name 由 `Run` / `New` 显式传入，不再从配置读取。需要独立 client bootstrap 时使用 `app.New(appName, ...)->NewClient(...)`，需要显式生命周期控制时再使用 `app.New(appName, ...)->Start(...)`。
 
 可直接运行的 quickstart：
 
@@ -198,8 +199,6 @@ func Compose(rt yggdrasil.Runtime) (*yggdrasil.BusinessBundle, error) {
 ```yaml
 yggdrasil:
   mode: prod-grpc
-  app:
-    name: order-service
 
   server:
     transports:
@@ -242,6 +241,8 @@ yggdrasil:
 ```
 
 详见 [配置、声明式装配与热重载](docs/zh_CN/05-配置声明式装配与热重载.md)。
+
+配置可以由文件、环境变量、命令行参数和程序化 source 分层组成。未加载配置文件、bootstrap source 或程序化配置 source 时，Yggdrasil 会安装默认 `YGGDRASIL` 环境变量 source 和默认命令行 flag source。启动期配置 source 可通过 `YGGDRASIL_CONFIG_SOURCES` 或 `--yggdrasil-config-sources` 声明，支持 JSON object、JSON array，以及 `kind:name:priority` 紧凑格式。
 
 ---
 

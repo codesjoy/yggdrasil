@@ -45,9 +45,9 @@ func main() {
 
 	err := yggdrasil.Run(
 		context.Background(),
+		business.ServerAppName(port),
 		business.Compose(instanceID),
 		yggdrasil.WithConfigPath("config.yaml"),
-		yggdrasil.WithAppName(business.ServerAppName(port)),
 		yggdrasil.WithConfigSource(
 			"example:port",
 			config.PriorityOverride,

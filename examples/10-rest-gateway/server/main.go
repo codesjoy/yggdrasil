@@ -26,6 +26,7 @@ import (
 func main() {
 	if err := yggdrasil.Run(
 		context.Background(),
+		business.AppName,
 		business.Compose,
 		yggdrasil.WithConfigPath("config.yaml"),
 	); err != nil {

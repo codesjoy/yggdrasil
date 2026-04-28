@@ -111,7 +111,6 @@ Restart-required:
 
 Module paths should follow `yggdrasil.<subsystem>.<module>`. The framework reserves:
 
-- `yggdrasil.app`
 - `yggdrasil.server`
 - `yggdrasil.transports`
 - `yggdrasil.observability`

@@ -16,7 +16,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	app, err := yapp.New("", yapp.WithConfigPath("config.yaml"))
+	app, err := yapp.New("client", yapp.WithConfigPath("config.yaml"))
 	if err != nil {
 		slog.Error("create client app", slog.Any("error", err))
 		os.Exit(1)

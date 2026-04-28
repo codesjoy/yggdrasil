@@ -1,6 +1,4 @@
 yggdrasil:
-  app:
-    name: "github.com.codesjoy.yggdrasil.example.14-client-load-balancing.client"
   admin:
     application:
       namespace: "dev"

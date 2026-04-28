@@ -24,7 +24,7 @@ go run .
 
 ## What to observe
 
-- The server entry is centralized on root `yggdrasil.Run(...)`; `RESTBinding` installation is decided by `server/business/compose.go`.
+- The server entry is centralized on root `yggdrasil.Run(ctx, appName, ...)`; `RESTBinding` installation is decided by `server/business/compose.go`.
 - `server/business/compose.go` returns both `LibraryServiceServiceDesc` and `LibraryServiceRestServiceDesc`.
 - `client/main.go` is not a Yggdrasil client. It is a plain HTTP caller used to validate route exposure, JSON encoding/decoding, and status codes from outside the framework.
 

@@ -24,8 +24,8 @@ go run .
 
 ## 观察点
 
-- 服务端走 `yggdrasil.Run(..., yggdrasil.WithCapabilityRegistrations(...))`，这样 registration 会和普通业务 bundle 一起进入当前 root app。
-- 客户端走 `app.New(..., WithCapabilityRegistrations(...))->NewClient(...)`，因为 standalone client bootstrap 仍然属于高级入口。
+- 服务端走 `yggdrasil.Run(ctx, appName, ..., yggdrasil.WithCapabilityRegistrations(...))`，这样 registration 会和普通业务 bundle 一起进入当前 root app。
+- 客户端走 `app.New(appName, ..., WithCapabilityRegistrations(...))->NewClient(...)`，因为 standalone client bootstrap 仍然属于高级入口。
 - 扩展点只发生在 `grpcx` transport provider 层，业务侧仍然只是普通的 `GreeterService` 安装。
 
 ## 关键源码入口

@@ -40,10 +40,8 @@ func TestOpenPrepareExposesRuntimeWithoutServing(t *testing.T) {
 	recorder := newTransportRecorder()
 	manager := newTestManager(t, assemblyTestConfig(false))
 
-	app, err := New("",
-		WithConfigManager(manager),
-		WithAppName("prepare-runtime"),
-		WithModules(testTransportModule{recorder: recorder}),
+	app, err := New("prepare-runtime",
+		WithConfigManager(manager), WithModules(testTransportModule{recorder: recorder}),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })
@@ -63,9 +61,11 @@ func TestOpenPrepareExposesRuntimeWithoutServing(t *testing.T) {
 func TestComposeAndInstallRegistersBindingsAndRejectsConflicts(t *testing.T) {
 	manager := newTestManager(t, assemblyTestConfig(true))
 
-	app, err := New("",
-		WithConfigManager(manager),
-		WithAppName("compose-install"),
+	app, err := New(
+		"compose-install",
+		WithConfigManager(
+			manager,
+		),
 		WithModules(testTransportModule{recorder: newTransportRecorder()}),
 	)
 	require.NoError(t, err)
@@ -107,9 +107,11 @@ func TestComposeAndInstallRegistersBindingsAndRejectsConflicts(t *testing.T) {
 		internalinstall.RouteKey(http.MethodGet, "/healthz"),
 	)
 
-	conflictApp, err := New("",
-		WithConfigManager(newTestManager(t, assemblyTestConfig(true))),
-		WithAppName("compose-conflict"),
+	conflictApp, err := New(
+		"compose-conflict",
+		WithConfigManager(
+			newTestManager(t, assemblyTestConfig(true)),
+		),
 		WithModules(testTransportModule{recorder: newTransportRecorder()}),
 	)
 	require.NoError(t, err)
@@ -137,9 +139,11 @@ func TestComposeAndInstallRegistersBindingsAndRejectsConflicts(t *testing.T) {
 	require.ErrorContains(t, err, "already installed")
 	require.ErrorIs(t, conflictApp.Start(context.Background()), errRestartUnsupported)
 
-	badApp, err := New("",
-		WithConfigManager(newTestManager(t, assemblyTestConfig(false))),
-		WithAppName("compose-bad-handler"),
+	badApp, err := New(
+		"compose-bad-handler",
+		WithConfigManager(
+			newTestManager(t, assemblyTestConfig(false)),
+		),
 		WithModules(testTransportModule{recorder: newTransportRecorder()}),
 	)
 	require.NoError(t, err)
@@ -162,10 +166,8 @@ func TestStartWaitStopWithPreparedBusinessBundle(t *testing.T) {
 	recorder := newTransportRecorder()
 	manager := newTestManager(t, assemblyTestConfig(false))
 
-	app, err := New("",
-		WithConfigManager(manager),
-		WithAppName("start-wait-stop"),
-		WithModules(testTransportModule{recorder: recorder}),
+	app, err := New("start-wait-stop",
+		WithConfigManager(manager), WithModules(testTransportModule{recorder: recorder}),
 	)
 	require.NoError(t, err)
 	require.NoError(
@@ -220,9 +222,11 @@ func TestStartWaitStopWithPreparedBusinessBundle(t *testing.T) {
 
 func TestRuntimeLookupSupportsTypedTargets(t *testing.T) {
 	manager := newTestManager(t, assemblyTestConfig(false))
-	app, err := New("",
-		WithConfigManager(manager),
-		WithAppName("runtime-lookup"),
+	app, err := New(
+		"runtime-lookup",
+		WithConfigManager(
+			manager,
+		),
 		WithModules(testTransportModule{recorder: newTransportRecorder()}),
 	)
 	require.NoError(t, err)
@@ -248,9 +252,11 @@ func TestRuntimeLookupSupportsTypedTargets(t *testing.T) {
 }
 
 func TestRuntimeUnavailableBeforePrepareAndAfterStop(t *testing.T) {
-	app, err := New("",
-		WithConfigManager(newTestManager(t, assemblyTestConfig(false))),
-		WithAppName("runtime-state"),
+	app, err := New(
+		"runtime-state",
+		WithConfigManager(
+			newTestManager(t, assemblyTestConfig(false)),
+		),
 		WithModules(testTransportModule{recorder: newTransportRecorder()}),
 	)
 	require.NoError(t, err)
@@ -273,9 +279,11 @@ func TestPrepareFailureCleansUpSynchronously(t *testing.T) {
 		},
 		closeCount: &closeCount,
 	}
-	app, err := New("",
-		WithConfigManager(config.NewManager()),
-		WithAppName("prepare-cleanup"),
+	app, err := New(
+		"prepare-cleanup",
+		WithConfigManager(
+			config.NewManager(),
+		),
 		WithConfigSource("invalid-mode", config.PriorityOverride, source),
 	)
 	require.NoError(t, err)
@@ -293,9 +301,11 @@ func TestComposeFailureCleansUpBeforeReturn(t *testing.T) {
 		data:       map[string]any{"yggdrasil": map[string]any{}},
 		closeCount: &closeCount,
 	}
-	app, err := New("",
-		WithConfigManager(config.NewManager()),
-		WithAppName("compose-cleanup"),
+	app, err := New(
+		"compose-cleanup",
+		WithConfigManager(
+			config.NewManager(),
+		),
 		WithConfigSource("compose-source", config.PriorityOverride, source),
 	)
 	require.NoError(t, err)
@@ -316,9 +326,11 @@ func TestInstallBusinessPartialFailureCleansUpBeforeReturn(t *testing.T) {
 		data:       map[string]any{"yggdrasil": map[string]any{}},
 		closeCount: &closeCount,
 	}
-	app, err := New("",
-		WithConfigManager(config.NewManager()),
-		WithAppName("install-cleanup"),
+	app, err := New(
+		"install-cleanup",
+		WithConfigManager(
+			config.NewManager(),
+		),
 		WithConfigSource("install-source", config.PriorityOverride, source),
 	)
 	require.NoError(t, err)
@@ -339,18 +351,18 @@ func TestInstallBusinessPartialFailureCleansUpBeforeReturn(t *testing.T) {
 
 func TestEffectiveResolved(t *testing.T) {
 	t.Run("nil result uses fallback", func(t *testing.T) {
-		fallback := settings.Resolved{App: settings.Application{Name: "fallback"}}
+		fallback := settings.Resolved{Mode: "fallback"}
 		result := effectiveResolved(nil, fallback)
-		assert.Equal(t, "fallback", result.App.Name)
+		assert.Equal(t, "fallback", result.Mode)
 	})
 
 	t.Run("non-nil result uses resolved", func(t *testing.T) {
-		fallback := settings.Resolved{App: settings.Application{Name: "fallback"}}
+		fallback := settings.Resolved{Mode: "fallback"}
 		planResult := &yassembly.Result{
-			EffectiveResolved: settings.Resolved{App: settings.Application{Name: "planned"}},
+			EffectiveResolved: settings.Resolved{Mode: "planned"},
 		}
 		result := effectiveResolved(planResult, fallback)
-		assert.Equal(t, "planned", result.App.Name)
+		assert.Equal(t, "planned", result.Mode)
 	})
 }
 
@@ -448,10 +460,8 @@ func TestStatsOtelAutoSpecEnablesRealModule(t *testing.T) {
 			},
 		},
 	})
-	app, err := New("",
-		WithConfigManager(manager),
-		WithAppName("stats-auto"),
-	)
+	app, err := New("stats-auto",
+		WithConfigManager(manager))
 	require.NoError(t, err)
 	require.NoError(t, app.Prepare(context.Background()))
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })
@@ -490,10 +500,8 @@ func TestDiagnosticsEndpointIncludesAssemblyState(t *testing.T) {
 			},
 		},
 	})
-	app, err := New("",
-		WithConfigManager(manager),
-		WithAppName("diagnostics-assembly"),
-		WithModules(testTransportModule{recorder: recorder}),
+	app, err := New("diagnostics-assembly",
+		WithConfigManager(manager), WithModules(testTransportModule{recorder: recorder}),
 		WithPlanOverrides(yassembly.ForceDefault("observability.logger.handler", "text")),
 	)
 	require.NoError(t, err)
@@ -568,10 +576,8 @@ func TestReloadWithInstalledBusinessMarksRestartRequired(t *testing.T) {
 	recorder := newTransportRecorder()
 	manager := newTestManager(t, assemblyTestConfig(false))
 
-	app, err := New("",
-		WithConfigManager(manager),
-		WithAppName("reload-installed-business"),
-		WithModules(testTransportModule{recorder: recorder}),
+	app, err := New("reload-installed-business",
+		WithConfigManager(manager), WithModules(testTransportModule{recorder: recorder}),
 	)
 	require.NoError(t, err)
 	require.NoError(
@@ -617,10 +623,8 @@ func TestReloadRuntimeOnlyChangeHotReloadsWithoutBusinessBundle(t *testing.T) {
 	recorder := newTransportRecorder()
 	manager := newTestManager(t, assemblyTestConfig(false))
 
-	app, err := New("",
-		WithConfigManager(manager),
-		WithAppName("reload-runtime-only"),
-		WithModules(testTransportModule{recorder: recorder}),
+	app, err := New("reload-runtime-only",
+		WithConfigManager(manager), WithModules(testTransportModule{recorder: recorder}),
 	)
 	require.NoError(t, err)
 	require.NoError(t, app.Start(context.Background()))
@@ -661,10 +665,8 @@ func TestReloadUpdatesPlanHashesAndDiffDiagnostics(t *testing.T) {
 			},
 		},
 	})
-	app, err := New("",
-		WithConfigManager(manager),
-		WithAppName("reload-plan-diff"),
-		WithModules(testTransportModule{recorder: recorder}),
+	app, err := New("reload-plan-diff",
+		WithConfigManager(manager), WithModules(testTransportModule{recorder: recorder}),
 	)
 	require.NoError(t, err)
 	require.NoError(t, app.Start(context.Background()))

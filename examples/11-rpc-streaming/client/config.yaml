@@ -1,6 +1,4 @@
 yggdrasil:
-  app:
-    name: "github.com.codesjoy.yggdrasil.example.11-rpc-streaming.client"
   admin:
     application:
       namespace: "dev"

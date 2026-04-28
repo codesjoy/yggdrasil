@@ -23,7 +23,7 @@ import (
 
 func TestSet_SimpleKey(t *testing.T) {
 	ct := New(t)
-	ct.Set("yggdrasil.app.name", "test-app")
+	ct.Set("yggdrasil.mode", "test")
 	snap := ct.Manager().Snapshot()
 	require.NotNil(t, snap.Map())
 }

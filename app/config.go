@@ -314,12 +314,9 @@ func (a *App) resolveIdentityLocked() error {
 	if a == nil || a.opts == nil {
 		return errors.New("app options are not initialized")
 	}
-	if name := a.opts.appName; name != "" {
-		a.name = name
-	} else if resolvedName := strings.TrimSpace(a.opts.resolvedSettings.App.Name); resolvedName != "" {
-		a.name = resolvedName
-	} else if strings.TrimSpace(a.name) == "" {
-		return errors.New("app name is required; use WithAppName or yggdrasil.app.name")
+	a.name = strings.TrimSpace(a.name)
+	if a.name == "" {
+		return errors.New("app name is required")
 	}
 	a.identity = internalidentity.FromInstanceConfig(
 		a.name,
