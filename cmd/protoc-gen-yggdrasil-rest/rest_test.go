@@ -538,7 +538,12 @@ func TestGenerateFiles_ExpandsSingletonRoute(t *testing.T) {
 
 	output := generatedFileContent(t, gen, "test_rest.pb.go")
 	assert.Contains(t, output, `Path:    "/v1/organizations/{params1}/settings"`)
-	assert.Contains(t, output, `PopulateFieldFromPath(protoReq, "name", val)`)
+	assert.Contains(t, output, `PopulateFieldFromPathContext(r.Context(), protoReq, "name", val)`)
+	assert.Contains(
+		t,
+		output,
+		`PopulateQueryParametersContext(r.Context(), protoReq, r.URL.Query(), "name")`,
+	)
 	assert.Contains(t, output, `"organizations/" + v5.URLParam(r, "params1") + "/settings"`)
 }
 
@@ -613,8 +618,14 @@ func TestGenerateFiles_NamedBodyPatchIncludesQueryBeforePathPopulation(t *testin
 
 	output := generatedFileContent(t, gen, "test_rest.pb.go")
 	decodeIdx := strings.Index(output, `Decode(protoReq.Resource)`)
-	queryIdx := strings.Index(output, `PopulateQueryParameters(protoReq, r.URL.Query())`)
-	pathIdx := strings.Index(output, `PopulateFieldFromPath(protoReq, "resource.name", val)`)
+	queryIdx := strings.Index(
+		output,
+		`PopulateQueryParametersContext(r.Context(), protoReq, r.URL.Query(), "resource", "resource.name")`,
+	)
+	pathIdx := strings.Index(
+		output,
+		`PopulateFieldFromPathContext(r.Context(), protoReq, "resource.name", val)`,
+	)
 	assert.NotEqual(t, -1, decodeIdx)
 	assert.NotEqual(t, -1, queryIdx)
 	assert.NotEqual(t, -1, pathIdx)
@@ -682,8 +693,8 @@ func TestGenerateFiles_BodyStarSkipsQueryParsing(t *testing.T) {
 
 	output := generatedFileContent(t, gen, "test_rest.pb.go")
 	assert.Contains(t, output, `Decode(protoReq)`)
-	assert.NotContains(t, output, `PopulateQueryParameters(protoReq, r.URL.Query())`)
-	assert.Contains(t, output, `PopulateFieldFromPath(protoReq, "name", val)`)
+	assert.NotContains(t, output, `PopulateQueryParametersContext(`)
+	assert.Contains(t, output, `PopulateFieldFromPathContext(r.Context(), protoReq, "name", val)`)
 }
 
 func TestGenerateFiles_OmitsRestImportWhenHelpersAreUnused(t *testing.T) {

@@ -15,17 +15,24 @@
 package rest
 
 import (
+	"context"
 	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/genproto/protobuf/field_mask"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
 )
 
 func TestParseField_Uint32(t *testing.T) {
@@ -293,7 +300,7 @@ func TestPopulateRepeatedField(t *testing.T) {
 	// The simplest approach: test populateRepeatedField indirectly.
 	// We need a message with repeated field. Let's use field_mask.FieldMask which has repeated string paths.
 	t.Run("FieldMask", func(t *testing.T) {
-		msg := &field_mask.FieldMask{}
+		msg := &fieldmaskpb.FieldMask{}
 		values := url.Values{}
 		values.Set("paths", "foo,bar,baz")
 		err := PopulateQueryParameters(msg, values)
@@ -326,25 +333,284 @@ func TestParseMessage_Timestamp(t *testing.T) {
 }
 
 func TestParseMessage_FieldMask(t *testing.T) {
-	// FieldMask is handled in parseMessage. To trigger it, we need a message
-	// that has a FieldMask field. We can't easily create one, so we test
-	// FieldMask paths parsing indirectly via populateFieldValues repeated path.
+	descriptor := (&fieldmaskpb.FieldMask{}).ProtoReflect().Descriptor()
+	tests := []struct {
+		name  string
+		value string
+		want  []string
+	}{
+		{name: "single path", value: "displayName", want: []string{"display_name"}},
+		{
+			name:  "multiple and nested paths",
+			value: "displayName,createTime.startTime",
+			want:  []string{"display_name", "create_time.start_time"},
+		},
+		{name: "empty mask", value: "", want: nil},
+		{name: "wildcard", value: "*", want: []string{"*"}},
+		{name: "trimmed wildcard", value: "  *  ", want: []string{"*"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			value, err := parseMessage(
+				descriptor,
+				tt.value,
+				queryParameterMarshaler(context.Background()),
+			)
+			require.NoError(t, err)
+			mask := value.Message().Interface().(*fieldmaskpb.FieldMask)
+			assert.Equal(t, tt.want, mask.Paths)
+		})
+	}
+}
 
-	// Test populateFieldValues directly by setting a repeated field with multiple values.
-	// Using url.Values with repeated keys.
-	t.Run("RepeatedValuesViaPopulateQueryParameters", func(t *testing.T) {
-		// Use a message with repeated field.
-		// Since we can't easily create one, test with structpb.ListValue.
-		// structpb.ListValue has repeated structpb.Value "values".
-		// That's a message type, not scalar, so it goes through a different path.
+func TestParseMessage_FieldMaskRejectsInvalidPaths(t *testing.T) {
+	descriptor := (&fieldmaskpb.FieldMask{}).ProtoReflect().Descriptor()
+	for _, value := range []string{"display_name", "displayName,,createTime", "display-name"} {
+		t.Run(value, func(t *testing.T) {
+			_, err := parseMessage(
+				descriptor,
+				value,
+				queryParameterMarshaler(context.Background()),
+			)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid path")
+		})
+	}
 
-		// Instead, let's test the error cases:
-		// 1. Too many values for a scalar field
-		msg := &wrapperspb.StringValue{}
-		err := PopulateFieldFromPath(msg, "value", "test")
-		require.NoError(t, err)
-		assert.Equal(t, "test", msg.Value)
+	t.Run("mixed wildcard", func(t *testing.T) {
+		_, err := parseMessage(
+			descriptor,
+			"*,displayName",
+			queryParameterMarshaler(context.Background()),
+		)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "wildcard must be used alone")
 	})
+}
+
+func TestQueryParameterMarshaler(t *testing.T) {
+	t.Run("reuse JSON inbound", func(t *testing.T) {
+		inbound := marshaler.NewJSONPbMarshalerWithConfig(nil)
+		ctx := marshaler.WithInboundContext(context.Background(), inbound)
+		assert.Same(t, inbound, queryParameterMarshaler(ctx))
+	})
+
+	t.Run("fallback from protobuf inbound", func(t *testing.T) {
+		oldSupport, oldConfig := currentMarshalerConfig()
+		t.Cleanup(func() { ConfigureMarshaler(oldSupport, oldConfig) })
+		cfg := &marshaler.JSONPbConfig{}
+		cfg.UnmarshalOptions.AllowPartial = true
+		ConfigureMarshaler(nil, cfg)
+
+		ctx := marshaler.WithInboundContext(context.Background(), &marshaler.ProtoMarshaler{})
+		decoder := queryParameterMarshaler(ctx)
+		require.IsType(t, &marshaler.JSONPb{}, decoder)
+		jsonpb := decoder.(*marshaler.JSONPb)
+		assert.True(t, jsonpb.UnmarshalOptions.AllowPartial)
+	})
+
+	t.Run("fallback from custom JSON inbound", func(t *testing.T) {
+		inbound := &jsonContentTypeProtoMarshaler{}
+		ctx := marshaler.WithInboundContext(context.Background(), inbound)
+		decoder := queryParameterMarshaler(ctx)
+		require.IsType(t, &marshaler.JSONPb{}, decoder)
+		assert.NotSame(t, inbound, decoder)
+	})
+}
+
+type jsonContentTypeProtoMarshaler struct {
+	marshaler.ProtoMarshaler
+}
+
+func (*jsonContentTypeProtoMarshaler) ContentType(any) string {
+	return marshaler.ContentTypeJSON
+}
+
+func TestPopulateQueryParameters_FieldMask(t *testing.T) {
+	msg := newFieldMaskRequest(t)
+	ctx := marshaler.WithInboundContext(context.Background(), &marshaler.ProtoMarshaler{})
+
+	err := PopulateQueryParametersContext(ctx, msg, url.Values{
+		"updateMask": {"displayName,createTime.startTime"},
+	})
+	require.NoError(t, err)
+
+	updateMaskField := msg.Descriptor().Fields().ByName("update_mask")
+	mask := msg.Get(updateMaskField).Message()
+	pathsField := mask.Descriptor().Fields().ByName("paths")
+	paths := mask.Get(pathsField).List()
+	require.Equal(t, 2, paths.Len())
+	assert.Equal(t, "display_name", paths.Get(0).String())
+	assert.Equal(t, "create_time.start_time", paths.Get(1).String())
+}
+
+func TestPopulateQueryParametersContext_CustomJSONInboundUsesJSONPbForFieldMask(t *testing.T) {
+	msg := newFieldMaskRequest(t)
+	ctx := marshaler.WithInboundContext(context.Background(), &jsonContentTypeProtoMarshaler{})
+
+	err := PopulateQueryParametersContext(ctx, msg, url.Values{
+		"updateMask": {"displayName"},
+	})
+	require.NoError(t, err)
+
+	updateMaskField := msg.Descriptor().Fields().ByName("update_mask")
+	mask := msg.Get(updateMaskField).Message()
+	paths := mask.Get(mask.Descriptor().Fields().ByName("paths")).List()
+	require.Equal(t, 1, paths.Len())
+	assert.Equal(t, "display_name", paths.Get(0).String())
+}
+
+func TestPopulateQueryParametersContext_ExcludedFieldPaths(t *testing.T) {
+	t.Run("body prefix and segment boundary", func(t *testing.T) {
+		msg := newQueryFilterRequest(t)
+		err := PopulateQueryParametersContext(context.Background(), msg, url.Values{
+			"resource.displayName": {"ignored"},
+			"resource.name":        {"ignored"},
+			"resourceName":         {"kept"},
+			"pageSize":             {"25"},
+			"unknown":              {"ignored"},
+		}, "resource")
+		require.NoError(t, err)
+
+		resourceField := msg.Descriptor().Fields().ByName("resource")
+		assert.False(t, msg.Has(resourceField))
+		assert.Equal(t, "kept", msg.Get(msg.Descriptor().Fields().ByName("resource_name")).String())
+		assert.Equal(
+			t,
+			int32(25),
+			int32(msg.Get(msg.Descriptor().Fields().ByName("page_size")).Int()),
+		)
+	})
+
+	t.Run("JSON name exclusion is canonicalized", func(t *testing.T) {
+		msg := newQueryFilterRequest(t)
+		err := PopulateQueryParametersContext(context.Background(), msg, url.Values{
+			"resource.displayName": {"ignored"},
+			"resource.name":        {"kept"},
+		}, "resource.displayName")
+		require.NoError(t, err)
+
+		resourceField := msg.Descriptor().Fields().ByName("resource")
+		resource := msg.Get(resourceField).Message()
+		assert.Equal(
+			t,
+			"",
+			resource.Get(resource.Descriptor().Fields().ByName("display_name")).String(),
+		)
+		assert.Equal(
+			t,
+			"kept",
+			resource.Get(resource.Descriptor().Fields().ByName("name")).String(),
+		)
+	})
+}
+
+func newFieldMaskRequest(t testing.TB) *dynamicpb.Message {
+	t.Helper()
+	file, err := protodesc.NewFile(
+		&descriptorpb.FileDescriptorProto{
+			Syntax:     proto.String("proto3"),
+			Name:       proto.String("field_mask_request.proto"),
+			Package:    proto.String("resttest"),
+			Dependency: []string{"google/protobuf/field_mask.proto"},
+			MessageType: []*descriptorpb.DescriptorProto{
+				{
+					Name: proto.String("UpdateRequest"),
+					Field: []*descriptorpb.FieldDescriptorProto{
+						{
+							Name:     proto.String("update_mask"),
+							JsonName: proto.String("updateMask"),
+							Number:   proto.Int32(1),
+							Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+							Type:     descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
+							TypeName: proto.String(".google.protobuf.FieldMask"),
+						},
+					},
+				},
+			},
+		},
+		protoregistry.GlobalFiles,
+	)
+	require.NoError(t, err)
+	return dynamicpb.NewMessage(file.Messages().ByName("UpdateRequest"))
+}
+
+func newQueryFilterRequest(t testing.TB) *dynamicpb.Message {
+	t.Helper()
+	file, err := protodesc.NewFile(
+		&descriptorpb.FileDescriptorProto{
+			Syntax:  proto.String("proto3"),
+			Name:    proto.String("query_filter_request.proto"),
+			Package: proto.String("resttest"),
+			MessageType: []*descriptorpb.DescriptorProto{
+				{
+					Name: proto.String("Resource"),
+					Field: []*descriptorpb.FieldDescriptorProto{
+						{
+							Name:     proto.String("display_name"),
+							JsonName: proto.String("displayName"),
+							Number:   proto.Int32(1),
+							Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+							Type:     descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+						},
+						{
+							Name:   proto.String("name"),
+							Number: proto.Int32(2),
+							Label:  descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+							Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+						},
+					},
+				},
+				{
+					Name: proto.String("UpdateRequest"),
+					Field: []*descriptorpb.FieldDescriptorProto{
+						{
+							Name:     proto.String("resource"),
+							Number:   proto.Int32(1),
+							Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+							Type:     descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
+							TypeName: proto.String(".resttest.Resource"),
+						},
+						{
+							Name:     proto.String("resource_name"),
+							JsonName: proto.String("resourceName"),
+							Number:   proto.Int32(2),
+							Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+							Type:     descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+						},
+						{
+							Name:     proto.String("page_size"),
+							JsonName: proto.String("pageSize"),
+							Number:   proto.Int32(3),
+							Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+							Type:     descriptorpb.FieldDescriptorProto_TYPE_INT32.Enum(),
+						},
+					},
+				},
+			},
+		},
+		nil,
+	)
+	require.NoError(t, err)
+	return dynamicpb.NewMessage(file.Messages().ByName("UpdateRequest"))
+}
+
+func BenchmarkParseMessage_FieldMask(b *testing.B) {
+	descriptor := (&fieldmaskpb.FieldMask{}).ProtoReflect().Descriptor()
+	decoder := queryParameterMarshaler(context.Background())
+	for _, value := range []string{
+		"displayName",
+		"displayName,createTime.startTime,resource.labels",
+	} {
+		b.Run(value, func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				if _, err := parseMessage(descriptor, value, decoder); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
 }
 
 func TestPopulateFieldValues_TooManyValues(t *testing.T) {
@@ -378,7 +644,7 @@ func TestPopulateFieldValues_EmptyPath(t *testing.T) {
 }
 
 func TestPopulateRepeatedField_FieldMaskPaths(t *testing.T) {
-	msg := &field_mask.FieldMask{}
+	msg := &fieldmaskpb.FieldMask{}
 	values := url.Values{}
 	values.Add("paths", "foo")
 	values.Add("paths", "bar")
@@ -544,13 +810,13 @@ func TestParseMessage_WellKnownTypes(t *testing.T) {
 		},
 		{
 			name:  "FieldMask via repeated paths",
-			msg:   &field_mask.FieldMask{},
+			msg:   &fieldmaskpb.FieldMask{},
 			field: "paths",
 			value: "foo,bar,baz",
 			check: func(t *testing.T, msg proto.Message) {
 				// PopulateFieldFromPath sets a single string value for the repeated field,
 				// so the comma-separated string is treated as a single element.
-				assert.Equal(t, []string{"foo,bar,baz"}, msg.(*field_mask.FieldMask).Paths)
+				assert.Equal(t, []string{"foo,bar,baz"}, msg.(*fieldmaskpb.FieldMask).Paths)
 			},
 		},
 	}

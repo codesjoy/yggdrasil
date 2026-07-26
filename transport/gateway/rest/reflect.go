@@ -15,7 +15,9 @@
 package rest
 
 import (
+	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -24,20 +26,40 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/genproto/protobuf/field_mask"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
 )
 
 // PopulateQueryParameters parses query parameters
 // into "msg" using current query parser
 func PopulateQueryParameters(msg proto.Message, values url.Values) error {
+	return PopulateQueryParametersContext(context.Background(), msg, values)
+}
+
+// PopulateQueryParametersContext parses query parameters into msg while excluding
+// fields whose canonical Protobuf paths start with one of excludedFieldPaths.
+func PopulateQueryParametersContext(
+	ctx context.Context,
+	msg proto.Message,
+	values url.Values,
+	excludedFieldPaths ...string,
+) error {
+	decoder := queryParameterMarshaler(ctx)
+	msgValue := msg.ProtoReflect()
+	excludedPaths := normalizeExcludedFieldPaths(msgValue, excludedFieldPaths)
 	for key, value := range values {
-		if err := populateFieldValues(msg.ProtoReflect(), strings.Split(key, "."), value); err != nil {
+		fieldPath := normalizeFieldPath(msgValue, strings.Split(key, "."))
+		if hasExcludedFieldPathPrefix(fieldPath, excludedPaths) {
+			continue
+		}
+		if err := populateFieldValues(msgValue, fieldPath, value, decoder); err != nil {
 			return err
 		}
 	}
@@ -46,11 +68,98 @@ func PopulateQueryParameters(msg proto.Message, values url.Values) error {
 
 // PopulateFieldFromPath sets a value in a nested Protobuf structure.
 func PopulateFieldFromPath(msg proto.Message, fieldPathString string, value string) error {
-	fieldPath := strings.Split(fieldPathString, ".")
-	return populateFieldValues(msg.ProtoReflect(), fieldPath, []string{value})
+	return PopulateFieldFromPathContext(context.Background(), msg, fieldPathString, value)
 }
 
-func populateFieldValues(v protoreflect.Message, fieldPath []string, values []string) error {
+// PopulateFieldFromPathContext sets a value in a nested Protobuf structure.
+func PopulateFieldFromPathContext(
+	ctx context.Context,
+	msg proto.Message,
+	fieldPathString string,
+	value string,
+) error {
+	fieldPath := strings.Split(fieldPathString, ".")
+	return populateFieldValues(
+		msg.ProtoReflect(),
+		fieldPath,
+		[]string{value},
+		queryParameterMarshaler(ctx),
+	)
+}
+
+func queryParameterMarshaler(ctx context.Context) marshaler.Marshaler {
+	inbound := marshaler.InboundFromContext(ctx)
+	if jsonpb, ok := inbound.(*marshaler.JSONPb); ok {
+		return jsonpb
+	}
+
+	_, cfg := currentMarshalerConfig()
+	return marshaler.NewJSONPbMarshalerWithConfig(cfg)
+}
+
+func normalizeExcludedFieldPaths(
+	msgValue protoreflect.Message,
+	excludedFieldPaths []string,
+) [][]string {
+	paths := make([][]string, 0, len(excludedFieldPaths))
+	for _, fieldPath := range excludedFieldPaths {
+		if fieldPath == "" {
+			continue
+		}
+		paths = append(paths, normalizeFieldPath(msgValue, strings.Split(fieldPath, ".")))
+	}
+	return paths
+}
+
+func normalizeFieldPath(msgValue protoreflect.Message, fieldPath []string) []string {
+	normalized := make([]string, 0, len(fieldPath))
+	for i, fieldName := range fieldPath {
+		fields := msgValue.Descriptor().Fields()
+		fd := fields.ByName(protoreflect.Name(fieldName))
+		if fd == nil {
+			fd = fields.ByJSONName(fieldName)
+		}
+		if fd == nil {
+			return append(normalized, fieldPath[i:]...)
+		}
+
+		normalized = append(normalized, string(fd.Name()))
+		if i == len(fieldPath)-1 {
+			break
+		}
+		if fd.Message() == nil || fd.Cardinality() == protoreflect.Repeated {
+			return append(normalized, fieldPath[i+1:]...)
+		}
+		msgValue = msgValue.Get(fd).Message()
+	}
+	return normalized
+}
+
+func hasExcludedFieldPathPrefix(fieldPath []string, excludedPaths [][]string) bool {
+	for _, excludedPath := range excludedPaths {
+		if len(excludedPath) > len(fieldPath) {
+			continue
+		}
+		matched := true
+		for i := range excludedPath {
+			if excludedPath[i] != fieldPath[i] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
+}
+
+func populateFieldValues(
+	v protoreflect.Message,
+	fieldPath []string,
+	values []string,
+	decoder marshaler.Marshaler,
+) error {
 	if len(fieldPath) < 1 {
 		return errors.New("no field path")
 	}
@@ -92,9 +201,9 @@ func populateFieldValues(v protoreflect.Message, fieldPath []string, values []st
 	}
 	switch {
 	case fd.IsList():
-		return populateRepeatedField(fd, v.Mutable(fd).List(), values)
+		return populateRepeatedField(fd, v.Mutable(fd).List(), values, decoder)
 	case fd.IsMap():
-		return populateMapField(fd, v.Mutable(fd).Map(), values)
+		return populateMapField(fd, v.Mutable(fd).Map(), values, decoder)
 	}
 	if len(values) != 1 {
 		return fmt.Errorf(
@@ -103,11 +212,16 @@ func populateFieldValues(v protoreflect.Message, fieldPath []string, values []st
 			strings.Join(values, ", "),
 		)
 	}
-	return populateField(fd, v, values[0])
+	return populateField(fd, v, values[0], decoder)
 }
 
-func populateField(fd protoreflect.FieldDescriptor, v protoreflect.Message, value string) error {
-	val, err := parseField(fd, value)
+func populateField(
+	fd protoreflect.FieldDescriptor,
+	v protoreflect.Message,
+	value string,
+	decoder marshaler.Marshaler,
+) error {
+	val, err := parseField(fd, value, decoder)
 	if err != nil {
 		return fmt.Errorf("parsing field %q: %w", fd.FullName().Name(), err)
 	}
@@ -119,9 +233,10 @@ func populateRepeatedField(
 	fd protoreflect.FieldDescriptor,
 	list protoreflect.List,
 	values []string,
+	decoder marshaler.Marshaler,
 ) error {
 	for _, value := range values {
-		v, err := parseField(fd, value)
+		v, err := parseField(fd, value, decoder)
 		if err != nil {
 			return fmt.Errorf("parsing list %q: %w", fd.FullName().Name(), err)
 		}
@@ -130,7 +245,12 @@ func populateRepeatedField(
 	return nil
 }
 
-func populateMapField(fd protoreflect.FieldDescriptor, mp protoreflect.Map, values []string) error {
+func populateMapField(
+	fd protoreflect.FieldDescriptor,
+	mp protoreflect.Map,
+	values []string,
+	decoder marshaler.Marshaler,
+) error {
 	if len(values) != 2 {
 		return fmt.Errorf(
 			"more than one value provided for key %q in map %q",
@@ -138,11 +258,11 @@ func populateMapField(fd protoreflect.FieldDescriptor, mp protoreflect.Map, valu
 			fd.FullName(),
 		)
 	}
-	key, err := parseField(fd.MapKey(), values[0])
+	key, err := parseField(fd.MapKey(), values[0], decoder)
 	if err != nil {
 		return fmt.Errorf("parsing map key %q: %w", fd.FullName().Name(), err)
 	}
-	value, err := parseField(fd.MapValue(), values[1])
+	value, err := parseField(fd.MapValue(), values[1], decoder)
 	if err != nil {
 		return fmt.Errorf("parsing map value %q: %w", fd.FullName().Name(), err)
 	}
@@ -150,7 +270,11 @@ func populateMapField(fd protoreflect.FieldDescriptor, mp protoreflect.Map, valu
 	return nil
 }
 
-func parseField(fd protoreflect.FieldDescriptor, value string) (protoreflect.Value, error) {
+func parseField(
+	fd protoreflect.FieldDescriptor,
+	value string,
+	decoder marshaler.Marshaler,
+) (protoreflect.Value, error) {
 	switch fd.Kind() {
 	case protoreflect.BoolKind:
 		v, err := strconv.ParseBool(value)
@@ -226,13 +350,17 @@ func parseField(fd protoreflect.FieldDescriptor, value string) (protoreflect.Val
 		}
 		return protoreflect.ValueOfBytes(v), nil
 	case protoreflect.MessageKind, protoreflect.GroupKind:
-		return parseMessage(fd.Message(), value)
+		return parseMessage(fd.Message(), value, decoder)
 	default:
 		return protoreflect.Value{}, fmt.Errorf("unknown field kind: %v", fd.Kind())
 	}
 }
 
-func parseMessage(md protoreflect.MessageDescriptor, value string) (protoreflect.Value, error) {
+func parseMessage(
+	md protoreflect.MessageDescriptor,
+	value string,
+	decoder marshaler.Marshaler,
+) (protoreflect.Value, error) {
 	var msg proto.Message
 	switch md.FullName() {
 	case "google.protobuf.Timestamp":
@@ -304,8 +432,27 @@ func parseMessage(md protoreflect.MessageDescriptor, value string) (protoreflect
 		}
 		msg = wrapperspb.Bytes(v)
 	case "google.protobuf.FieldMask":
-		fm := &field_mask.FieldMask{}
-		fm.Paths = append(fm.Paths, strings.Split(value, ",")...)
+		fm := &fieldmaskpb.FieldMask{}
+		value = strings.TrimSpace(value)
+		if value == "*" {
+			fm.Paths = []string{"*"}
+			msg = fm
+			break
+		}
+		for _, path := range strings.Split(value, ",") {
+			if path == "*" {
+				return protoreflect.Value{}, errors.New(
+					"field mask wildcard must be used alone",
+				)
+			}
+		}
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return protoreflect.Value{}, err
+		}
+		if err := decoder.Unmarshal(encoded, fm); err != nil {
+			return protoreflect.Value{}, err
+		}
 		msg = fm
 	default:
 		return protoreflect.Value{}, fmt.Errorf(

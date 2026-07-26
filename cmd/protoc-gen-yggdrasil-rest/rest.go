@@ -261,8 +261,31 @@ func buildHTTPRule(
 			md.BodyType = bodyType
 		}
 	}
+	if md.HasQueryParams {
+		excludedPaths := make([]string, 0, len(md.PathBindings)+1)
+		if body != "" {
+			excludedPaths = append(excludedPaths, body)
+		}
+		for _, binding := range md.PathBindings {
+			excludedPaths = append(excludedPaths, binding.FieldPath)
+		}
+		md.QueryParameterExclusions = dedupStable(excludedPaths)
+	}
 
 	return md, nil
+}
+
+func dedupStable(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
 }
 
 // getBodyFieldType returns the Go type name of the body field from the input message

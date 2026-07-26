@@ -48,7 +48,7 @@ func local_handler_{{$.ServiceType}}_{{ .Name }}_{{.Num}}(w {{$.HTTPPkg}}Respons
 			}
 		{{end -}}
 		{{if $method.HasQueryParams }}
-			if err := {{$.RestPkg}}PopulateQueryParameters(protoReq, r.URL.Query()); err != nil {
+			if err := {{$.RestPkg}}PopulateQueryParametersContext(r.Context(), protoReq, r.URL.Query(){{range $fieldPath := $method.QueryParameterExclusions}}, {{$fieldPath | printf "%q"}}{{end}}); err != nil {
 				return nil,  {{$.StatusPkg}}Wrap(err, {{$.CodePkg}}Code_INVALID_ARGUMENT, "")
 			}
 		{{end -}}
@@ -56,7 +56,7 @@ func local_handler_{{$.ServiceType}}_{{ .Name }}_{{.Num}}(w {{$.HTTPPkg}}Respons
 		{{- range  $binding := .PathBindings}}
 			if val := {{renderPathValue $binding.Segments }}; len(val) == 0 {
 				return nil, {{$.StatusPkg}}New({{$.CodePkg}}Code_INVALID_ARGUMENT, "not found {{$binding.FieldPath}}")
-			} else if err := {{$.RestPkg}}PopulateFieldFromPath(protoReq, {{$binding.FieldPath | printf "%q"}}, val); err != nil {
+			} else if err := {{$.RestPkg}}PopulateFieldFromPathContext(r.Context(), protoReq, {{$binding.FieldPath | printf "%q"}}, val); err != nil {
 				return nil, {{$.StatusPkg}}Wrap(err, {{$.CodePkg}}Code_INVALID_ARGUMENT, "")
 			}
 		{{- end}}
@@ -124,6 +124,10 @@ type methodDesc struct {
 	BodyType       string // qualified Go type name of the body field message, for nil-initialization
 	HasBody        bool   // true when the HTTP rule declares a body
 	HasQueryParams bool   // true when query parameters should be populated (body="" or body="field")
+
+	// QueryParameterExclusions contains canonical body and path field prefixes
+	// that must not be populated from query parameters.
+	QueryParameterExclusions []string
 }
 
 func (s *serviceDesc) execute() string {
