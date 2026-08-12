@@ -358,21 +358,27 @@ func TestSPIFFEIDFromPeer(t *testing.T) {
 	})
 }
 
-func TestLeafFromVerifyArgs(t *testing.T) {
+func TestLeafFromConnectionState(t *testing.T) {
 	t.Run("verifiedChains with valid leaf", func(t *testing.T) {
 		cert := &x509.Certificate{}
-		leaf, err := leafFromVerifyArgs(nil, [][]*x509.Certificate{{cert}})
+		leaf, err := leafFromConnectionState(stdtls.ConnectionState{
+			VerifiedChains: [][]*x509.Certificate{{cert}},
+		})
 		require.NoError(t, err)
 		require.Equal(t, cert, leaf)
 	})
 
-	t.Run("empty both", func(t *testing.T) {
-		_, err := leafFromVerifyArgs(nil, nil)
-		require.Error(t, err)
+	t.Run("peerCertificates fallback", func(t *testing.T) {
+		cert := &x509.Certificate{}
+		leaf, err := leafFromConnectionState(stdtls.ConnectionState{
+			PeerCertificates: []*x509.Certificate{cert},
+		})
+		require.NoError(t, err)
+		require.Equal(t, cert, leaf)
 	})
 
-	t.Run("empty verifiedChains, invalid rawCerts", func(t *testing.T) {
-		_, err := leafFromVerifyArgs([][]byte{{0xff, 0xff}}, nil)
+	t.Run("empty state", func(t *testing.T) {
+		_, err := leafFromConnectionState(stdtls.ConnectionState{})
 		require.Error(t, err)
 	})
 }
@@ -724,7 +730,24 @@ func TestApplyServerConfig_CertKeyMismatch(t *testing.T) {
 func TestApplySPIFFEVerify_NoConfig(t *testing.T) {
 	tlsCfg := &stdtls.Config{}
 	applySPIFFEVerify(tlsCfg, SideConfig{})
-	require.Nil(t, tlsCfg.VerifyPeerCertificate)
+	require.Nil(t, tlsCfg.VerifyConnection)
+}
+
+func TestApplySPIFFEVerify_PreservesPeerCertificateCallback(t *testing.T) {
+	called := false
+	tlsCfg := &stdtls.Config{
+		SessionTicketsDisabled: true,
+		VerifyPeerCertificate: func([][]byte, [][]*x509.Certificate) error {
+			called = true
+			return nil
+		},
+	}
+
+	applySPIFFEVerify(tlsCfg, SideConfig{SPIFFEID: "spiffe://example.com/svc"})
+
+	require.NoError(t, tlsCfg.VerifyPeerCertificate(nil, nil))
+	require.True(t, called)
+	require.NotNil(t, tlsCfg.VerifyConnection)
 }
 
 func TestApplySPIFFEVerify_WithSPIFFEID_Match(t *testing.T) {
@@ -733,10 +756,11 @@ func TestApplySPIFFEVerify_WithSPIFFEID_Match(t *testing.T) {
 
 	tlsCfg := &stdtls.Config{}
 	applySPIFFEVerify(tlsCfg, SideConfig{SPIFFEID: "spiffe://example.com/my-service"})
-	require.NotNil(t, tlsCfg.VerifyPeerCertificate)
+	require.NotNil(t, tlsCfg.VerifyConnection)
 
-	// Call the callback with verified chains containing the leaf cert.
-	err := tlsCfg.VerifyPeerCertificate(nil, [][]*x509.Certificate{{leaf.cert}})
+	err := tlsCfg.VerifyConnection(stdtls.ConnectionState{
+		VerifiedChains: [][]*x509.Certificate{{leaf.cert}},
+	})
 	require.NoError(t, err)
 }
 
@@ -746,9 +770,11 @@ func TestApplySPIFFEVerify_WithSPIFFEID_Mismatch(t *testing.T) {
 
 	tlsCfg := &stdtls.Config{}
 	applySPIFFEVerify(tlsCfg, SideConfig{SPIFFEID: "spiffe://example.com/other-service"})
-	require.NotNil(t, tlsCfg.VerifyPeerCertificate)
+	require.NotNil(t, tlsCfg.VerifyConnection)
 
-	err := tlsCfg.VerifyPeerCertificate(nil, [][]*x509.Certificate{{leaf.cert}})
+	err := tlsCfg.VerifyConnection(stdtls.ConnectionState{
+		VerifiedChains: [][]*x509.Certificate{{leaf.cert}},
+	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "spiffe id mismatch")
 }
@@ -759,9 +785,11 @@ func TestApplySPIFFEVerify_WithTrustDomain_Match(t *testing.T) {
 
 	tlsCfg := &stdtls.Config{}
 	applySPIFFEVerify(tlsCfg, SideConfig{SPIFFETrustDomain: "example.com"})
-	require.NotNil(t, tlsCfg.VerifyPeerCertificate)
+	require.NotNil(t, tlsCfg.VerifyConnection)
 
-	err := tlsCfg.VerifyPeerCertificate(nil, [][]*x509.Certificate{{leaf.cert}})
+	err := tlsCfg.VerifyConnection(stdtls.ConnectionState{
+		VerifiedChains: [][]*x509.Certificate{{leaf.cert}},
+	})
 	require.NoError(t, err)
 }
 
@@ -771,9 +799,11 @@ func TestApplySPIFFEVerify_WithTrustDomain_Mismatch(t *testing.T) {
 
 	tlsCfg := &stdtls.Config{}
 	applySPIFFEVerify(tlsCfg, SideConfig{SPIFFETrustDomain: "other.com"})
-	require.NotNil(t, tlsCfg.VerifyPeerCertificate)
+	require.NotNil(t, tlsCfg.VerifyConnection)
 
-	err := tlsCfg.VerifyPeerCertificate(nil, [][]*x509.Certificate{{leaf.cert}})
+	err := tlsCfg.VerifyConnection(stdtls.ConnectionState{
+		VerifiedChains: [][]*x509.Certificate{{leaf.cert}},
+	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "spiffe trust domain mismatch")
 }
@@ -784,38 +814,38 @@ func TestApplySPIFFEVerify_MissingSPIFFEID(t *testing.T) {
 
 	tlsCfg := &stdtls.Config{}
 	applySPIFFEVerify(tlsCfg, SideConfig{SPIFFEID: "spiffe://example.com/my-service"})
-	require.NotNil(t, tlsCfg.VerifyPeerCertificate)
+	require.NotNil(t, tlsCfg.VerifyConnection)
 
-	err := tlsCfg.VerifyPeerCertificate(nil, [][]*x509.Certificate{{leaf.cert}})
+	err := tlsCfg.VerifyConnection(stdtls.ConnectionState{
+		VerifiedChains: [][]*x509.Certificate{{leaf.cert}},
+	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "spiffe id missing or invalid")
 }
 
 func TestApplySPIFFEVerify_PrevCallbackError(t *testing.T) {
-	ca := createTestCertPair(t)
-	leaf := createTestLeafCertPair(t, ca, "spiffe://example.com/svc")
-
 	prevErr := errors.New("previous check failed")
 	tlsCfg := &stdtls.Config{
-		VerifyPeerCertificate: func(rawCerts [][]byte, chains [][]*x509.Certificate) error {
+		VerifyConnection: func(stdtls.ConnectionState) error {
 			return prevErr
 		},
 	}
 	applySPIFFEVerify(tlsCfg, SideConfig{SPIFFEID: "spiffe://example.com/svc"})
 
-	err := tlsCfg.VerifyPeerCertificate(nil, [][]*x509.Certificate{{leaf.cert}})
+	err := tlsCfg.VerifyConnection(stdtls.ConnectionState{})
 	require.ErrorIs(t, err, prevErr)
 }
 
-func TestApplySPIFFEVerify_WithRawCertsFallback(t *testing.T) {
+func TestApplySPIFFEVerify_WithPeerCertificatesFallback(t *testing.T) {
 	ca := createTestCertPair(t)
 	leaf := createTestLeafCertPair(t, ca, "spiffe://example.com/svc")
 
 	tlsCfg := &stdtls.Config{}
 	applySPIFFEVerify(tlsCfg, SideConfig{SPIFFEID: "spiffe://example.com/svc"})
 
-	// Pass nil verifiedChains so it falls back to parsing rawCerts.
-	err := tlsCfg.VerifyPeerCertificate([][]byte{leaf.cert.Raw}, nil)
+	err := tlsCfg.VerifyConnection(stdtls.ConnectionState{
+		PeerCertificates: []*x509.Certificate{leaf.cert},
+	})
 	require.NoError(t, err)
 }
 

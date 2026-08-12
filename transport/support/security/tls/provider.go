@@ -208,16 +208,16 @@ func applySPIFFEVerify(tlsCfg *stdtls.Config, cfg SideConfig) {
 	if cfg.SPIFFEID == "" && cfg.SPIFFETrustDomain == "" {
 		return
 	}
-	prev := tlsCfg.VerifyPeerCertificate
+	prev := tlsCfg.VerifyConnection
 	expectedID := cfg.SPIFFEID
 	expectedTrustDomain := cfg.SPIFFETrustDomain
-	tlsCfg.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+	tlsCfg.VerifyConnection = func(state stdtls.ConnectionState) error {
 		if prev != nil {
-			if err := prev(rawCerts, verifiedChains); err != nil {
+			if err := prev(state); err != nil {
 				return err
 			}
 		}
-		leaf, err := leafFromVerifyArgs(rawCerts, verifiedChains)
+		leaf, err := leafFromConnectionState(state)
 		if err != nil {
 			return err
 		}
@@ -239,21 +239,16 @@ func applySPIFFEVerify(tlsCfg *stdtls.Config, cfg SideConfig) {
 	}
 }
 
-func leafFromVerifyArgs(
-	rawCerts [][]byte,
-	verifiedChains [][]*x509.Certificate,
-) (*x509.Certificate, error) {
-	if len(verifiedChains) > 0 && len(verifiedChains[0]) > 0 && verifiedChains[0][0] != nil {
-		return verifiedChains[0][0], nil
+func leafFromConnectionState(state stdtls.ConnectionState) (*x509.Certificate, error) {
+	if len(state.VerifiedChains) > 0 &&
+		len(state.VerifiedChains[0]) > 0 &&
+		state.VerifiedChains[0][0] != nil {
+		return state.VerifiedChains[0][0], nil
 	}
-	if len(rawCerts) == 0 {
+	if len(state.PeerCertificates) == 0 || state.PeerCertificates[0] == nil {
 		return nil, errors.New("tls: no peer certificates")
 	}
-	cert, err := x509.ParseCertificate(rawCerts[0])
-	if err != nil {
-		return nil, err
-	}
-	return cert, nil
+	return state.PeerCertificates[0], nil
 }
 
 func parseTLSVersion(v string) (uint16, bool) {
