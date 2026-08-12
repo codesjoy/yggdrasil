@@ -36,14 +36,21 @@ import (
 type blockingTask struct {
 	started chan struct{}
 	stopCh  chan struct{}
+	stopped chan stopObservation
 	once    sync.Once
 	err     error
+}
+
+type stopObservation struct {
+	ctx context.Context
+	err error
 }
 
 func newBlockingTask(err error) *blockingTask {
 	return &blockingTask{
 		started: make(chan struct{}),
 		stopCh:  make(chan struct{}),
+		stopped: make(chan stopObservation, 1),
 		err:     err,
 	}
 }
@@ -57,7 +64,11 @@ func (t *blockingTask) Serve() error {
 	return nil
 }
 
-func (t *blockingTask) Stop(context.Context) error {
+func (t *blockingTask) Stop(ctx context.Context) error {
+	select {
+	case t.stopped <- stopObservation{ctx: ctx, err: ctx.Err()}:
+	default:
+	}
 	t.once.Do(func() {
 		close(t.stopCh)
 	})
@@ -132,7 +143,9 @@ func TestComposeAndInstallFailureStopsFacade(t *testing.T) {
 func TestRunHappyPathStopsOnContextCancel(t *testing.T) {
 	useTestManager()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	type contextKey struct{}
+	ctx := context.WithValue(context.Background(), contextKey{}, "run-value")
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	task := newBlockingTask(nil)
@@ -152,6 +165,14 @@ func TestRunHappyPathStopsOnContextCancel(t *testing.T) {
 		WithConfigSource("root", config.PriorityOverride, rootConfigSource()),
 	)
 	require.NoError(t, err)
+
+	select {
+	case stopped := <-task.stopped:
+		require.NoError(t, stopped.err)
+		require.Equal(t, "run-value", stopped.ctx.Value(contextKey{}))
+	case <-time.After(2 * time.Second):
+		t.Fatal("task did not receive stop context")
+	}
 }
 
 func TestWaitPropagatesServeFailure(t *testing.T) {

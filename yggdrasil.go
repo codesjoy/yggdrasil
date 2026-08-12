@@ -253,7 +253,7 @@ func Run(ctx context.Context, appName string, fn ComposeFunc, opts ...Option) er
 	go func() {
 		select {
 		case <-runCtx.Done():
-			_ = app.Stop(context.Background())
+			_ = app.Stop(context.WithoutCancel(runCtx))
 		case <-done:
 		}
 	}()
