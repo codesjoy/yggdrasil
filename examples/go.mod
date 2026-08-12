@@ -3,10 +3,13 @@ module github.com/codesjoy/yggdrasil/v3/examples
 go 1.25.7
 
 require (
-	github.com/codesjoy/pkg/basic/xerror v0.0.0-20260225033528-924cf61d0622
+	github.com/codesjoy/pkg/basic/xerror v0.0.0-20260812100337-f4b6f4ac7d17
 	github.com/codesjoy/yggdrasil/v3 v3.0.0
 	github.com/codesjoy/yggdrasil/v3/examples/protogen v0.0.0-00010101000000-000000000000
 	github.com/robfig/cron/v3 v3.0.1
+	go.opentelemetry.io/otel v1.39.0
+	go.opentelemetry.io/otel/metric v1.39.0
+	go.opentelemetry.io/otel/trace v1.39.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260122232226-8e98ce8d340d
 	google.golang.org/protobuf v1.36.11
 )
@@ -22,14 +25,10 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
-	go.opentelemetry.io/otel v1.39.0 // indirect
-	go.opentelemetry.io/otel/metric v1.39.0 // indirect
-	go.opentelemetry.io/otel/trace v1.39.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
-	google.golang.org/genproto v0.0.0-20251222181119-0a764e51fe1b // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260122232226-8e98ce8d340d // indirect
 	google.golang.org/grpc v1.80.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
