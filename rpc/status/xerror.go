@@ -19,6 +19,11 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 )
 
+var (
+	_ xerror.CodeCarrier   = (*Status)(nil)
+	_ xerror.ReasonCarrier = (*Status)(nil)
+)
+
 func fromXError(err error) (*Status, bool) {
 	errorCode, ok := xerror.CodeOf(err)
 	if !ok {

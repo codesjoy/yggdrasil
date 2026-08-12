@@ -26,7 +26,7 @@ go run .
 
 - The server entry uses root `yggdrasil.Run(ctx, appName, ...)`; the error semantics service is installed through `BusinessBundle`.
 - `server/main.go` keeps service implementation and `composeBundle(...)` together so error cases are easy to compare.
-- The client uses standalone `app.New(appName, ...)->NewClient(...)` bootstrap and focuses on `status.FromError(...)`, `Code()`, `HTTPCode()`, and `ErrorInfo()`.
+- The client uses `xerror.IsCode(...)` and `xerror.IsReason(...)` to inspect local and remote errors uniformly; transport-specific HTTP codes and protobuf details remain available through `status.FromError(...)`.
 
 ## Key source entry points
 

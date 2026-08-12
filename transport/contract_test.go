@@ -16,6 +16,7 @@ package transport_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -32,6 +33,12 @@ import (
 	grpctransport "github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc"
 	rpchttp "github.com/codesjoy/yggdrasil/v3/transport/protocol/rpchttp"
 )
+
+type contractErrorReason struct{}
+
+func (contractErrorReason) Reason() string  { return "INVALID_REQUEST" }
+func (contractErrorReason) Domain() string  { return "transport.contract" }
+func (contractErrorReason) Code() code.Code { return code.Code_INVALID_ARGUMENT }
 
 func TestClientServerContracts(t *testing.T) {
 	t.Parallel()
@@ -119,7 +126,11 @@ func runClientServerContract(
 				ss.Finish(nil, err)
 				return
 			}
-			ss.Finish(nil, xerror.New(code.Code_INVALID_ARGUMENT, "boom"))
+			ss.Finish(nil, xerror.NewWithReason(
+				contractErrorReason{},
+				"boom",
+				map[string]string{"field": "value"},
+			))
 		default:
 			ss.Finish(nil, xerror.New(code.Code_UNIMPLEMENTED, "unknown method"))
 		}
@@ -208,6 +219,23 @@ func runClientServerContract(
 	err = errorStream.RecvMsg(&ignored)
 	if err == nil {
 		t.Fatal("expected error response")
+	}
+	var statusErr *ystatus.Status
+	if !errors.As(err, &statusErr) {
+		t.Fatalf("expected status carrier, got %T", err)
+	}
+	if !xerror.IsCode(err, code.Code_INVALID_ARGUMENT) {
+		t.Fatalf("expected xerror code inspection to match: %v", err)
+	}
+	if !xerror.IsReason(err, contractErrorReason{}) {
+		t.Fatalf("expected xerror reason inspection to match: %v", err)
+	}
+	reason, domain, reasonMetadata, ok := xerror.ReasonOf(err)
+	if !ok || reason != "INVALID_REQUEST" || domain != "transport.contract" {
+		t.Fatalf("unexpected reason payload: reason=%q domain=%q ok=%v", reason, domain, ok)
+	}
+	if reasonMetadata["field"] != "value" {
+		t.Fatalf("unexpected reason metadata: %#v", reasonMetadata)
 	}
 	st, ok := ystatus.CoverError(err)
 	if !ok {

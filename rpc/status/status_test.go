@@ -150,6 +150,57 @@ func TestFromProto(t *testing.T) {
 	assert.Equal(t, "not found", st.Message())
 }
 
+func TestXErrorCarrier(t *testing.T) {
+	reason := testReason{
+		reason: "USER_NOT_FOUND",
+		domain: "demo.domain",
+		code:   code.Code_NOT_FOUND,
+	}
+	src := xerror.NewWithReason(reason, "user not found", map[string]string{
+		"user_id": "42",
+	})
+	st := FromError(src)
+	err := fmt.Errorf("wrapped: %w", st.Err())
+
+	gotCode, ok := xerror.CodeOf(err)
+	require.True(t, ok)
+	assert.Equal(t, code.Code_NOT_FOUND, gotCode)
+	assert.True(t, xerror.IsCode(err, code.Code_NOT_FOUND))
+	assert.True(t, xerror.IsReason(err, reason))
+
+	gotReason, domain, metadata, ok := xerror.ReasonOf(err)
+	require.True(t, ok)
+	assert.Equal(t, "USER_NOT_FOUND", gotReason)
+	assert.Equal(t, "demo.domain", domain)
+	assert.Equal(t, "42", metadata["user_id"])
+
+	metadata["user_id"] = "changed"
+	_, _, metadata, ok = xerror.ReasonOf(err)
+	require.True(t, ok)
+	assert.Equal(t, "42", metadata["user_id"])
+
+	metadata = st.Metadata()
+	metadata["user_id"] = "changed"
+	assert.Equal(t, "42", st.Metadata()["user_id"])
+}
+
+func TestXErrorCarrierWithoutReason(t *testing.T) {
+	err := New(code.Code_INTERNAL, "internal").Err()
+
+	assert.True(t, xerror.IsCode(err, code.Code_INTERNAL))
+	_, _, metadata, ok := xerror.ReasonOf(err)
+	assert.False(t, ok)
+	assert.Nil(t, metadata)
+}
+
+func TestZeroStatusReasonCarrier(t *testing.T) {
+	st := &Status{}
+
+	assert.Empty(t, st.Reason())
+	assert.Empty(t, st.Domain())
+	assert.Nil(t, st.Metadata())
+}
+
 func TestNewAndWithCode(t *testing.T) {
 	assert.Equal(t, "missing", New(code.Code_NOT_FOUND, "missing").Message())
 	assert.Equal(

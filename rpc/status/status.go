@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 
 	"google.golang.org/genproto/googleapis/rpc/code"
@@ -130,7 +131,7 @@ func (e *Status) Status() *statuspb.Status {
 
 // ErrorInfo returns the reason of the status.
 func (e *Status) ErrorInfo() *errdetails.ErrorInfo {
-	if e != nil {
+	if e != nil && e.stu != nil {
 		reason := &errdetails.ErrorInfo{}
 		for _, detail := range e.stu.Details {
 			if detail.MessageIs(reason) {
@@ -138,6 +139,30 @@ func (e *Status) ErrorInfo() *errdetails.ErrorInfo {
 				return reason
 			}
 		}
+	}
+	return nil
+}
+
+// Reason returns the domain reason from the first ErrorInfo detail.
+func (e *Status) Reason() string {
+	if info := e.ErrorInfo(); info != nil {
+		return info.GetReason()
+	}
+	return ""
+}
+
+// Domain returns the reason domain from the first ErrorInfo detail.
+func (e *Status) Domain() string {
+	if info := e.ErrorInfo(); info != nil {
+		return info.GetDomain()
+	}
+	return ""
+}
+
+// Metadata returns a copy of the metadata from the first ErrorInfo detail.
+func (e *Status) Metadata() map[string]string {
+	if info := e.ErrorInfo(); info != nil {
+		return maps.Clone(info.GetMetadata())
 	}
 	return nil
 }

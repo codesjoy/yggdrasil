@@ -26,7 +26,7 @@ go run .
 
 - 服务端主入口已经收敛到 root `yggdrasil.Run(ctx, appName, ...)`，而错误语义服务仍然是通过 `BusinessBundle` 正式安装的。
 - 为了把各种错误场景放在一个文件里对照，`server/main.go` 同时保留了 service 实现和 `composeBundle(...)` 入口。
-- 客户端使用独立 `app.New(appName, ...)->NewClient(...)` bootstrap，因为这个例子要把注意力集中在 `status.FromError(...)`、`Code()`、`HTTPCode()` 和 `ErrorInfo()` 的读取方式上。
+- 客户端使用 `xerror.IsCode(...)` 和 `xerror.IsReason(...)` 统一检查本地与远端错误；需要 HTTP code 或完整 protobuf details 时，仍通过 `status.FromError(...)` 读取传输层状态。
 
 ## 关键源码入口
 
