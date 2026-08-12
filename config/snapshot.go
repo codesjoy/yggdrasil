@@ -75,7 +75,7 @@ func (s Snapshot) Value() any {
 
 func decodeInto(src, target any) error {
 	value := reflect.ValueOf(target)
-	if !value.IsValid() || value.Kind() != reflect.Ptr || value.IsNil() {
+	if !value.IsValid() || value.Kind() != reflect.Pointer || value.IsNil() {
 		return errors.New("decode target must be a non-nil pointer")
 	}
 	elem := value.Elem()
@@ -104,7 +104,11 @@ func decodeInto(src, target any) error {
 		}
 	default:
 		if elem.Kind() == reflect.Struct {
-			return fmt.Errorf("config snapshot value type %T cannot decode into struct %s", src, elem.Type())
+			return fmt.Errorf(
+				"config snapshot value type %T cannot decode into struct %s",
+				src,
+				elem.Type(),
+			)
 		}
 		srcValue := reflect.ValueOf(src)
 		switch {
@@ -113,7 +117,11 @@ func decodeInto(src, target any) error {
 		case srcValue.Type().ConvertibleTo(elem.Type()):
 			elem.Set(srcValue.Convert(elem.Type()))
 		default:
-			return fmt.Errorf("config snapshot value type %s is not assignable to %s", srcValue.Type(), elem.Type())
+			return fmt.Errorf(
+				"config snapshot value type %s is not assignable to %s",
+				srcValue.Type(),
+				elem.Type(),
+			)
 		}
 	}
 

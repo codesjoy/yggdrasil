@@ -41,10 +41,20 @@ func (p *planner) resolveModules() error {
 		all[name] = mod
 		order = append(order, name)
 	}
-	if err := p.recordDisabledModuleOverrides(all, p.configOverrides.DisabledModules, "config_override", "disabled by yggdrasil.overrides.disable_modules"); err != nil {
+	if err := p.recordDisabledModuleOverrides(
+		all,
+		p.configOverrides.DisabledModules,
+		"config_override",
+		"disabled by yggdrasil.overrides.disable_modules",
+	); err != nil {
 		return err
 	}
-	if err := p.recordDisabledModuleOverrides(all, p.codeOverrides.DisabledModules, "code_override", "disabled by WithPlanOverrides"); err != nil {
+	if err := p.recordDisabledModuleOverrides(
+		all,
+		p.codeOverrides.DisabledModules,
+		"code_override",
+		"disabled by WithPlanOverrides",
+	); err != nil {
 		return err
 	}
 

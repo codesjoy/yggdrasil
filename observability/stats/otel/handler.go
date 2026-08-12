@@ -212,10 +212,18 @@ func (h *handler) handleWithMetrics(ctx context.Context, rs stats.RPCStats, isSe
 			messageID = atomic.AddInt64(&rctx.messagesReceived, 1)
 			if rs.IsClient() {
 				atomic.AddInt64(&rctx.responses, 1)
-				h.rpcResponseSize.Record(ctx, int64(rs.GetTransportSize()), metric.WithAttributes(metricAttrs...))
+				h.rpcResponseSize.Record(
+					ctx,
+					int64(rs.GetTransportSize()),
+					metric.WithAttributes(metricAttrs...),
+				)
 			} else {
 				atomic.AddInt64(&rctx.requests, 1)
-				h.rpcRequestSize.Record(ctx, int64(rs.GetTransportSize()), metric.WithAttributes(metricAttrs...))
+				h.rpcRequestSize.Record(
+					ctx,
+					int64(rs.GetTransportSize()),
+					metric.WithAttributes(metricAttrs...),
+				)
 			}
 		}
 
@@ -234,10 +242,18 @@ func (h *handler) handleWithMetrics(ctx context.Context, rs stats.RPCStats, isSe
 			messageID = atomic.AddInt64(&rctx.messagesSent, 1)
 			if rs.IsClient() {
 				atomic.AddInt64(&rctx.requests, 1)
-				h.rpcRequestSize.Record(ctx, int64(rs.GetTransportSize()), metric.WithAttributes(metricAttrs...))
+				h.rpcRequestSize.Record(
+					ctx,
+					int64(rs.GetTransportSize()),
+					metric.WithAttributes(metricAttrs...),
+				)
 			} else {
 				atomic.AddInt64(&rctx.responses, 1)
-				h.rpcResponseSize.Record(ctx, int64(rs.GetTransportSize()), metric.WithAttributes(metricAttrs...))
+				h.rpcResponseSize.Record(
+					ctx,
+					int64(rs.GetTransportSize()),
+					metric.WithAttributes(metricAttrs...),
+				)
 			}
 		}
 
@@ -281,8 +297,16 @@ func (h *handler) handleWithMetrics(ctx context.Context, rs stats.RPCStats, isSe
 
 		h.rpcDuration.Record(ctx, elapsedTime, metric.WithAttributes(metricAttrs...))
 		if rctx != nil {
-			h.rpcRequestsPerRPC.Record(ctx, atomic.LoadInt64(&rctx.requests), metric.WithAttributes(metricAttrs...))
-			h.rpcResponsesPerRPC.Record(ctx, atomic.LoadInt64(&rctx.responses), metric.WithAttributes(metricAttrs...))
+			h.rpcRequestsPerRPC.Record(
+				ctx,
+				atomic.LoadInt64(&rctx.requests),
+				metric.WithAttributes(metricAttrs...),
+			)
+			h.rpcResponsesPerRPC.Record(
+				ctx,
+				atomic.LoadInt64(&rctx.responses),
+				metric.WithAttributes(metricAttrs...),
+			)
 		}
 	default:
 		return

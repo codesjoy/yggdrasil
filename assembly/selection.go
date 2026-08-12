@@ -281,7 +281,9 @@ func (p *planner) selectDefault(capability string) (string, string, error) {
 					return preferred, "mode:" + p.mode.Name, nil
 				}
 			}
-			if fallback, source, candidates, err := p.selectModuleFallbackDefault(capability); err != nil {
+			if fallback, source, candidates, err := p.selectModuleFallbackDefault(
+				capability,
+			); err != nil {
 				return "", "", err
 			} else if fallback != "" {
 				p.defaultCandidates[capability] = candidates

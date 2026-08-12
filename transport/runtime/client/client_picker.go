@@ -81,7 +81,10 @@ func (c *client) pick(failFast bool, info *balancer.RPCInfo) (balancer.PickResul
 				if lastPickErr != nil {
 					errStr = "latest balancer error: " + lastPickErr.Error()
 				} else {
-					errStr = fmt.Sprintf("%v while waiting for connections to become ready", info.Ctx.Err())
+					errStr = fmt.Sprintf(
+						"%v while waiting for connections to become ready",
+						info.Ctx.Err(),
+					)
 				}
 				switch err := info.Ctx.Err(); {
 				case errors.Is(err, context.DeadlineExceeded):

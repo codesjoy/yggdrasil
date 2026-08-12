@@ -31,14 +31,14 @@ type Strategy interface {
 // Config defines the configuration options for backoff.
 type Config struct {
 	// BaseDelay is the amount of time to backoff after the first failure.
-	BaseDelay time.Duration `mapstructure:"baseDelay"  default:"1s"`
+	BaseDelay time.Duration `mapstructure:"baseDelay" default:"1s"`
 	// Multiplier is the factor with which to multiply backoffs after a
 	// failed retry. Should ideally be greater than 1.
 	Multiplier float64 `mapstructure:"multiplier" default:"1.6"`
 	// Jitter is the factor with which backoffs are randomized.
-	Jitter float64 `mapstructure:"jitter"     default:"0.2"`
+	Jitter float64 `mapstructure:"jitter" default:"0.2"`
 	// MaxDelay is the upper bound of backoff delay.
-	MaxDelay time.Duration `mapstructure:"maxDelay"   default:"2m"`
+	MaxDelay time.Duration `mapstructure:"maxDelay" default:"2m"`
 }
 
 // DefaultConfig defines the default configuration for backoff.

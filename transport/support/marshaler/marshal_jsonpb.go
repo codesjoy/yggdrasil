@@ -208,7 +208,7 @@ func (j *JSONPb) marshalNonProtoField(v interface{}) ([]byte, error) {
 		return []byte("null"), nil
 	}
 	rv := reflect.ValueOf(v)
-	for rv.Kind() == reflect.Ptr {
+	for rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			return []byte("null"), nil
 		}
@@ -260,7 +260,9 @@ func (j *JSONPb) marshalNonProtoField(v interface{}) ([]byte, error) {
 				if j.UseEnumNumbers {
 					_, err = buf.WriteString(strconv.FormatInt(rv.Index(i).Int(), 10))
 				} else {
-					_, err = buf.WriteString("\"" + rv.Index(i).Interface().(protoEnum).String() + "\"")
+					_, err = buf.WriteString(
+						"\"" + rv.Index(i).Interface().(protoEnum).String() + "\"",
+					)
 				}
 				if err != nil {
 					return nil, err
@@ -357,10 +359,10 @@ func decodeNonProtoField(
 	v interface{},
 ) error {
 	rv := reflect.ValueOf(v)
-	if rv.Kind() != reflect.Ptr {
+	if rv.Kind() != reflect.Pointer {
 		return fmt.Errorf("%T is not a pointer", v)
 	}
-	for rv.Kind() == reflect.Ptr {
+	for rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			rv.Set(reflect.New(rv.Type().Elem()))
 		}
@@ -441,7 +443,11 @@ func decodeNonProtoField(
 		}
 		switch v := repr.(type) {
 		case string:
-			return fmt.Errorf("unmarshaling of symbolic enum %q not supported: %T", repr, rv.Interface())
+			return fmt.Errorf(
+				"unmarshaling of symbolic enum %q not supported: %T",
+				repr,
+				rv.Interface(),
+			)
 		case float64:
 			rv.Set(reflect.ValueOf(int32(v)).Convert(rv.Type()))
 			return nil

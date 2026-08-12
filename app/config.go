@@ -216,7 +216,14 @@ func loadDefaultConfigSources(opts *options) error {
 
 func loadLayersAndTrack(opts *options, layers []configLayerSource, scope string) error {
 	for i, item := range layers {
-		if err := loadConfigLayer(opts, item.Name, item.Priority, item.Source, scope, i); err != nil {
+		if err := loadConfigLayer(
+			opts,
+			item.Name,
+			item.Priority,
+			item.Source,
+			scope,
+			i,
+		); err != nil {
 			return err
 		}
 	}

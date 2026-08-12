@@ -65,7 +65,11 @@ func (l *Loader) LoadFile(
 
 	loaded := make([]source.Source, 0, 4)
 	configFileSource := filesource.NewSource(path, false)
-	if err := manager.LoadLayer("config:file:"+path, config.PriorityFile, configFileSource); err != nil {
+	if err := manager.LoadLayer(
+		"config:file:"+path,
+		config.PriorityFile,
+		configFileSource,
+	); err != nil {
 		return nil, false, err
 	}
 	loaded = append(loaded, configFileSource)
