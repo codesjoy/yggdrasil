@@ -347,8 +347,7 @@ func (cs *httpClientStream) finish(h, t metadata.MD, err error, ch chan struct{}
 }
 
 type httpServerStream struct {
-	ctx    context.Context
-	cancel context.CancelFunc
+	ctx context.Context
 
 	method             string
 	req                *http.Request

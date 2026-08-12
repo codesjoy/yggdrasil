@@ -191,9 +191,9 @@ func (s *server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx = attachPeer(ctx, r, localAddr, authInfo)
 
 	ssCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	ss := &httpServerStream{
 		ctx:                ssCtx,
-		cancel:             cancel,
 		method:             method,
 		req:                r,
 		w:                  w,

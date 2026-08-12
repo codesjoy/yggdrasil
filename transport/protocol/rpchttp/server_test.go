@@ -77,6 +77,24 @@ func TestServeHTTP_TagRPCCanReadIncomingMetadata(t *testing.T) {
 	assert.True(t, called)
 }
 
+func TestServeHTTP_CancelsStreamContextWhenHandlerReturns(t *testing.T) {
+	var streamCtx context.Context
+	s := &server{
+		opts:         &ServerConfig{},
+		statsHandler: stats.NoOpHandler,
+		handle: func(ss remote.ServerStream) {
+			streamCtx = ss.Context()
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/pkg.Service/Method", bytes.NewBufferString("{}"))
+	w := httptest.NewRecorder()
+	s.serveHTTP(w, req)
+
+	require.NotNil(t, streamCtx)
+	require.ErrorIs(t, streamCtx.Err(), context.Canceled)
+}
+
 func TestWriteMetadata(t *testing.T) {
 	rec := httptest.NewRecorder()
 	writeMetadata(rec, metadata.Pairs("key1", "val1", "key2", "val2a", "key2", "val2b"))
