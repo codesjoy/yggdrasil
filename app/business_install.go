@@ -205,6 +205,11 @@ func (a *App) installBundleLocked(bundle *BusinessBundle) error {
 			return err
 		}
 	}
+	for _, item := range bundle.GovernorHTTP {
+		if err := a.installGovernorHTTPBinding(item); err != nil {
+			return err
+		}
+	}
 	for _, item := range bundle.Tasks {
 		if err := a.addBackgroundTask(item); err != nil {
 			return err
@@ -329,6 +334,42 @@ func (a *App) installRawHTTPBinding(binding RawHTTPBinding) error {
 	}
 	svr.RegisterRestRawHandlers(desc)
 	a.installedHTTPRoutes[internalinstall.RouteKey(desc.Method, desc.Path)] = struct{}{}
+	return nil
+}
+
+func (a *App) installGovernorHTTPBinding(binding GovernorHTTPBinding) error {
+	opts, err := a.installOptions()
+	if err != nil {
+		return err
+	}
+	method, path, err := internalinstall.ValidateGovernorHTTPBinding(
+		binding.Method,
+		binding.Path,
+		binding.Handler,
+	)
+	if err != nil {
+		return err
+	}
+	if opts.governor == nil {
+		return internalinstall.ValidationError("governor server is not available", nil)
+	}
+	if opts.governor.HasRoute(path) {
+		return internalinstall.ConflictError(
+			fmt.Sprintf("governor route %s %s already installed", method, path),
+			nil,
+		)
+	}
+	// Governor routes are dispatched by path, so they are keyed by path alone.
+	if err := internalinstall.CheckRouteConflict(
+		"governor http",
+		a.installedGovernorRoutes,
+		"",
+		path,
+	); err != nil {
+		return err
+	}
+	opts.governor.Handle(method, path, binding.Handler)
+	a.installedGovernorRoutes[internalinstall.RouteKey("", path)] = struct{}{}
 	return nil
 }
 

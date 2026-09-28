@@ -209,6 +209,8 @@ Governor should expose:
 - transport server info;
 - registry / resolver / balancer status summary.
 
+The governor listener binds `yggdrasil.admin.governor.bind`. When `bind` is unset it resolves to the host's primary routable IPv4 address (falling back to loopback), so other machines on the intranet can probe it; an explicit wildcard (`0.0.0.0` / `::`) listens on every interface while still advertising a routable address. `yggdrasil.admin.governor.host` is a deprecated alias for `bind` and takes lower precedence.
+
 ## 11. Custom Transport Module Example
 
 ```go

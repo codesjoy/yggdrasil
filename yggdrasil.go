@@ -46,6 +46,9 @@ type RESTBinding = yapp.RESTBinding
 // RawHTTPBinding declares one raw HTTP binding.
 type RawHTTPBinding = yapp.RawHTTPBinding
 
+// GovernorHTTPBinding declares one handler bound to the governor admin server.
+type GovernorHTTPBinding = yapp.GovernorHTTPBinding
+
 // BackgroundTask is one managed background task.
 type BackgroundTask = yapp.BackgroundTask
 

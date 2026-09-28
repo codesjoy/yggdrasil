@@ -33,6 +33,7 @@ type mockBundleInstaller struct {
 	rpcBindings  []RPCBinding
 	restBindings []RESTBinding
 	rawHTTP      []RawHTTPBinding
+	governorHTTP []GovernorHTTPBinding
 	tasks        []BackgroundTask
 	hooks        []BusinessHook
 }
@@ -49,6 +50,11 @@ func (m *mockBundleInstaller) installRESTBinding(b RESTBinding) error {
 
 func (m *mockBundleInstaller) installRawHTTPBinding(b RawHTTPBinding) error {
 	m.rawHTTP = append(m.rawHTTP, b)
+	return nil
+}
+
+func (m *mockBundleInstaller) installGovernorHTTPBinding(b GovernorHTTPBinding) error {
+	m.governorHTTP = append(m.governorHTTP, b)
 	return nil
 }
 
@@ -130,6 +136,27 @@ func TestInstallContext_RegisterRawHTTP(t *testing.T) {
 	t.Run("nil installer returns error", func(t *testing.T) {
 		ctx := &InstallContext{}
 		err := ctx.RegisterRawHTTP(RawHTTPBinding{})
+		require.Error(t, err)
+	})
+}
+
+func TestInstallContext_RegisterGovernorHTTP(t *testing.T) {
+	t.Run("valid binding", func(t *testing.T) {
+		installer := &mockBundleInstaller{}
+		ctx := &InstallContext{installer: installer}
+		binding := GovernorHTTPBinding{
+			Method:  "GET",
+			Path:    "/test",
+			Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		}
+		err := ctx.RegisterGovernorHTTP(binding)
+		require.NoError(t, err)
+		assert.Len(t, installer.governorHTTP, 1)
+	})
+
+	t.Run("nil installer returns error", func(t *testing.T) {
+		ctx := &InstallContext{}
+		err := ctx.RegisterGovernorHTTP(GovernorHTTPBinding{})
 		require.Error(t, err)
 	})
 }

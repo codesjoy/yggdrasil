@@ -19,36 +19,18 @@ import (
 	"context"
 	"strings"
 
-	"github.com/codesjoy/pkg/utils/xnet"
+	"github.com/codesjoy/yggdrasil/v3/internal/netaddr"
 )
 
 // NormalizeListenHost normalizes listen host for empty or wildcard values.
+//
+// Empty and wildcard values resolve to the host's primary routable IPv4
+// address, so a listener is never bound to an unreachable interface address.
+// Explicit host values pass through unchanged.
 func NormalizeListenHost(host string) (string, error) {
 	host = strings.TrimSpace(host)
-	if !isWildcardHost(host) {
+	if !netaddr.IsWildcard(host) {
 		return host, nil
 	}
-
-	addr, err := xnet.SelectLocalAddr(context.Background(), defaultLocalAddrOptions())
-	if err != nil {
-		return "", err
-	}
-	return addr.String(), nil
-}
-
-func isWildcardHost(host string) bool {
-	switch host {
-	case "", "0.0.0.0", "::", "[::]":
-		return true
-	default:
-		return false
-	}
-}
-
-func defaultLocalAddrOptions() xnet.LocalAddrOptions {
-	return xnet.LocalAddrOptions{
-		Family:           xnet.FamilyIPv4,
-		IncludeLoopback:  true,
-		IncludeLinkLocal: true,
-	}
+	return netaddr.SelectPrimaryIPv4(context.Background()), nil
 }

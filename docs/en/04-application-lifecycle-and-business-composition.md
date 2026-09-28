@@ -130,6 +130,7 @@ type BusinessBundle struct {
     RPCBindings  []RPCBinding
     RESTBindings []RESTBinding
     RawHTTP      []RawHTTPBinding
+    GovernorHTTP []GovernorHTTPBinding
     Tasks        []BackgroundTask
     Hooks        []BusinessHook
     Extensions   []BusinessInstallable
@@ -141,7 +142,8 @@ type BusinessBundle struct {
 | --- | --- |
 | `RPCBindings` | Register RPC / gRPC services |
 | `RESTBindings` | Register REST gateway services |
-| `RawHTTP` | Register raw HTTP handlers |
+| `RawHTTP` | Register raw HTTP handlers on the main server |
+| `GovernorHTTP` | Register raw HTTP handlers on the governor admin server |
 | `Tasks` | Background tasks managed by the lifecycle runner |
 | `Hooks` | before-start, before-stop, and after-stop hooks |
 | `Extensions` | Formal extension point beyond standard bindings |
@@ -154,6 +156,7 @@ type BusinessBundle struct {
 - validates RPC desc / impl type;
 - validates REST desc / impl type;
 - validates RawHTTP method/path/handler;
+- validates GovernorHTTP method/path/handler;
 - checks service-name and route conflicts;
 - registers tasks and hooks;
 - executes `BusinessInstallable` extensions;
@@ -196,6 +199,20 @@ type RawHTTPBinding struct {
 ```
 
 Legacy desc normalization is supported. Otherwise method/path/handler are used directly.
+
+### 7.4 GovernorHTTPBinding
+
+```go
+type GovernorHTTPBinding struct {
+    Method  string
+    Path    string
+    Handler http.HandlerFunc
+}
+```
+
+Registers a raw handler on the governor admin server, so business code can expose its own diagnostic or operations endpoints next to the framework's own (`/routes`, `/configs`, `/diagnostics`, ...). Governor routes are dispatched by path, so one binding is allowed per path; registering an already-registered path — including a built-in one — is rejected as a conflict. Handlers run behind the configured `governor.auth` middleware.
+
+The same handler can be registered imperatively from a `BusinessInstallable` through `InstallContext.RegisterGovernorHTTP`.
 
 ## 8. Start / Serving / Running
 

@@ -222,6 +222,28 @@ func ValidateRawHTTPBinding(
 	return normalized, nil
 }
 
+// ValidateGovernorHTTPBinding validates and normalizes one governor HTTP binding.
+func ValidateGovernorHTTPBinding(
+	method, path string,
+	handler http.HandlerFunc,
+) (string, string, error) {
+	method = strings.ToUpper(strings.TrimSpace(method))
+	path = strings.TrimSpace(path)
+	if method == "" {
+		return "", "", ValidationError("governor http binding method is empty", nil)
+	}
+	if path == "" {
+		return "", "", ValidationError("governor http binding path is empty", nil)
+	}
+	if !strings.HasPrefix(path, "/") {
+		return "", "", ValidationError("governor http binding path must start with '/'", nil)
+	}
+	if handler == nil {
+		return "", "", ValidationError("governor http binding handler is nil", nil)
+	}
+	return method, path, nil
+}
+
 // CheckServiceConflict reports whether the RPC service key is already installed.
 func CheckServiceConflict(installed map[string]struct{}, key string, displayName string) error {
 	if _, exists := installed[key]; exists {

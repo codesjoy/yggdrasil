@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"reflect"
 
 	"go.opentelemetry.io/otel/metric"
@@ -69,6 +70,14 @@ type RawHTTPBinding struct {
 	Desc *server.RestRawHandlerDesc
 }
 
+// GovernorHTTPBinding declares one handler bound to the governor admin server.
+// Method/Path/Handler is the canonical shape; governor routes are keyed by path.
+type GovernorHTTPBinding struct {
+	Method  string
+	Path    string
+	Handler http.HandlerFunc
+}
+
 // BackgroundTask reuses the managed internal server lifecycle contract.
 type BackgroundTask interface {
 	Serve() error
@@ -109,6 +118,7 @@ type BusinessBundle struct {
 	RPCBindings  []RPCBinding
 	RESTBindings []RESTBinding
 	RawHTTP      []RawHTTPBinding
+	GovernorHTTP []GovernorHTTPBinding
 	Tasks        []BackgroundTask
 	Hooks        []BusinessHook
 	Extensions   []BusinessInstallable
@@ -119,6 +129,7 @@ type bundleInstaller interface {
 	installRPCBinding(RPCBinding) error
 	installRESTBinding(RESTBinding) error
 	installRawHTTPBinding(RawHTTPBinding) error
+	installGovernorHTTPBinding(GovernorHTTPBinding) error
 	addBackgroundTask(BackgroundTask) error
 	addBusinessHook(BusinessHook) error
 }
@@ -155,6 +166,15 @@ func (ctx *InstallContext) RegisterRawHTTP(binding RawHTTPBinding) error {
 		return err
 	}
 	return installer.installRawHTTPBinding(binding)
+}
+
+// RegisterGovernorHTTP installs one raw handler on the governor admin server.
+func (ctx *InstallContext) RegisterGovernorHTTP(binding GovernorHTTPBinding) error {
+	installer, err := ctx.installerOrError()
+	if err != nil {
+		return err
+	}
+	return installer.installGovernorHTTPBinding(binding)
 }
 
 // AddTask registers one managed background task.

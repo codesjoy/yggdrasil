@@ -154,6 +154,7 @@ type App struct {
 	explicitBundleInstalled bool
 	installedRPCServices    map[string]struct{}
 	installedHTTPRoutes     map[string]struct{}
+	installedGovernorRoutes map[string]struct{}
 	bundleDiagnostics       []BundleDiag
 }
 
@@ -172,13 +173,14 @@ func New(appName string, ops ...Option) (*App, error) {
 		return nil, err
 	}
 	return &App{
-		name:                 appName,
-		state:                lifecycleStateNew,
-		opts:                 opts,
-		lifecycle:            lifecycle,
-		hub:                  module.NewHub(),
-		installedRPCServices: map[string]struct{}{},
-		installedHTTPRoutes:  map[string]struct{}{},
+		name:                    appName,
+		state:                   lifecycleStateNew,
+		opts:                    opts,
+		lifecycle:               lifecycle,
+		hub:                     module.NewHub(),
+		installedRPCServices:    map[string]struct{}{},
+		installedHTTPRoutes:     map[string]struct{}{},
+		installedGovernorRoutes: map[string]struct{}{},
 	}, nil
 }
 

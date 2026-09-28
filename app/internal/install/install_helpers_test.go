@@ -317,6 +317,45 @@ func TestValidateRawHTTPBindingStateful(t *testing.T) {
 	})
 }
 
+func TestValidateGovernorHTTPBinding(t *testing.T) {
+	handler := func(http.ResponseWriter, *http.Request) {}
+
+	t.Run("valid binding normalizes", func(t *testing.T) {
+		method, path, err := ValidateGovernorHTTPBinding(" get ", "/metrics", handler)
+		require.NoError(t, err)
+		assert.Equal(t, "GET", method)
+		assert.Equal(t, "/metrics", path)
+	})
+
+	t.Run("invalid bindings", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			method   string
+			path     string
+			handler  http.HandlerFunc
+			contains string
+		}{
+			{name: "empty method", path: "/metrics", handler: handler, contains: "method is empty"},
+			{name: "empty path", method: "GET", handler: handler, contains: "path is empty"},
+			{
+				name:     "path without slash",
+				method:   "GET",
+				path:     "metrics",
+				handler:  handler,
+				contains: "start with '/'",
+			},
+			{name: "nil handler", method: "GET", path: "/metrics", contains: "handler is nil"},
+		}
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				_, _, err := ValidateGovernorHTTPBinding(tc.method, tc.path, tc.handler)
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.contains)
+			})
+		}
+	})
+}
+
 func TestCheckServiceConflict(t *testing.T) {
 	t.Run("no conflict", func(t *testing.T) {
 		err := CheckServiceConflict(map[string]struct{}{}, "svc", "svc")

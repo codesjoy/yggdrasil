@@ -27,6 +27,7 @@ import (
 	"sync"
 
 	"github.com/codesjoy/yggdrasil/v3/config"
+	"github.com/codesjoy/yggdrasil/v3/internal/netaddr"
 )
 
 // ServerInfo contains server info.
@@ -122,6 +123,18 @@ func (s *Server) Serve() error {
 		return err
 	}
 
+	advertisedHost := host
+	if netaddr.IsWildcard(host) {
+		advertisedHost = resolvePrimaryHost()
+		if !s.cfg.Auth.Enabled() {
+			slog.Warn(
+				"governor is listening on all interfaces without authentication",
+				"bind",
+				host,
+			)
+		}
+	}
+
 	s.mu.Lock()
 	s.listener = listener
 	s.cfg.Bind = host
@@ -130,7 +143,7 @@ func (s *Server) Serve() error {
 	s.Addr = s.cfg.Address()
 	s.mu.Unlock()
 	s.setInfo(ServerInfo{
-		Address: fmt.Sprintf("%s:%d", host, port),
+		Address: net.JoinHostPort(advertisedHost, portStr),
 		Scheme:  "http",
 		Attr:    map[string]string{},
 	})

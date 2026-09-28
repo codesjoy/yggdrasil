@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+	"slices"
 	"strings"
 
 	"github.com/codesjoy/yggdrasil/v3/config"
@@ -32,13 +33,35 @@ import (
 func (s *Server) HandleFunc(pattern string, handler http.HandlerFunc) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, item := range s.routes {
-		if item == pattern {
-			return
-		}
+	if slices.Contains(s.routes, pattern) {
+		return
 	}
 	s.mux.HandleFunc(pattern, handler)
 	s.routes = append(s.routes, pattern)
+}
+
+// Handle registers a method-scoped route with this governor instance.
+// An empty method matches every HTTP method.
+func (s *Server) Handle(method, pattern string, handler http.HandlerFunc) {
+	if handler == nil {
+		return
+	}
+	method = strings.ToUpper(strings.TrimSpace(method))
+	s.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+		if method != "" && !strings.EqualFold(r.Method, method) {
+			w.Header().Set("Allow", method)
+			respErr(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
+			return
+		}
+		handler(w, r)
+	})
+}
+
+// HasRoute reports whether a route pattern is already registered.
+func (s *Server) HasRoute(pattern string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Contains(s.routes, pattern)
 }
 
 // ErrResponse represents an error response.

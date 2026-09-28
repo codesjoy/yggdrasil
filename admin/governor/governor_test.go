@@ -21,6 +21,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -32,16 +33,69 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/config"
 )
 
+// TestMain pins host resolution to loopback so tests bind predictably instead
+// of depending on the test host's routable interfaces.
+func TestMain(m *testing.M) {
+	prev := resolvePrimaryHost
+	resolvePrimaryHost = func() string { return "127.0.0.1" }
+	code := m.Run()
+	resolvePrimaryHost = prev
+	os.Exit(code)
+}
+
 func TestConfig_SetDefault(t *testing.T) {
 	cfg := Config{}
 	require.NoError(t, cfg.SetDefault())
 	require.NotNil(t, cfg.Enabled)
 	assert.True(t, *cfg.Enabled)
 	assert.Equal(t, "127.0.0.1", cfg.Bind)
+	assert.Equal(t, cfg.Bind, cfg.Host)
 	assert.False(t, cfg.ExposePprof)
 	assert.False(t, cfg.ExposeEnv)
 	assert.False(t, cfg.AllowConfigPatch)
 	assert.False(t, cfg.Advertise)
+}
+
+func TestConfig_SetDefault_ExplicitBind(t *testing.T) {
+	cfg := Config{Bind: " 10.1.2.3 "}
+	require.NoError(t, cfg.SetDefault())
+	assert.Equal(t, "10.1.2.3", cfg.Bind)
+}
+
+func TestConfig_SetDefault_WildcardPreserved(t *testing.T) {
+	for _, bind := range []string{"0.0.0.0", "::", "[::]"} {
+		t.Run(bind, func(t *testing.T) {
+			cfg := Config{Bind: bind}
+			require.NoError(t, cfg.SetDefault())
+			assert.Equal(t, bind, cfg.Bind)
+		})
+	}
+}
+
+func TestConfig_SetDefault_DeprecatedHostWarns(t *testing.T) {
+	t.Run("host used as bind", func(t *testing.T) {
+		logOutput := captureWarnLogs(t)
+		cfg := Config{Host: "10.0.0.5"}
+		require.NoError(t, cfg.SetDefault())
+		assert.Equal(t, "10.0.0.5", cfg.Bind)
+		assert.Contains(t, logOutput(), "governor.host is deprecated")
+	})
+
+	t.Run("bind takes precedence", func(t *testing.T) {
+		logOutput := captureWarnLogs(t)
+		cfg := Config{Bind: "10.0.0.1", Host: "10.0.0.2"}
+		require.NoError(t, cfg.SetDefault())
+		assert.Equal(t, "10.0.0.1", cfg.Bind)
+		assert.Contains(t, logOutput(), "governor.bind takes precedence")
+	})
+
+	t.Run("setdefault is idempotent", func(t *testing.T) {
+		cfg := Config{Bind: "10.0.0.1", Host: "10.0.0.2"}
+		require.NoError(t, cfg.SetDefault())
+		logOutput := captureWarnLogs(t)
+		require.NoError(t, cfg.SetDefault())
+		assert.NotContains(t, logOutput(), "deprecated")
+	})
 }
 
 func TestConfig_SetDefault_ValidateAuth(t *testing.T) {
@@ -255,6 +309,59 @@ func TestWarnOnExposedRoutesWithoutAuth(t *testing.T) {
 	assert.Contains(t, logOutput, "pprof")
 	assert.Contains(t, logOutput, "env")
 	assert.Contains(t, logOutput, "config_patch")
+}
+
+func TestServe_AdvertiseResolvesWildcard(t *testing.T) {
+	s := startGovernor(t, Config{Bind: "0.0.0.0"}, config.NewManager())
+
+	host, _, err := net.SplitHostPort(s.Info().Address)
+	require.NoError(t, err)
+	assert.Equal(t, "127.0.0.1", host, "wildcard listeners must advertise a routable host")
+
+	// The listener still accepts connections on the advertised address.
+	assertStatus(t, "GET", "http://"+s.Info().Address+"/routes", "", nil, http.StatusOK)
+}
+
+func TestHandle_MethodScope(t *testing.T) {
+	s := startGovernor(t, Config{}, config.NewManager())
+	s.Handle("GET", "/custom", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	})
+
+	assertStatus(t, "GET", "http://"+s.Info().Address+"/custom", "", nil, http.StatusOK)
+	assertStatus(
+		t,
+		"POST",
+		"http://"+s.Info().Address+"/custom",
+		"",
+		nil,
+		http.StatusMethodNotAllowed,
+	)
+}
+
+func TestHasRoute(t *testing.T) {
+	s, err := NewServerWithConfig(Config{Bind: "127.0.0.1"}, config.NewManager())
+	require.NoError(t, err)
+	assert.True(t, s.HasRoute("/routes"))
+	assert.False(t, s.HasRoute("/custom"))
+
+	s.HandleFunc("/custom", func(http.ResponseWriter, *http.Request) {})
+	assert.True(t, s.HasRoute("/custom"))
+}
+
+// captureWarnLogs redirects the default logger to a buffer and returns a
+// reader for the warnings captured so far.
+func captureWarnLogs(t *testing.T) func() string {
+	t.Helper()
+	var buf bytes.Buffer
+	oldLogger := slog.Default()
+	slog.SetDefault(
+		slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})),
+	)
+	t.Cleanup(func() {
+		slog.SetDefault(oldLogger)
+	})
+	return buf.String
 }
 
 func TestWaitStartedReturnsServeError(t *testing.T) {

@@ -32,7 +32,7 @@ func TestDiagnosticsExposeReloadRequiresRestart(t *testing.T) {
 		t,
 		configPath,
 		fmt.Sprintf(
-			"yggdrasil:\n  mode: dev\n  server:\n    transports:\n      - \"grpc\"\n  transports:\n    grpc:\n      server:\n        address: \"127.0.0.1:%d\"\n  admin:\n    governor:\n      port: %d\napp:\n  diagnostics_reload:\n    greeting: \"hello from smoke test\"\n",
+			"yggdrasil:\n  mode: dev\n  server:\n    transports:\n      - \"grpc\"\n  transports:\n    grpc:\n      server:\n        address: \"127.0.0.1:%d\"\n  admin:\n    governor:\n      bind: \"127.0.0.1\"\n      port: %d\napp:\n  diagnostics_reload:\n    greeting: \"hello from smoke test\"\n",
 			grpcPort,
 			governorPort,
 		),

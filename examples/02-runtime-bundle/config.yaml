@@ -16,6 +16,7 @@ yggdrasil:
 
   admin:
     governor:
+      bind: "127.0.0.1"
       port: 56022
 
 app:

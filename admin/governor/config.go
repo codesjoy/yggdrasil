@@ -15,19 +15,32 @@
 package governor
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/codesjoy/yggdrasil/v3/internal/netaddr"
 )
 
 const (
+	// defaultGovernorBind is the loopback fallback used when no routable local
+	// address can be resolved. It is not the default listener bind.
 	defaultGovernorBind              = "127.0.0.1"
 	defaultGovernorReadHeaderTimeout = 5 * time.Second
 	defaultGovernorReadTimeout       = 15 * time.Second
 	defaultGovernorWriteTimeout      = 30 * time.Second
 	defaultGovernorIdleTimeout       = time.Minute
 )
+
+// resolvePrimaryHost resolves the host's primary routable IPv4 address. It
+// backs both the unset-bind default and wildcard advertisement, and is
+// overridable in tests.
+var resolvePrimaryHost = func() string {
+	return netaddr.SelectPrimaryIPv4(context.Background())
+}
 
 // BasicAuthConfig holds HTTP basic auth credentials for governor routes.
 type BasicAuthConfig struct {
@@ -69,9 +82,11 @@ type Config struct {
 	// Enabled controls whether governor serve loop is active.
 	// Nil means enabled for backward compatibility.
 	Enabled *bool `mapstructure:"enabled"`
-	// Bind is the preferred bind host for governor.
+	// Bind is the preferred bind host for governor. When unset it resolves to
+	// the host's primary routable IPv4 address; an explicit wildcard is kept so
+	// the listener accepts connections on every interface.
 	Bind string `mapstructure:"bind"`
-	// Host is the legacy bind host key kept for compatibility.
+	// Host is a deprecated alias for Bind. Bind takes precedence when both are set.
 	Host              string        `mapstructure:"host"`
 	Port              uint64        `mapstructure:"port"`
 	ReadHeaderTimeout time.Duration `mapstructure:"read_header_timeout" default:"5s"`
@@ -105,7 +120,14 @@ func (c *Config) SetDefault() error {
 		enabled := true
 		c.Enabled = &enabled
 	}
+	warnDeprecatedHost(c.Bind, c.Host)
 	c.Bind = normalizeGovernorBind(c.Bind, c.Host)
+	if c.Bind == "" {
+		c.Bind = resolvePrimaryHost()
+		if c.Bind == "" {
+			c.Bind = defaultGovernorBind
+		}
+	}
 	c.Host = c.Bind
 	if c.ReadHeaderTimeout <= 0 {
 		c.ReadHeaderTimeout = defaultGovernorReadHeaderTimeout
@@ -125,15 +147,37 @@ func (c *Config) SetDefault() error {
 	return c.Auth.Validate()
 }
 
+// normalizeGovernorBind resolves the configured bind host.
+//
+// An empty value is kept empty as the "auto" sentinel, resolved by SetDefault.
+// Explicit values, including wildcards, are preserved so an explicit wildcard
+// still listens on every interface.
 func normalizeGovernorBind(bind, host string) string {
 	next := strings.TrimSpace(bind)
 	if next == "" {
 		next = strings.TrimSpace(host)
 	}
-	switch next {
-	case "", "0.0.0.0", "::", "[::]":
-		return defaultGovernorBind
-	default:
-		return next
+	return next
+}
+
+func warnDeprecatedHost(bind, host string) {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return
+	}
+	// Host is synced to Bind after resolution, so comparing them keeps the
+	// warning correct when SetDefault runs more than once.
+	if strings.TrimSpace(bind) == "" {
+		slog.Warn("governor.host is deprecated; use governor.bind", "host", host)
+		return
+	}
+	if strings.TrimSpace(bind) != host {
+		slog.Warn(
+			"governor.host is deprecated and ignored; governor.bind takes precedence",
+			"host",
+			host,
+			"bind",
+			strings.TrimSpace(bind),
+		)
 	}
 }
