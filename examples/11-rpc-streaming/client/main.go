@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -28,16 +29,22 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error("rpc streaming client failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	app, err := yapp.New("client", yapp.WithConfigPath("config.yaml"))
 	if err != nil {
-		os.Exit(1)
+		return fmt.Errorf("create client app: %w", err)
 	}
 	defer func() { _ = app.Stop(context.Background()) }()
 
 	cli, err := app.NewClient(context.Background(), business.AppName)
 	if err != nil {
-		slog.Error("failed to create client", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("create client: %w", err)
 	}
 	defer func() { _ = cli.Close() }()
 
@@ -65,6 +72,7 @@ func main() {
 	}
 
 	slog.Info("All streaming tests completed successfully!")
+	return nil
 }
 
 func testUnaryRPC(ctx context.Context, client helloworldpb.GreeterServiceClient) error {

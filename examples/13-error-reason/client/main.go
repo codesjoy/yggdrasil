@@ -33,9 +33,16 @@ import (
 const serverName = "github.com.codesjoy.yggdrasil.example.13-error-reason"
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error("error reason client failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	app, err := yapp.New("client", yapp.WithConfigPath("config.yaml"))
 	if err != nil {
-		os.Exit(1)
+		return fmt.Errorf("create client app: %w", err)
 	}
 	defer func() { _ = app.Stop(context.Background()) }()
 
@@ -44,8 +51,7 @@ func main() {
 		serverName,
 	)
 	if err != nil {
-		slog.Error("failed to create client", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("create client: %w", err)
 	}
 	defer func() { _ = cli.Close() }()
 
@@ -101,6 +107,7 @@ func main() {
 	testRetryMechanism(ctx, client)
 
 	slog.Info("All error handling tests completed!")
+	return nil
 }
 
 func testCreateBook(ctx context.Context, client errorhandlingpb.LibraryServiceClient) {

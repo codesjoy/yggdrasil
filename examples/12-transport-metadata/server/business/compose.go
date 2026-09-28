@@ -1,3 +1,17 @@
+// Copyright 2022 The codesjoy Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package business
 
 import (
@@ -11,6 +25,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 )
 
+// AppName is the service name this example registers with the runtime.
 const AppName = "github.com.codesjoy.yggdrasil.example.12-transport-metadata"
 
 // Compose installs a greeter service that focuses on transport metadata behavior.
@@ -32,10 +47,12 @@ func Compose(rt yapp.Runtime) (*yapp.BusinessBundle, error) {
 	}, nil
 }
 
+// GreeterService implements the greeter service with rich metadata handling.
 type GreeterService struct {
 	helloworldpb.UnimplementedGreeterServiceServer
 }
 
+// SayHello answers a unary call and sets both response header and trailer metadata.
 func (s *GreeterService) SayHello(
 	ctx context.Context,
 	req *helloworldpb.SayHelloRequest,
@@ -56,6 +73,7 @@ func (s *GreeterService) SayHello(
 	}, nil
 }
 
+// SayHelloStream reports stream status through trailer metadata.
 func (s *GreeterService) SayHelloStream(
 	stream helloworldpb.GreeterServiceSayHelloStreamServer,
 ) error {
@@ -90,6 +108,7 @@ func (s *GreeterService) SayHelloStream(
 	}
 }
 
+// SayHelloClientStream replies with the processed count in the trailer.
 func (s *GreeterService) SayHelloClientStream(
 	stream helloworldpb.GreeterServiceSayHelloClientStreamServer,
 ) error {
@@ -114,6 +133,7 @@ func (s *GreeterService) SayHelloClientStream(
 	})
 }
 
+// SayHelloServerStream streams five replies and reports completion via the trailer.
 func (s *GreeterService) SayHelloServerStream(
 	req *helloworldpb.SayHelloServerStreamRequest,
 	stream helloworldpb.GreeterServiceSayHelloServerStreamServer,
