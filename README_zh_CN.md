@@ -327,15 +327,14 @@ stateDiagram-v2
 
 ## 开发约定
 
-- 强依赖使用 `DependsOn()`，不要用 `InitOrder()` 表达。
-- `Prepare()` 阶段不得执行 listen、accept、register-instance 等对外服务动作。
-- `Stop()` 必须幂等。
-- Capability 冲突必须视为错误。
-- 业务服务、handler、task、hook 进入 `BusinessBundle`，不要进入 Hub。
-- 默认 interceptor / middleware 栈使用版本化链模板。
-- reload 中涉及业务图变化时标记 `restart-required`。
+[工程规范](docs/engineering-standards.md)（英文）是本仓库的规范性规则集。简要版：
+强依赖使用 `DependsOn()` 而非 `InitOrder()`；`Prepare()` 阶段不得执行对外服务动作、
+`Stop()` 必须幂等；Capability 冲突必须视为错误；业务服务、handler、task、hook 进入
+`BusinessBundle` 而非 Hub；默认 interceptor / middleware 栈使用版本化链模板；reload
+中涉及业务图变化时标记 `restart-required`。
 
-详见 [开发者实践与扩展指南](docs/zh_CN/07-开发者实践与扩展指南.md)。
+上述规则背后的清单与反模式详见
+[开发者实践与扩展指南](docs/zh_CN/07-开发者实践与扩展指南.md)。
 
 ---
 

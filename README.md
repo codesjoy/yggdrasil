@@ -327,15 +327,16 @@ Changes that affect the business graph, module set, or non-reloadable modules ar
 
 ## Development Guidelines
 
-- Use `DependsOn()` for hard dependencies; do not encode them with `InitOrder()`.
-- Keep `Prepare()` free of external serving actions such as listen, accept, or register-instance.
-- Make `Stop()` idempotent.
-- Treat capability conflicts as errors.
-- Put business services, handlers, tasks, and hooks into `BusinessBundle`, not the Hub.
-- Use versioned chain templates for default interceptor/middleware stacks.
-- Mark business graph changes as restart-required during reload.
+[Engineering Standards](docs/engineering-standards.md) is the normative rule set
+for this repository. In short: declare hard dependencies with `DependsOn()` rather
+than `InitOrder()`; keep `Prepare()` free of serving actions and make `Stop()`
+idempotent; treat capability conflicts as errors; put business services, handlers,
+tasks, and hooks into `BusinessBundle` rather than the Hub; use versioned chain
+templates for default interceptor and middleware stacks; and mark business graph
+changes as restart-required during reload.
 
-See [Developer Practices and Extension Guide](docs/en/07-developer-practices-and-extension-guide.md).
+See [Developer Practices and Extension Guide](docs/en/07-developer-practices-and-extension-guide.md)
+for the checklists and anti-patterns behind these rules.
 
 ---
 
