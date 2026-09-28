@@ -14,7 +14,7 @@
 # Dependency directories (remove the comment below to include it)
 vendor/
 
-# Go workspace file
+# Go workspace file (local IDE convenience; not committed)
 go.work
 go.work.sum
 
@@ -40,3 +40,9 @@ Thumbs.db
 *.swp
 
 _output
+
+# go-task local state (fingerprints for `sources`)
+.task/
+
+# Changelog scratch output used by `task changelog:verify`
+.chglog/CHANGELOG.generated.md

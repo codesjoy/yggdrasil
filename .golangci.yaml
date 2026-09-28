@@ -70,3 +70,16 @@ formatters:
     - gofumpt
     - goimports
     - golines
+  # golangci-lint is the single formatting authority: `task fmt` and
+  # `task go:lint` both run through it, so they can never disagree. The
+  # settings below restate the tool defaults explicitly so a future default
+  # change cannot silently reformat the tree.
+  settings:
+    golines:
+      max-len: 100
+      tab-len: 4
+      reformat-tags: true
+      chain-split-dots: true
+  exclusions:
+    # Generated protobuf output is left untouched.
+    generated: lax

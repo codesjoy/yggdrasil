@@ -1,0 +1,65 @@
+# Copyright 2022 The codesjoy Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# git-chglog configuration. Regenerate the changelog with `task changelog`.
+#
+# Only release tags are rendered: tag_filter_pattern keeps v* and drops the
+# per-module cmd/*/v* tags, and sort: semver requires that filter because
+# semver sorting panics on non-version tag names.
+style: github
+
+# Resolved relative to this file.
+template: CHANGELOG.tpl.md
+
+info:
+  title: Changelog
+  repository_url: https://github.com/codesjoy/yggdrasil
+
+options:
+  tag_filter_pattern: '^v'
+  sort: semver
+
+  # Whitelist of Conventional Commits types that reach the changelog. The
+  # filter is an exact-match whitelist, so any type not listed here
+  # (docs/test/style/build/chore) is dropped entirely.
+  commits:
+    filters:
+      Type:
+        - feat
+        - fix
+        - perf
+        - refactor
+#        - ci
+#        - revert
+
+  commit_groups:
+    title_maps:
+      feat: Features
+      fix: Fixes
+      perf: Perf
+      refactor: Refactor
+#      ci: CI
+#      revert: Reverts
+
+  header:
+    # type(scope)!: subject — the bang is optional.
+    pattern: '^(\w*)(?:\(([\w$.\-* ]*)\))?!?:\s(.*)$'
+    pattern_maps:
+      - Type
+      - Scope
+      - Subject
+
+  notes:
+    keywords:
+      - BREAKING CHANGE

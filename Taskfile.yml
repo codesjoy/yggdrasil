@@ -1,0 +1,310 @@
+# Copyright 2022 The codesjoy Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+version: '3'
+
+set: [pipefail]
+
+vars:
+  GO: '{{default "go" .GO}}'
+  TOOL_DIR: '{{.ROOT_DIR}}/bin'
+  GOLANGCI_LINT_CONFIG: '{{.ROOT_DIR}}/.golangci.yaml'
+
+  # Pinned tool versions. golangci-lint is the single Go formatting and linting
+  # authority: gofmt, gofumpt, goimports and golines all ship inside it.
+  GOLANGCI_LINT_VERSION: v2.12.2
+  SHFMT_VERSION: v3.12.0
+  GIT_CHGLOG_VERSION: v0.15.4
+  ADDLICENSE_VERSION: v1.2.0
+  PREK_VERSION: 0.5.1
+  COPYRIGHT_HOLDER: 'The codesjoy Authors.'
+
+  COVERAGE: '{{default "80" .COVERAGE}}'
+  COVERAGE_DIR: '{{.ROOT_DIR}}/_output/coverage'
+  TEST_TIMEOUT: '{{default "10m" .TEST_TIMEOUT}}'
+  EXCLUDE_TESTS: '{{default "" .EXCLUDE_TESTS}}'
+  INCLUDE_EXAMPLES: '{{default "0" .INCLUDE_EXAMPLES}}'
+
+  # Module lists come from scripts/modules.sh, which discovers module roots
+  # from go.mod files (through git, not find/sed). MODULES_COVERAGE never
+  # includes the example modules, whatever INCLUDE_EXAMPLES says.
+  MODULES:
+    sh: 'INCLUDE_EXAMPLES="{{.INCLUDE_EXAMPLES}}" sh scripts/modules.sh'
+  MODULES_ALL:
+    sh: 'sh scripts/modules.sh --all'
+  MODULES_COVERAGE:
+    sh: 'sh scripts/modules.sh --no-examples'
+
+env:
+  GOCACHE: '{{default (printf "%s/.cache/go-build" .ROOT_DIR) .GOCACHE}}'
+  GOLANGCI_LINT_CACHE: '{{default (printf "%s/.cache/golangci-lint" .ROOT_DIR) .GOLANGCI_LINT_CACHE}}'
+
+tasks:
+  default:
+    desc: List available development tasks
+    cmds:
+      - task --list
+
+  setup:
+    desc: Install pinned tools into ./bin and the git hooks
+    cmds:
+      - task: tools:install
+      - task: tools:check
+      - task: hooks:install
+
+  # ---------------------------------------------------------------- tooling ---
+
+  tools:install:
+    desc: Install the pinned development tools into ./bin
+    cmds:
+      - 'GOBIN="{{.TOOL_DIR}}" {{.GO}} install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{.GOLANGCI_LINT_VERSION}}'
+      - 'GOBIN="{{.TOOL_DIR}}" {{.GO}} install mvdan.cc/sh/v3/cmd/shfmt@{{.SHFMT_VERSION}}'
+      - 'GOBIN="{{.TOOL_DIR}}" {{.GO}} install github.com/git-chglog/git-chglog/cmd/git-chglog@{{.GIT_CHGLOG_VERSION}}'
+      - 'GOBIN="{{.TOOL_DIR}}" {{.GO}} install github.com/google/addlicense@{{.ADDLICENSE_VERSION}}'
+      - 'test -x "{{.TOOL_DIR}}/prek{{exeExt}}" || curl -fsSL "https://github.com/j178/prek/releases/download/v{{.PREK_VERSION}}/prek-installer.sh" | PREK_UNMANAGED_INSTALL="{{.TOOL_DIR}}" PREK_NO_MODIFY_PATH=1 sh -s --'
+
+  tools:check:
+    desc: Verify the pinned development tools are installed
+    cmds:
+      - |
+        for tool in golangci-lint shfmt git-chglog addlicense prek; do
+          [ -x "{{.TOOL_DIR}}/$tool{{exeExt}}" ] || {
+            echo "missing $tool; run: task tools:install" >&2
+            exit 1
+          }
+        done
+
+  # ------------------------------------------------------- format and lint ---
+
+  fmt:
+    desc: Format every module with the golangci-lint formatters
+    deps: [tools:check]
+    cmds:
+      - for: {var: MODULES}
+        cmd: 'cd "{{.ITEM}}" && GOWORK=off "{{.TOOL_DIR}}/golangci-lint{{exeExt}}" fmt --config="{{.GOLANGCI_LINT_CONFIG}}" ./...'
+
+  fmt:check:
+    desc: Verify formatting without rewriting source
+    deps: [tools:check]
+    cmds:
+      - for: {var: MODULES}
+        cmd: |
+          diff_out=$(cd "{{.ITEM}}" && GOWORK=off "{{.TOOL_DIR}}/golangci-lint{{exeExt}}" fmt --diff --config="{{.GOLANGCI_LINT_CONFIG}}" ./...)
+          if [ -n "$diff_out" ]; then
+            echo "$diff_out"
+            echo "code is not formatted in {{.ITEM}}; run: task fmt" >&2
+            exit 1
+          fi
+
+  go:lint:
+    desc: Run golangci-lint once per module
+    deps: [tools:check]
+    cmds:
+      - for: {var: MODULES}
+        cmd: 'cd "{{.ITEM}}" && GOWORK=off "{{.TOOL_DIR}}/golangci-lint{{exeExt}}" run --config="{{.GOLANGCI_LINT_CONFIG}}"{{if .EXCLUDE_TESTS}} --exclude="{{.EXCLUDE_TESTS}}"{{end}} ./...'
+
+  go:fix:
+    desc: Apply formatting and safe lint fixes once per module
+    deps: [tools:check]
+    cmds:
+      - task: fmt
+      - for: {var: MODULES}
+        cmd: 'cd "{{.ITEM}}" && GOWORK=off "{{.TOOL_DIR}}/golangci-lint{{exeExt}}" run --config="{{.GOLANGCI_LINT_CONFIG}}" --fix ./...'
+
+  # ---------------------------------------------------------------- testing ---
+
+  test:
+    desc: Run unit tests in every module
+    cmds:
+      - for: {var: MODULES}
+        cmd: 'cd "{{.ITEM}}" && GOWORK=off "{{.GO}}" test -count=1 -timeout={{.TEST_TIMEOUT}} ./...'
+
+  test:race:
+    desc: Run race-enabled tests in every module
+    cmds:
+      - for: {var: MODULES}
+        cmd: 'cd "{{.ITEM}}" && GOWORK=off "{{.GO}}" test -count=1 -race -timeout={{.TEST_TIMEOUT}} ./...'
+
+  coverage:
+    desc: 'Coverage gate over the non-example modules (COVERAGE=<percent>)'
+    cmds:
+      - task: coverage:collect
+      - task: coverage:check
+
+  coverage:collect:
+    desc: Generate coverage profiles and HTML reports (examples excluded)
+    env:
+      GO: '{{.GO}}'
+    cmds:
+      - 'mkdir -p "{{.COVERAGE_DIR}}"'
+      - for: {var: MODULES_COVERAGE}
+        cmd: 'sh scripts/coverage.sh collect "{{.ITEM}}" "{{.COVERAGE_DIR}}" "{{base (toSlash .ITEM)}}"'
+
+  coverage:check:
+    desc: Check coverage against the COVERAGE threshold (examples excluded)
+    env:
+      GO: '{{.GO}}'
+      COVERAGE: '{{.COVERAGE}}'
+    cmds:
+      - for: {var: MODULES_COVERAGE}
+        cmd: 'sh scripts/coverage.sh check "{{.ITEM}}" "{{.COVERAGE_DIR}}" "{{base (toSlash .ITEM)}}"'
+
+  # ----------------------------------------------------------- dependencies ---
+
+  deps:tidy:
+    desc: Tidy go.mod/go.sum in every module
+    cmds:
+      - for: {var: MODULES_ALL}
+        cmd: 'cd "{{.ITEM}}" && GOWORK=off "{{.GO}}" mod tidy'
+
+  deps:tidy:check:
+    desc: Check go.mod/go.sum are tidy without modifying files
+    cmds:
+      - for: {var: MODULES_ALL}
+        cmd: |
+          diff_out=$(cd "{{.ITEM}}" && GOWORK=off "{{.GO}}" mod tidy -diff 2>&1) || {
+            echo "$diff_out"
+            exit 1
+          }
+          if [ -n "$diff_out" ]; then
+            echo "$diff_out"
+            echo "{{.ITEM}} has go.mod/go.sum drift; run: task deps:tidy" >&2
+            exit 1
+          fi
+
+  clean:
+    desc: Remove the coverage and build output directory
+    cmds:
+      - 'git clean -fdX -- "{{.ROOT_DIR}}/_output"'
+
+  # ----------------------------------------------------------- repository ---
+
+  copyright:add:
+    desc: Add Apache license headers to Go and shell sources (current year)
+    deps: [tools:check]
+    cmds:
+      - |
+        files=$(sh scripts/license-files.sh)
+        [ -z "${files}" ] || "{{.TOOL_DIR}}/addlicense{{exeExt}}" -c "{{.COPYRIGHT_HOLDER}}" ${files}
+
+  copyright:verify:
+    desc: Verify Apache license headers without rewriting files
+    deps: [tools:check]
+    cmds:
+      - |
+        files=$(sh scripts/license-files.sh)
+        [ -z "${files}" ] || "{{.TOOL_DIR}}/addlicense{{exeExt}}" -check -c "{{.COPYRIGHT_HOLDER}}" ${files}
+
+  scripts:lint:
+    desc: Check shell script formatting with shfmt
+    deps: [tools:check]
+    sources:
+      - 'scripts/*.sh'
+      - 'scripts/**/*.sh'
+    cmds:
+      - for: sources
+        cmd: '"{{.TOOL_DIR}}/shfmt{{exeExt}}" -d "{{.ITEM}}"'
+
+  proto:generate:
+    desc: Regenerate the example error-handling protobuf code (requires buf)
+    dir: examples
+    cmds:
+      - 'buf generate --path proto/error-handling/reason.proto --path proto/error-handling/service.proto'
+
+  # ---------------------------------------------------------------- hooks ----
+
+  hooks:install:
+    desc: Install the pre-commit and commit-msg git hooks with prek
+    deps: [tools:check]
+    cmds:
+      - '"{{.TOOL_DIR}}/prek{{exeExt}}" install --install-hooks'
+
+  hooks:verify:
+    desc: Verify the git hooks are installed
+    cmds:
+      - |
+        for hook in pre-commit commit-msg; do
+          [ -x ".git/hooks/$hook" ] || {
+            echo "missing .git/hooks/$hook; run: task hooks:install" >&2
+            exit 1
+          }
+        done
+
+  hooks:run:
+    desc: Run the git hooks on staged files
+    deps: [tools:check]
+    cmds:
+      - '"{{.TOOL_DIR}}/prek{{exeExt}}" run'
+
+  hooks:run-all:
+    desc: Run the git hooks on all files
+    deps: [tools:check]
+    cmds:
+      - '"{{.TOOL_DIR}}/prek{{exeExt}}" run --all-files'
+
+  hooks:clean:
+    desc: Uninstall the git hooks
+    deps: [tools:check]
+    cmds:
+      - '"{{.TOOL_DIR}}/prek{{exeExt}}" uninstall'
+
+  # ---------------------------------------------------------- changelog -----
+
+  changelog:
+    desc: Regenerate CHANGELOG.md from the version tags (v*)
+    deps: [tools:check]
+    cmds:
+      - '"{{.TOOL_DIR}}/git-chglog{{exeExt}}" -o CHANGELOG.md'
+
+  changelog:verify:
+    desc: Verify CHANGELOG.md matches the version tags
+    deps: [tools:check]
+    cmds:
+      - '"{{.TOOL_DIR}}/git-chglog{{exeExt}}" -o "{{.ROOT_DIR}}/.chglog/CHANGELOG.generated.md"'
+      - 'git diff --no-index --exit-code -- "{{.ROOT_DIR}}/.chglog/CHANGELOG.generated.md" CHANGELOG.md'
+
+  # --------------------------------------------------------------- doctor ----
+
+  doctor:
+    desc: Check the toolchain, the pinned tools and the git hooks
+    cmds:
+      - |
+        command -v "{{.GO}}" >/dev/null 2>&1 || { echo "go not found in PATH" >&2; exit 1; }
+        command -v task >/dev/null 2>&1 || { echo "task not found in PATH" >&2; exit 1; }
+        "{{.GO}}" version
+        task --version
+      - task: tools:check
+      - task: hooks:verify
+
+  # ----------------------------------------------------------- merge gates ---
+
+  check:fast:
+    desc: 'Fast gate: fmt:check + go:lint + test'
+    cmds:
+      - task: fmt:check
+      - task: go:lint
+      - task: test
+
+  check:
+    desc: 'Full gate: check:fast + coverage + deps:tidy:check'
+    cmds:
+      - task: check:fast
+      - task: coverage
+      - task: deps:tidy:check
+
+  check:strict:
+    desc: 'Strict gate: check + race tests, including the example modules'
+    cmds:
+      - 'INCLUDE_EXAMPLES=1 task check'
+      - 'INCLUDE_EXAMPLES=1 task test:race'

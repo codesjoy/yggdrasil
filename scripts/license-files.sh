@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Copyright 2022 The codesjoy Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,15 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -o errexit
-set +o nounset
-set -o pipefail
+# Prints one Go or shell source file per line: every .go/.sh file that git
+# tracks or would track and that currently exists in the working tree.
+#
+# Paths still present in the index but deleted from the working tree are
+# skipped, so addlicense never receives a path that is gone. Run from the
+# repository root.
 
-# Unset CDPATH so that path interpolation can work correctly
-unset CDPATH
+set -eu
 
-# The root of the project
-ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
-
-source "${ROOT_DIR}/scripts/lib/logger.sh"
-source "${ROOT_DIR}/scripts/lib/util.sh"
+git ls-files --cached --others --exclude-standard -- '*.go' '*.sh' | while IFS= read -r file; do
+	[ -e "${file}" ] || continue
+	printf '%s\n' "${file}"
+done
