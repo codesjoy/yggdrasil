@@ -102,7 +102,8 @@ func TestWatchMethodRenameBranch(t *testing.T) {
 
 	fw, err := fsnotify.NewWatcher()
 	require.NoError(t, err)
-	defer fw.Close()
+	// fsnotify closes Events when the watcher is closed; closing it would race
+	// with the synthetic send below, so leave the watcher open for the test.
 
 	f := &file{
 		path:   path,

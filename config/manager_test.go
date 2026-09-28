@@ -240,25 +240,25 @@ func TestManagerWatchLayerUpdatesAndIgnoresInvalidPayload(t *testing.T) {
 	section := Bind[struct {
 		Enabled bool `mapstructure:"enabled"`
 	}](manager, "app")
-	var last bool
+	var last atomic.Bool
 	cancel := section.Watch(func(next struct {
 		Enabled bool `mapstructure:"enabled"`
 	}, err error,
 	) {
 		require.NoError(t, err)
-		last = next.Enabled
+		last.Store(next.Enabled)
 	})
 	defer cancel()
-	require.False(t, last)
+	require.False(t, last.Load())
 
 	changeCh <- source.NewMapData(map[string]any{
 		"app": map[string]any{"enabled": true},
 	})
-	waitFor(t, func() bool { return last })
+	waitFor(t, last.Load)
 
 	changeCh <- source.NewBytesData([]byte(`not-json`), json.Unmarshal)
 	time.Sleep(50 * time.Millisecond)
-	require.True(t, last)
+	require.True(t, last.Load())
 }
 
 func TestManagerCloseIsIdempotentAndJoinsErrors(t *testing.T) {
