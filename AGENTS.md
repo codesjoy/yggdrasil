@@ -126,7 +126,11 @@ engineering standard §9. In short:
 
 - Conventional Commits, enforced by gitlint: `feat(scope): subject`. The subject
   is lowercase, at least eight characters, and does not end with a period. The
-  title is at most 72 characters.
+  title is at most 72 characters, and body lines are at most 100 characters.
+- A small commit may omit the body. A body is required when a commit changes at
+  least 8 files, adds and deletes at least 200 lines in total, or contains
+  multiple behavior changes. A required body contains 1 to 4 concise bullet
+  points.
 - Branch names are `main`, `master`, `develop`, or
   `(feature|release|hotfix)/<name>`.
 - A breaking change carries `!` and a `BREAKING CHANGE:` footer, and must be

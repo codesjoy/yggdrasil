@@ -667,6 +667,10 @@ A commit title **MUST** match:
   the type prefix, and **MUST NOT** end with a period.
 - The title **MUST NOT** exceed 72 characters, and body lines **MUST NOT** exceed
   100 characters.
+- A small commit **MAY** omit the body. A body **MUST** be present when a
+  commit changes at least 8 files, adds and deletes at least 200 lines in total,
+  or contains multiple behavior changes. A required body **MUST** contain 1 to 4
+  concise bullet points.
 - A breaking change **MUST** carry `!` after the scope and a `BREAKING CHANGE:`
   footer in the body.
 
@@ -694,6 +698,7 @@ A review **MUST** answer these questions:
 - Were generated files regenerated rather than hand-edited?
 - Are the numbered documents updated on both sides?
 - Which verification commands were run, and did `task check` pass?
+- Does the commit message include the body required by §9.2?
 
 ## 10. AI Coding Checklist
 
