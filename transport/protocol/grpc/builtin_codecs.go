@@ -15,14 +15,22 @@
 package grpc
 
 import (
+	"sync"
+
 	_ "github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc/encoding/gzip"
 	"github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc/encoding/jsonraw"
 	_ "github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc/encoding/proto"
 	"github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc/encoding/raw"
 )
 
+// builtinCodecsOnce serialises registration into grpc's global codec registry,
+// which is not safe for concurrent writes; a reload can race with startup.
+var builtinCodecsOnce sync.Once
+
 // ConfigureBuiltinCodecs registers framework-owned grpc codecs.
 func ConfigureBuiltinCodecs() {
-	raw.RegisterCodec()
-	jsonraw.RegisterCodec()
+	builtinCodecsOnce.Do(func() {
+		raw.RegisterCodec()
+		jsonraw.RegisterCodec()
+	})
 }
