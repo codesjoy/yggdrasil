@@ -24,17 +24,14 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/codesjoy/yggdrasil/v3/admin/governor"
 	internallifecycle "github.com/codesjoy/yggdrasil/v3/app/internal/lifecycle"
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/config"
-	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	internalidentity "github.com/codesjoy/yggdrasil/v3/internal/identity"
 	"github.com/codesjoy/yggdrasil/v3/module"
 	"github.com/codesjoy/yggdrasil/v3/transport/runtime/client"
-	"github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
 
 type lifecycleState uint32
@@ -59,54 +56,8 @@ const (
 	lifecycleStateStopped
 )
 
-func withLifecycleBeforeStartHooks(hooks ...func(context.Context) error) lifecycleOption {
-	return internallifecycle.WithBeforeStartHooks(hooks...)
-}
-
-func withLifecycleBeforeStopHooks(hooks ...func(context.Context) error) lifecycleOption {
-	return internallifecycle.WithBeforeStopHooks(hooks...)
-}
-
-func withLifecycleAfterStopHooks(hooks ...func(context.Context) error) lifecycleOption {
-	return internallifecycle.WithAfterStopHooks(hooks...)
-}
-
-func withLifecycleCleanup(name string, fn func(context.Context) error) lifecycleOption {
-	return internallifecycle.WithCleanup(name, fn)
-}
-
 func newLifecycleRunner(opts ...lifecycleOption) (*lifecycleRunner, error) {
 	return internallifecycle.New(opts...)
-}
-
-func withLifecycleInternalServers(servers ...InternalServer) lifecycleOption {
-	converted := make([]internallifecycle.InternalServer, 0, len(servers))
-	converted = append(converted, servers...)
-	return internallifecycle.WithInternalServers(converted...)
-}
-
-func withLifecycleRegistry(reg registry.Registry) lifecycleOption {
-	return internallifecycle.WithRegistry(reg)
-}
-
-func withLifecycleLogger(logger *slog.Logger) lifecycleOption {
-	return internallifecycle.WithLogger(logger)
-}
-
-func withLifecycleIdentity(identity internalidentity.Identity) lifecycleOption {
-	return internallifecycle.WithIdentity(identity)
-}
-
-func withLifecycleShutdownTimeout(timeout time.Duration) lifecycleOption {
-	return internallifecycle.WithShutdownTimeout(timeout)
-}
-
-func withLifecycleServer(srv server.Server) lifecycleOption {
-	return internallifecycle.WithServer(srv)
-}
-
-func withLifecycleGovernor(srv *governor.Server) lifecycleOption {
-	return internallifecycle.WithGovernor(srv)
 }
 
 var (
@@ -216,15 +167,15 @@ func New(appName string, ops ...Option) (*App, error) {
 
 func (a *App) buildLifecycleOptions() []lifecycleOption {
 	out := a.opts.buildLifecycleOptions()
-	out = append(out, withLifecycleBeforeStopHooks(a.beginStop))
+	out = append(out, internallifecycle.WithBeforeStopHooks(a.beginStop))
 	if a.identityResolved {
-		out = append(out, withLifecycleIdentity(a.identity))
+		out = append(out, internallifecycle.WithIdentity(a.identity))
 	}
 	out = append(
 		out,
-		withLifecycleLogger(a.runtimeLogger()),
-		withLifecycleCleanup("runtime_adapters", a.shutdownRuntimeAdapters),
-		withLifecycleCleanup("config_watch", func(context.Context) error {
+		internallifecycle.WithLogger(a.runtimeLogger()),
+		internallifecycle.WithCleanup("runtime_adapters", a.shutdownRuntimeAdapters),
+		internallifecycle.WithCleanup("config_watch", func(context.Context) error {
 			a.stopConfigWatch()
 			return nil
 		}),
@@ -330,14 +281,6 @@ func (a *App) stopResources(ctx context.Context) error {
 	})
 	<-a.stopDone
 	return a.stopErr
-}
-
-func (a *App) reloadAsync() {
-	go func() {
-		if err := a.Reload(context.Background()); err != nil {
-			a.runtimeLogger().Error("auto reload failed", slog.Any("error", err))
-		}
-	}()
 }
 
 // Start initializes and runs the application.
@@ -482,18 +425,29 @@ func (a *App) initializeLocked(ctx context.Context) (err error) {
 			err = errors.Join(err, wrapped)
 		}
 	}()
-	if err = initConfigChainWithLogger(a.opts, a.runtimeLogger()); err != nil {
-		err = wrapAssemblyStageError("prepare", err)
+	if err = a.preparePlanLocked(ctx); err != nil {
 		return err
 	}
-	if err = a.resolveIdentityLocked(); err != nil {
-		err = wrapAssemblyStageError("prepare", err)
+	if err = a.prepareServicesLocked(); err != nil {
 		return err
 	}
-	planResult, planErr := a.buildAssemblyResult(ctx)
-	if planErr != nil {
-		err = wrapAssemblyStageError("prepare", planErr)
+	if err = a.finishInitializationLocked(); err != nil {
 		return err
+	}
+	cleanupNeeded = false
+	return nil
+}
+
+func (a *App) preparePlanLocked(ctx context.Context) error {
+	if err := initConfigChainWithLogger(a.opts, a.runtimeLogger()); err != nil {
+		return wrapAssemblyStageError("prepare", err)
+	}
+	if err := a.resolveIdentityLocked(); err != nil {
+		return wrapAssemblyStageError("prepare", err)
+	}
+	planResult, err := a.buildAssemblyResult(ctx)
+	if err != nil {
+		return wrapAssemblyStageError("prepare", err)
 	}
 	a.lastPlanResult = planResult
 	a.planMu.Lock()
@@ -505,34 +459,36 @@ func (a *App) initializeLocked(ctx context.Context) (err error) {
 	a.assemblySpec = planResult.Spec
 	a.state = lifecycleStatePlanned
 	if err = a.initHub(ctx); err != nil {
-		err = wrapAssemblyStageError("prepare", err)
-		return err
+		return wrapAssemblyStageError("prepare", err)
 	}
 	a.state = lifecycleStateInfraInitialized
-	if err = validateStartupWithLogger(a.opts, a.runtimeLogger()); err != nil {
-		err = wrapAssemblyStageError("prepare", err)
-		return err
+	return nil
+}
+
+func (a *App) prepareServicesLocked() error {
+	if err := validateStartupWithLogger(a.opts, a.runtimeLogger()); err != nil {
+		return wrapAssemblyStageError("prepare", err)
 	}
-	if err = a.applyRuntimeAdapters(a.currentRuntimeSnapshot()); err != nil {
-		err = wrapAssemblyStageError("prepare", err)
-		return err
+	if err := a.applyRuntimeAdapters(a.currentRuntimeSnapshot()); err != nil {
+		return wrapAssemblyStageError("prepare", err)
 	}
-	if err = initGovernor(a.opts); err != nil {
-		err = wrapAssemblyStageError("prepare", err)
-		return err
+	if err := initGovernor(a.opts); err != nil {
+		return wrapAssemblyStageError("prepare", err)
 	}
-	if err = a.initRegistry(); err != nil {
-		err = wrapAssemblyStageError("prepare", err)
-		return err
+	if err := a.initRegistry(); err != nil {
+		return wrapAssemblyStageError("prepare", err)
 	}
-	if err = a.initServer(); err != nil {
-		err = wrapAssemblyStageError("prepare", err)
-		return err
+	if err := a.initServer(); err != nil {
+		return wrapAssemblyStageError("prepare", err)
 	}
+	return nil
+}
+
+func (a *App) finishInitializationLocked() error {
 	a.runtime = newRuntimeSurface(a)
 	a.runtimeAssembly = &preparedAssembly{
 		Spec:    a.assemblySpec,
-		Modules: append([]module.Module(nil), planResult.Modules...),
+		Modules: append([]module.Module(nil), a.lastPlanResult.Modules...),
 		Runtime: a.runtime,
 		Server:  a.opts.server,
 		CloseFunc: func(ctx context.Context) error {
@@ -540,12 +496,10 @@ func (a *App) initializeLocked(ctx context.Context) (err error) {
 		},
 	}
 	a.installDiagnosticsRoutes()
-	if err = a.installLifecycleOptions(); err != nil {
-		err = wrapAssemblyStageError("prepare", err)
-		return err
+	if err := a.installLifecycleOptions(); err != nil {
+		return wrapAssemblyStageError("prepare", err)
 	}
 	a.state = lifecycleStateInitialized
-	cleanupNeeded = false
 	return nil
 }
 
@@ -705,10 +659,10 @@ func (a *App) initHub(ctx context.Context) error {
 	}
 	a.opts.lifecycleOptions = append(
 		a.opts.lifecycleOptions,
-		withLifecycleBeforeStartHooks(func(ctx context.Context) error {
+		internallifecycle.WithBeforeStartHooks(func(ctx context.Context) error {
 			return a.hub.Start(ctx)
 		}),
-		withLifecycleCleanup("module_hub", func(ctx context.Context) error {
+		internallifecycle.WithCleanup("module_hub", func(ctx context.Context) error {
 			return a.hub.Stop(ctx)
 		}),
 	)

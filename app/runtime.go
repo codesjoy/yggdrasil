@@ -21,12 +21,14 @@ import (
 	"io"
 	"log/slog"
 
+	internallifecycle "github.com/codesjoy/yggdrasil/v3/app/internal/lifecycle"
 	internalruntime "github.com/codesjoy/yggdrasil/v3/app/internal/runtime"
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 	"github.com/codesjoy/yggdrasil/v3/internal/remotelog"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
+	"github.com/codesjoy/yggdrasil/v3/module"
 	"github.com/codesjoy/yggdrasil/v3/observability/logger"
 	xotel "github.com/codesjoy/yggdrasil/v3/observability/otel"
 	"github.com/codesjoy/yggdrasil/v3/observability/stats"
@@ -113,25 +115,20 @@ func (a *App) commitFoundationSnapshotTransaction(snapshot *Snapshot) *Snapshot 
 	return previous
 }
 
-func (a *App) rollbackFoundationSnapshot(snapshot *Snapshot) {
-	_ = a.rollbackFoundationSnapshotTransaction(snapshot, nil, false)
-}
-
 func (a *App) rollbackFoundationSnapshotTransaction(
 	snapshot *Snapshot,
 	previous *Snapshot,
 	committed bool,
-) bool {
+) {
 	a.runtimeMu.Lock()
 	defer a.runtimeMu.Unlock()
 	if a.preparedFoundationSnapshot == snapshot {
 		a.preparedFoundationSnapshot = nil
 	}
 	if !committed || a.foundationSnapshot != snapshot {
-		return false
+		return
 	}
 	a.foundationSnapshot = previous
-	return true
 }
 
 func (a *App) foundationSnapshotForRuntime() *Snapshot {
@@ -190,12 +187,26 @@ func (a *App) prepareRuntimeAdapters(snapshot *Snapshot) (*preparedRuntimeAdapte
 	if snapshot == nil {
 		return nil, errors.New("runtime snapshot is nil")
 	}
+	if err := a.configureSnapshotLogging(snapshot); err != nil {
+		return nil, err
+	}
+	prepared := &preparedRuntimeAdapters{snapshot: snapshot}
+	configureSnapshotProviders(snapshot, prepared, a.identity.AppName)
+	bindSnapshotStats(snapshot)
+	if a.opts != nil && a.opts.processDefaults {
+		a.runtimeMu.RLock()
+		prepared.lease = a.processDefaultsLease
+		a.runtimeMu.RUnlock()
+	}
+	return prepared, nil
+}
 
+func (a *App) configureSnapshotLogging(snapshot *Snapshot) error {
 	snapshot.Identity = publicIdentity(a.identity)
 	if snapshot.Logger == nil {
 		handler, err := snapshot.BuildDefaultLoggerHandler()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		snapshot.Logger = slog.New(handler)
 	}
@@ -206,26 +217,34 @@ func (a *App) prepareRuntimeAdapters(snapshot *Snapshot) (*preparedRuntimeAdapte
 	}
 	var remoteLoggerLv slog.Level
 	if err := remoteLoggerLv.UnmarshalText([]byte(remoteLoggerLvStr)); err != nil {
-		return nil, err
+		return err
 	}
 	snapshot.RemoteLogger = remotelog.New(remoteLoggerLv, handler)
 	snapshot.TextMapPropagator = xotel.DefaultPropagator()
+	return nil
+}
 
-	prepared := &preparedRuntimeAdapters{snapshot: snapshot}
-	if tp, ok := snapshot.BuildTracerProvider(a.identity.AppName); ok {
+func configureSnapshotProviders(
+	snapshot *Snapshot,
+	prepared *preparedRuntimeAdapters,
+	instanceName string,
+) {
+	if tp, ok := snapshot.BuildTracerProvider(instanceName); ok {
 		snapshot.TracerProvider = tp
 		prepared.tracerShutdown = runtimeShutdown(tp)
 	} else {
 		snapshot.TracerProvider = tracenoop.NewTracerProvider()
 	}
 
-	if mp, ok := snapshot.BuildMeterProvider(a.identity.AppName); ok {
+	if mp, ok := snapshot.BuildMeterProvider(instanceName); ok {
 		snapshot.MeterProvider = mp
 		prepared.meterShutdown = runtimeShutdown(mp)
 	} else {
 		snapshot.MeterProvider = metricnoop.NewMeterProvider()
 	}
+}
 
+func bindSnapshotStats(snapshot *Snapshot) {
 	statsBuilders := internalruntime.BindStatsHandlerBuildersWithRuntime(
 		snapshot.Resolved,
 		snapshot.StatsHandlerBuilders,
@@ -244,12 +263,6 @@ func (a *App) prepareRuntimeAdapters(snapshot *Snapshot) (*preparedRuntimeAdapte
 		statsBuilders,
 		false,
 	)
-	if a.opts != nil && a.opts.processDefaults {
-		a.runtimeMu.RLock()
-		prepared.lease = a.processDefaultsLease
-		a.runtimeMu.RUnlock()
-	}
-	return prepared, nil
 }
 
 func (a *App) activateRuntimeAdapters(prepared *preparedRuntimeAdapters) error {
@@ -359,22 +372,6 @@ func shutdownPreparedAdapters(
 	return err
 }
 
-func (a *App) swapTracerShutdown(next func(context.Context) error) func(context.Context) error {
-	a.runtimeMu.Lock()
-	defer a.runtimeMu.Unlock()
-	prev := a.tracerShutdown
-	a.tracerShutdown = next
-	return prev
-}
-
-func (a *App) swapMeterShutdown(next func(context.Context) error) func(context.Context) error {
-	a.runtimeMu.Lock()
-	defer a.runtimeMu.Unlock()
-	prev := a.meterShutdown
-	a.meterShutdown = next
-	return prev
-}
-
 func (a *App) shutdownRuntimeAdapters(ctx context.Context) error {
 	a.runtimeMu.Lock()
 	pending := a.pendingRuntimeAdapters
@@ -392,7 +389,7 @@ func (a *App) shutdownRuntimeAdapters(ctx context.Context) error {
 		err = errors.Join(err, a.rollbackRuntimeAdapters(pending))
 	}
 	if lease != nil {
-		err = errors.Join(err, lease.release(ctx))
+		lease.release()
 	}
 	if tracerShutdown != nil {
 		err = errors.Join(err, tracerShutdown(ctx))
@@ -429,7 +426,7 @@ func (a *App) initRegistry() error {
 	if c, ok := r.(io.Closer); ok {
 		a.opts.lifecycleOptions = append(
 			a.opts.lifecycleOptions,
-			withLifecycleCleanup("registry", func(context.Context) error {
+			internallifecycle.WithCleanup("registry", func(context.Context) error {
 				return c.Close()
 			}),
 		)
@@ -466,7 +463,59 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 	planResult := a.runtimePlan()
 	resolved := effectiveResolved(planResult, a.opts.resolvedSettings)
 	bindings := selectedCapabilityBindings(planResult, a.opts.resolvedSettings)
+	capabilities, err := a.resolveFoundationCapabilities(resolved, bindings)
+	if err != nil {
+		return nil, err
+	}
+	return newFoundationSnapshot(resolved, capabilities), nil
+}
 
+type foundationRuntimeCapabilities struct {
+	writerBuilders    map[string]logger.WriterBuilder
+	handlerBuilders   map[string]logger.HandlerBuilder
+	tracerBuilders    map[string]xotel.TracerProviderBuilder
+	meterBuilders     map[string]xotel.MeterProviderBuilder
+	statsBuilders     map[string]stats.HandlerBuilder
+	security          map[string]security.Provider
+	marshalerBuilders map[string]marshaler.MarshalerBuilder
+}
+
+func (a *App) resolveFoundationCapabilities(
+	resolved settings.Resolved,
+	bindings map[string][]string,
+) (foundationRuntimeCapabilities, error) {
+	logging, err := a.resolveFoundationLogging(resolved, bindings)
+	if err != nil {
+		return foundationRuntimeCapabilities{}, err
+	}
+	telemetry, err := a.resolveFoundationTelemetry(resolved, bindings)
+	if err != nil {
+		return foundationRuntimeCapabilities{}, err
+	}
+	connectivity, err := a.resolveFoundationConnectivity(bindings)
+	if err != nil {
+		return foundationRuntimeCapabilities{}, err
+	}
+	return foundationRuntimeCapabilities{
+		writerBuilders:    logging.writerBuilders,
+		handlerBuilders:   logging.handlerBuilders,
+		tracerBuilders:    telemetry.tracerBuilders,
+		meterBuilders:     telemetry.meterBuilders,
+		statsBuilders:     telemetry.statsBuilders,
+		security:          connectivity.security,
+		marshalerBuilders: connectivity.marshalerBuilders,
+	}, nil
+}
+
+type foundationLoggingCapabilities struct {
+	writerBuilders  map[string]logger.WriterBuilder
+	handlerBuilders map[string]logger.HandlerBuilder
+}
+
+func (a *App) resolveFoundationLogging(
+	resolved settings.Resolved,
+	bindings map[string][]string,
+) (foundationLoggingCapabilities, error) {
 	writerBuilders, err := internalruntime.ResolveNamedRuntimeCapabilities[logger.WriterBuilder](
 		a.hub,
 		bindings,
@@ -474,10 +523,9 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 		loggerWriterCapabilitySpec,
 	)
 	if err != nil {
-		return nil, err
+		return foundationLoggingCapabilities{}, err
 	}
 	writerBuilders = internalruntime.BindLoggerWriterBuilders(resolved, writerBuilders)
-
 	handlerBuilders, err := internalruntime.ResolveNamedRuntimeCapabilities[logger.HandlerBuilder](
 		a.hub,
 		bindings,
@@ -485,14 +533,28 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 		loggerHandlerCapabilitySpec,
 	)
 	if err != nil {
-		return nil, err
+		return foundationLoggingCapabilities{}, err
 	}
-	handlerBuilders = internalruntime.BindLoggerHandlerBuilders(
-		resolved,
-		handlerBuilders,
-		writerBuilders,
-	)
+	return foundationLoggingCapabilities{
+		writerBuilders: writerBuilders,
+		handlerBuilders: internalruntime.BindLoggerHandlerBuilders(
+			resolved,
+			handlerBuilders,
+			writerBuilders,
+		),
+	}, nil
+}
 
+type foundationTelemetryCapabilities struct {
+	tracerBuilders map[string]xotel.TracerProviderBuilder
+	meterBuilders  map[string]xotel.MeterProviderBuilder
+	statsBuilders  map[string]stats.HandlerBuilder
+}
+
+func (a *App) resolveFoundationTelemetry(
+	resolved settings.Resolved,
+	bindings map[string][]string,
+) (foundationTelemetryCapabilities, error) {
 	tracerBuilders, err := internalruntime.ResolveNamedRuntimeCapabilities[xotel.TracerProviderBuilder](
 		a.hub,
 		bindings,
@@ -500,7 +562,7 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 		tracerProviderCapabilitySpec,
 	)
 	if err != nil {
-		return nil, err
+		return foundationTelemetryCapabilities{}, err
 	}
 	meterBuilders, err := internalruntime.ResolveNamedRuntimeCapabilities[xotel.MeterProviderBuilder](
 		a.hub,
@@ -509,7 +571,7 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 		meterProviderCapabilitySpec,
 	)
 	if err != nil {
-		return nil, err
+		return foundationTelemetryCapabilities{}, err
 	}
 	statsBuilders, err := internalruntime.ResolveNamedRuntimeCapabilities[stats.HandlerBuilder](
 		a.hub,
@@ -518,10 +580,23 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 		statsHandlerCapabilitySpec,
 	)
 	if err != nil {
-		return nil, err
+		return foundationTelemetryCapabilities{}, err
 	}
-	statsBuilders = internalruntime.BindStatsHandlerBuilders(resolved, statsBuilders)
+	return foundationTelemetryCapabilities{
+		tracerBuilders: tracerBuilders,
+		meterBuilders:  meterBuilders,
+		statsBuilders:  internalruntime.BindStatsHandlerBuilders(resolved, statsBuilders),
+	}, nil
+}
 
+type foundationConnectivityCapabilities struct {
+	security          map[string]security.Provider
+	marshalerBuilders map[string]marshaler.MarshalerBuilder
+}
+
+func (a *App) resolveFoundationConnectivity(
+	bindings map[string][]string,
+) (foundationConnectivityCapabilities, error) {
 	securityProviders, err := internalruntime.ResolveNamedRuntimeCapabilities[security.Provider](
 		a.hub,
 		bindings,
@@ -529,9 +604,8 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 		securityProfileCapabilitySpec,
 	)
 	if err != nil {
-		return nil, err
+		return foundationConnectivityCapabilities{}, err
 	}
-
 	marshalerBuilders, err := internalruntime.ResolveNamedRuntimeCapabilities[marshaler.MarshalerBuilder](
 		a.hub,
 		bindings,
@@ -539,29 +613,38 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 		marshalerCapabilitySpec,
 	)
 	if err != nil {
-		return nil, err
+		return foundationConnectivityCapabilities{}, err
 	}
+	return foundationConnectivityCapabilities{
+		security:          securityProviders,
+		marshalerBuilders: marshalerBuilders,
+	}, nil
+}
 
+func newFoundationSnapshot(
+	resolved settings.Resolved,
+	capabilities foundationRuntimeCapabilities,
+) *Snapshot {
 	return &Snapshot{
 		Resolved:               resolved,
-		LoggerHandlerBuilders:  handlerBuilders,
-		LoggerWriterBuilders:   writerBuilders,
-		TracerProviderBuilders: tracerBuilders,
-		MeterProviderBuilders:  meterBuilders,
-		StatsHandlerBuilders:   statsBuilders,
+		LoggerHandlerBuilders:  capabilities.handlerBuilders,
+		LoggerWriterBuilders:   capabilities.writerBuilders,
+		TracerProviderBuilders: capabilities.tracerBuilders,
+		MeterProviderBuilders:  capabilities.meterBuilders,
+		StatsHandlerBuilders:   capabilities.statsBuilders,
 		ServerStats: stats.BuildHandlerChainWithBuilders(
 			resolved.Telemetry.Stats,
-			statsBuilders,
+			capabilities.statsBuilders,
 			true,
 		),
 		ClientStats: stats.BuildHandlerChainWithBuilders(
 			resolved.Telemetry.Stats,
-			statsBuilders,
+			capabilities.statsBuilders,
 			false,
 		),
-		SecurityProviders:                securityProviders,
+		SecurityProviders:                capabilities.security,
 		SecurityProfiles:                 map[string]security.Profile{},
-		MarshalerBuilderMap:              marshalerBuilders,
+		MarshalerBuilderMap:              capabilities.marshalerBuilders,
 		TransportServerProviders:         map[string]remote.TransportServerProvider{},
 		TransportClientProviders:         map[string]remote.TransportClientProvider{},
 		UnaryServerInterceptorProviders:  map[string]interceptor.UnaryServerInterceptorProvider{},
@@ -572,16 +655,35 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 		RegistryProviders:                map[string]registry.Provider{},
 		ResolverProviders:                map[string]resolver.Provider{},
 		BalancerProviders:                map[string]balancer.Provider{},
-	}, nil
+	}
 }
 
 func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
+	next, resolved, bindings, err := a.newRuntimeSnapshot()
+	if err != nil {
+		return nil, false, err
+	}
+	if err = a.configureRuntimeCapabilities(next, resolved, bindings); err != nil {
+		return nil, false, err
+	}
+	current := a.currentRuntimeSnapshot()
+	return next, runtimeRequiresRestart(current, next), nil
+}
+
+func (a *App) newRuntimeSnapshot() (
+	*Snapshot,
+	settings.Resolved,
+	map[string][]string,
+	error,
+) {
 	if a == nil || a.opts == nil {
-		return nil, false, fmt.Errorf("runtime app is not initialized")
+		return nil, settings.Resolved{}, nil, fmt.Errorf("runtime app is not initialized")
 	}
 	base := a.foundationSnapshotForRuntime()
 	if base == nil {
-		return nil, false, fmt.Errorf("foundation runtime snapshot is not available")
+		return nil, settings.Resolved{}, nil, fmt.Errorf(
+			"foundation runtime snapshot is not available",
+		)
 	}
 	planResult := a.runtimePlan()
 	resolved := effectiveResolved(planResult, a.opts.resolvedSettings)
@@ -592,16 +694,139 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	if next.Logger == nil {
 		handler, err := next.BuildDefaultLoggerHandler()
 		if err != nil {
-			return nil, false, err
+			return nil, settings.Resolved{}, nil, err
 		}
 		next.Logger = slog.New(handler)
 	}
 	profiles, err := internalruntime.CompileSecurityProfiles(resolved, next.SecurityProviders)
 	if err != nil {
-		return nil, false, err
+		return nil, settings.Resolved{}, nil, err
 	}
 	next.SecurityProfiles = profiles
+	return next, resolved, bindings, nil
+}
 
+func (a *App) configureRuntimeCapabilities(
+	next *Snapshot,
+	resolved settings.Resolved,
+	bindings map[string][]string,
+) error {
+	if err := a.configureTransportProviders(next, resolved, bindings); err != nil {
+		return err
+	}
+	builtins, err := loadBuiltinInterceptors(next.Logger, resolved)
+	if err != nil {
+		return err
+	}
+	if err = a.configureInterceptors(next, bindings, builtins); err != nil {
+		return err
+	}
+	if err = a.configureRESTProviders(next, bindings); err != nil {
+		return err
+	}
+	if err = a.configureRegistryProviders(next, bindings); err != nil {
+		return err
+	}
+	if err = a.configureResolverProviders(next, bindings); err != nil {
+		return err
+	}
+	return a.configureBalancerProviders(next, bindings)
+}
+
+func (a *App) configureRESTProviders(next *Snapshot, bindings map[string][]string) error {
+	restProviders, err := internalruntime.ResolveOrderedRuntimeCapabilities[rest.Provider](
+		a.hub,
+		bindings,
+		"transport.rest.middleware",
+		restMiddlewareCapabilitySpec,
+	)
+	if err != nil {
+		return err
+	}
+	for name, provider := range restProviders {
+		switch name {
+		case "logger":
+			next.RESTMiddlewareProviderMap[name] = rest.BuiltinLoggingProviderWithLogger(
+				next.Logger,
+			)
+		case "marshaler":
+			next.RESTMiddlewareProviderMap[name] = newRuntimeMarshalerProvider(next)
+		default:
+			next.RESTMiddlewareProviderMap[name] = provider
+		}
+	}
+	return nil
+}
+
+func (a *App) configureRegistryProviders(
+	next *Snapshot,
+	bindings map[string][]string,
+) error {
+	registryProviders, err := internalruntime.ResolveNamedRuntimeCapabilities[registry.Provider](
+		a.hub,
+		bindings,
+		"discovery.registry.provider",
+		registryProviderCapabilitySpec,
+	)
+	if err != nil {
+		return err
+	}
+	internalruntime.CopyIntoMap(next.RegistryProviders, registryProviders)
+	if _, ok := next.RegistryProviders["multi_registry"]; ok {
+		next.RegistryProviders["multi_registry"] = registry.BuiltinProviderWithFactory(
+			func(typeName string, cfg map[string]any) (registry.Registry, error) {
+				return next.NewRegistryByType(typeName, cfg)
+			},
+		)
+	}
+	return nil
+}
+
+func (a *App) configureResolverProviders(
+	next *Snapshot,
+	bindings map[string][]string,
+) error {
+	resolverProviders, err := internalruntime.ResolveNamedRuntimeCapabilities[resolver.Provider](
+		a.hub,
+		bindings,
+		"discovery.resolver.provider",
+		resolverProviderCapabilitySpec,
+	)
+	if err != nil {
+		return err
+	}
+	internalruntime.CopyIntoMap(next.ResolverProviders, resolverProviders)
+	return nil
+}
+
+func (a *App) configureBalancerProviders(
+	next *Snapshot,
+	bindings map[string][]string,
+) error {
+	balancerProviders, err := internalruntime.ResolveNamedRuntimeCapabilities[balancer.Provider](
+		a.hub,
+		bindings,
+		"transport.balancer.provider",
+		balancerProviderCapabilitySpec,
+	)
+	if err != nil {
+		return err
+	}
+	internalruntime.CopyPreferredIntoMap(
+		next.BalancerProviders,
+		balancerProviders,
+		map[string]balancer.Provider{
+			"round_robin": balancer.BuiltinProvider(),
+		},
+	)
+	return nil
+}
+
+func (a *App) configureTransportProviders(
+	next *Snapshot,
+	resolved settings.Resolved,
+	bindings map[string][]string,
+) error {
 	serverProviders, err := internalruntime.ResolveNamedRuntimeCapabilities[remote.TransportServerProvider](
 		a.hub,
 		bindings,
@@ -609,7 +834,7 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 		transportServerProviderCapabilitySpec,
 	)
 	if err != nil {
-		return nil, false, err
+		return err
 	}
 	for name, provider := range serverProviders {
 		switch name {
@@ -638,7 +863,7 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 		transportClientProviderCapabilitySpec,
 	)
 	if err != nil {
-		return nil, false, err
+		return err
 	}
 	for name, provider := range clientProviders {
 		switch name {
@@ -657,171 +882,124 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 			next.TransportClientProviders[name] = provider
 		}
 	}
+	return nil
+}
 
+type builtinInterceptorProviders struct {
+	unaryServer  map[string]interceptor.UnaryServerInterceptorProvider
+	streamServer map[string]interceptor.StreamServerInterceptorProvider
+	unaryClient  map[string]interceptor.UnaryClientInterceptorProvider
+	streamClient map[string]interceptor.StreamClientInterceptorProvider
+}
+
+func loadBuiltinInterceptors(
+	logger *slog.Logger,
+	resolved settings.Resolved,
+) (builtinInterceptorProviders, error) {
 	loggingCfg := internalruntime.LoggingInterceptorSource(resolved)
 	unaryServerProvidersBuiltin, err := intlogging.BuiltinUnaryServerProvidersWithConfigE(
 		loggingCfg,
-		intlogging.WithProviderLogger(next.Logger),
+		intlogging.WithProviderLogger(logger),
 	)
 	if err != nil {
-		return nil, false, err
+		return builtinInterceptorProviders{}, err
 	}
-	unaryServerBuiltins := internalruntime.MapUnaryServerProviders(unaryServerProvidersBuiltin)
 	streamServerProvidersBuiltin, err := intlogging.BuiltinStreamServerProvidersWithConfigE(
 		loggingCfg,
-		intlogging.WithProviderLogger(next.Logger),
+		intlogging.WithProviderLogger(logger),
 	)
 	if err != nil {
-		return nil, false, err
+		return builtinInterceptorProviders{}, err
 	}
-	streamServerBuiltins := internalruntime.MapStreamServerProviders(streamServerProvidersBuiltin)
 	unaryClientProvidersBuiltin, err := intlogging.BuiltinUnaryClientProvidersWithConfigE(
 		loggingCfg,
-		intlogging.WithProviderLogger(next.Logger),
+		intlogging.WithProviderLogger(logger),
 	)
 	if err != nil {
-		return nil, false, err
+		return builtinInterceptorProviders{}, err
 	}
-	unaryClientBuiltins := internalruntime.MapUnaryClientProviders(unaryClientProvidersBuiltin)
 	streamClientProvidersBuiltin, err := intlogging.BuiltinStreamClientProvidersWithConfigE(
 		loggingCfg,
-		intlogging.WithProviderLogger(next.Logger),
+		intlogging.WithProviderLogger(logger),
 	)
 	if err != nil {
-		return nil, false, err
+		return builtinInterceptorProviders{}, err
 	}
-	streamClientBuiltins := internalruntime.MapStreamClientProviders(streamClientProvidersBuiltin)
+	return builtinInterceptorProviders{
+		unaryServer:  internalruntime.MapUnaryServerProviders(unaryServerProvidersBuiltin),
+		streamServer: internalruntime.MapStreamServerProviders(streamServerProvidersBuiltin),
+		unaryClient:  internalruntime.MapUnaryClientProviders(unaryClientProvidersBuiltin),
+		streamClient: internalruntime.MapStreamClientProviders(streamClientProvidersBuiltin),
+	}, nil
+}
 
-	unaryServerProviders, err := internalruntime.ResolveOrderedRuntimeCapabilities[interceptor.UnaryServerInterceptorProvider](
+func (a *App) configureInterceptors(
+	next *Snapshot,
+	bindings map[string][]string,
+	builtins builtinInterceptorProviders,
+) error {
+	if err := copyOrderedRuntimeCapabilities(
 		a.hub,
+		next.UnaryServerInterceptorProviders,
 		bindings,
 		"rpc.interceptor.unary_server",
 		unaryServerInterceptorCapabilitySpec,
-	)
-	if err != nil {
-		return nil, false, err
+		builtins.unaryServer,
+	); err != nil {
+		return err
 	}
-	internalruntime.CopyPreferredIntoMap(
-		next.UnaryServerInterceptorProviders,
-		unaryServerProviders,
-		unaryServerBuiltins,
-	)
-
-	streamServerProviders, err := internalruntime.ResolveOrderedRuntimeCapabilities[interceptor.StreamServerInterceptorProvider](
+	if err := copyOrderedRuntimeCapabilities(
 		a.hub,
+		next.StreamServerInterceptorProviders,
 		bindings,
 		"rpc.interceptor.stream_server",
 		streamServerInterceptorCapabilitySpec,
-	)
-	if err != nil {
-		return nil, false, err
+		builtins.streamServer,
+	); err != nil {
+		return err
 	}
-	internalruntime.CopyPreferredIntoMap(
-		next.StreamServerInterceptorProviders,
-		streamServerProviders,
-		streamServerBuiltins,
-	)
-
-	unaryClientProviders, err := internalruntime.ResolveOrderedRuntimeCapabilities[interceptor.UnaryClientInterceptorProvider](
+	if err := copyOrderedRuntimeCapabilities(
 		a.hub,
+		next.UnaryClientInterceptorProviders,
 		bindings,
 		"rpc.interceptor.unary_client",
 		unaryClientInterceptorCapabilitySpec,
-	)
-	if err != nil {
-		return nil, false, err
+		builtins.unaryClient,
+	); err != nil {
+		return err
 	}
-	internalruntime.CopyPreferredIntoMap(
-		next.UnaryClientInterceptorProviders,
-		unaryClientProviders,
-		unaryClientBuiltins,
-	)
-
-	streamClientProviders, err := internalruntime.ResolveOrderedRuntimeCapabilities[interceptor.StreamClientInterceptorProvider](
+	if err := copyOrderedRuntimeCapabilities(
 		a.hub,
+		next.StreamClientInterceptorProviders,
 		bindings,
 		"rpc.interceptor.stream_client",
 		streamClientInterceptorCapabilitySpec,
-	)
-	if err != nil {
-		return nil, false, err
+		builtins.streamClient,
+	); err != nil {
+		return err
 	}
-	internalruntime.CopyPreferredIntoMap(
-		next.StreamClientInterceptorProviders,
-		streamClientProviders,
-		streamClientBuiltins,
-	)
+	return nil
+}
 
-	restProviders, err := internalruntime.ResolveOrderedRuntimeCapabilities[rest.Provider](
-		a.hub,
+func copyOrderedRuntimeCapabilities[T any](
+	hub *module.Hub,
+	dst map[string]T,
+	bindings map[string][]string,
+	capability string,
+	spec module.CapabilitySpec,
+	preferred map[string]T,
+) error {
+	providers, err := internalruntime.ResolveOrderedRuntimeCapabilities[T](
+		hub,
 		bindings,
-		"transport.rest.middleware",
-		restMiddlewareCapabilitySpec,
+		capability,
+		spec,
 	)
 	if err != nil {
-		return nil, false, err
+		return err
 	}
-	for name, provider := range restProviders {
-		switch name {
-		case "logger":
-			next.RESTMiddlewareProviderMap[name] = rest.BuiltinLoggingProviderWithLogger(
-				next.Logger,
-			)
-		case "marshaler":
-			next.RESTMiddlewareProviderMap[name] = newRuntimeMarshalerProvider(next)
-		default:
-			next.RESTMiddlewareProviderMap[name] = provider
-		}
-	}
-
-	registryProviders, err := internalruntime.ResolveNamedRuntimeCapabilities[registry.Provider](
-		a.hub,
-		bindings,
-		"discovery.registry.provider",
-		registryProviderCapabilitySpec,
-	)
-	if err != nil {
-		return nil, false, err
-	}
-	internalruntime.CopyIntoMap(next.RegistryProviders, registryProviders)
-	if _, ok := next.RegistryProviders["multi_registry"]; ok {
-		next.RegistryProviders["multi_registry"] = registry.BuiltinProviderWithFactory(
-			func(typeName string, cfg map[string]any) (registry.Registry, error) {
-				return next.NewRegistryByType(typeName, cfg)
-			},
-		)
-	}
-
-	resolverProviders, err := internalruntime.ResolveNamedRuntimeCapabilities[resolver.Provider](
-		a.hub,
-		bindings,
-		"discovery.resolver.provider",
-		resolverProviderCapabilitySpec,
-	)
-	if err != nil {
-		return nil, false, err
-	}
-	internalruntime.CopyIntoMap(next.ResolverProviders, resolverProviders)
-
-	balancerProviders, err := internalruntime.ResolveNamedRuntimeCapabilities[balancer.Provider](
-		a.hub,
-		bindings,
-		"transport.balancer.provider",
-		balancerProviderCapabilitySpec,
-	)
-	if err != nil {
-		return nil, false, err
-	}
-	internalruntime.CopyPreferredIntoMap(
-		next.BalancerProviders,
-		balancerProviders,
-		map[string]balancer.Provider{
-			"round_robin": balancer.BuiltinProvider(),
-		},
-	)
-
-	current := a.currentRuntimeSnapshot()
-	return next, runtimeRequiresRestart(current, next), nil
+	internalruntime.CopyPreferredIntoMap(dst, providers, preferred)
+	return nil
 }
 
 func newRuntimeMarshalerProvider(snapshot *Snapshot) rest.Provider {

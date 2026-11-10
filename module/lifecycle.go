@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/codesjoy/yggdrasil/v3/config"
@@ -104,7 +105,7 @@ func (h *Hub) Stop(ctx context.Context) error {
 
 func (h *Hub) stopSequence(ctx context.Context, startedSeq []Module) error {
 	var multiErr error
-	for i := len(startedSeq) - 1; i >= 0; i-- {
+	for i := range slices.Backward(startedSeq) {
 		mod := startedSeq[i]
 		item, ok := mod.(Stoppable)
 		if !ok {
@@ -140,14 +141,54 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 	h.reloadMu.Lock()
 	defer h.reloadMu.Unlock()
 
+	oldSnap, topo, forceAll, restartRequired, err := h.beginReload()
+	if err != nil {
+		return err
+	}
+	affected := reloadAffectedModules(topo, oldSnap, snap, forceAll)
+	if len(affected) == 0 {
+		h.completeReload(snap)
+		return nil
+	}
+	if h.markNonReloadableModules(affected, forceAll) {
+		return nil
+	}
+
+	prepared, err := h.prepareReloadModules(
+		ctx,
+		snap,
+		affected,
+		forceAll,
+		restartRequired,
+	)
+	if err != nil {
+		return err
+	}
+	if err = h.commitPreparedReloads(ctx, prepared, forceAll, restartRequired); err != nil {
+		return err
+	}
+	if err = h.finalizePreparedReloads(ctx, prepared, snap, forceAll); err != nil {
+		return err
+	}
+	h.completeReload(snap)
+	return nil
+}
+
+func (h *Hub) beginReload() (
+	config.Snapshot,
+	[]Module,
+	bool,
+	bool,
+	error,
+) {
 	h.mu.Lock()
+	defer h.mu.Unlock()
 	if !h.sealed {
-		h.mu.Unlock()
-		return errHubNotSealed
+		return config.Snapshot{}, nil, false, false, errHubNotSealed
 	}
 	if h.reloadState.Phase == ReloadPhaseDegraded {
-		h.mu.Unlock()
-		return errors.New("module hub is degraded; restart required before next reload")
+		return config.Snapshot{}, nil, false, false,
+			errors.New("module hub is degraded; restart required before next reload")
 	}
 	oldSnap := h.snapshot
 	topo := append([]Module(nil), h.topoOrder...)
@@ -158,53 +199,59 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 		Phase:           ReloadPhasePreparing,
 		RestartRequired: restartRequired,
 	}
-	h.mu.Unlock()
+	return oldSnap, topo, forceAll, restartRequired, nil
+}
 
+func reloadAffectedModules(
+	topo []Module,
+	oldSnap, newSnap config.Snapshot,
+	forceAll bool,
+) []Module {
 	affected := make([]Module, 0, len(topo))
 	if forceAll {
-		affected = append(affected, topo...)
-	} else {
-		for _, mod := range topo {
-			if !configChanged(mod, oldSnap, snap) {
-				continue
-			}
+		return append(affected, topo...)
+	}
+	for _, mod := range topo {
+		if configChanged(mod, oldSnap, newSnap) {
 			affected = append(affected, mod)
 		}
 	}
-	if len(affected) == 0 {
-		h.mu.Lock()
-		h.snapshot = snap
-		h.reloadState = ReloadState{
-			Phase:           ReloadPhaseIdle,
-			RestartRequired: h.restartRequired,
-		}
-		h.mu.Unlock()
-		return nil
-	}
+	return affected
+}
 
+func (h *Hub) markNonReloadableModules(affected []Module, forceAll bool) bool {
 	nonReloadable := make([]Module, 0)
 	for _, mod := range affected {
 		if _, ok := mod.(Reloadable); !ok {
 			nonReloadable = append(nonReloadable, mod)
 		}
 	}
-	if len(nonReloadable) > 0 {
-		h.mu.Lock()
-		for _, mod := range nonReloadable {
-			h.restartFlag[mod.Name()] = true
-		}
-		h.restartRequired = true
-		if forceAll {
-			h.reloadAll = true
-		}
-		h.reloadState = ReloadState{
-			Phase:           ReloadPhaseIdle,
-			RestartRequired: true,
-		}
-		h.mu.Unlock()
-		return nil
+	if len(nonReloadable) == 0 {
+		return false
 	}
+	h.mu.Lock()
+	for _, mod := range nonReloadable {
+		h.restartFlag[mod.Name()] = true
+	}
+	h.restartRequired = true
+	if forceAll {
+		h.reloadAll = true
+	}
+	h.reloadState = ReloadState{
+		Phase:           ReloadPhaseIdle,
+		RestartRequired: true,
+	}
+	h.mu.Unlock()
+	return true
+}
 
+func (h *Hub) prepareReloadModules(
+	ctx context.Context,
+	snap config.Snapshot,
+	affected []Module,
+	forceAll bool,
+	restartRequired bool,
+) ([]preparedReload, error) {
 	prepared := make([]preparedReload, 0, len(affected))
 	for _, mod := range affected {
 		item := mod.(Reloadable)
@@ -240,11 +287,19 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 			h.restartFlag[mod.Name()] = true
 			h.reloadState = state
 			h.mu.Unlock()
-			return fmt.Errorf("module %q prepare reload failed: %w", mod.Name(), err)
+			return nil, fmt.Errorf("module %q prepare reload failed: %w", mod.Name(), err)
 		}
 		prepared = append(prepared, preparedReload{module: mod, committer: committer})
 	}
+	return prepared, nil
+}
 
+func (h *Hub) commitPreparedReloads(
+	ctx context.Context,
+	prepared []preparedReload,
+	forceAll bool,
+	restartRequired bool,
+) error {
 	h.mu.Lock()
 	h.reloadState = ReloadState{
 		Phase:           ReloadPhaseCommitting,
@@ -282,7 +337,15 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 			return fmt.Errorf("module %q commit reload failed: %w", item.module.Name(), err)
 		}
 	}
+	return nil
+}
 
+func (h *Hub) finalizePreparedReloads(
+	ctx context.Context,
+	prepared []preparedReload,
+	snap config.Snapshot,
+	forceAll bool,
+) error {
 	var finalizeErr error
 	finalizeModule := ""
 	for _, item := range prepared {
@@ -317,7 +380,10 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 		h.mu.Unlock()
 		return finalizeErr
 	}
+	return nil
+}
 
+func (h *Hub) completeReload(snap config.Snapshot) {
 	h.mu.Lock()
 	h.snapshot = snap
 	h.reloadState = ReloadState{
@@ -325,13 +391,12 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 		RestartRequired: h.restartRequired,
 	}
 	h.mu.Unlock()
-	return nil
 }
 
 func rollbackPrepared(ctx context.Context, prepared []preparedReload) (string, error) {
 	var multiErr error
 	var failedModule string
-	for i := len(prepared) - 1; i >= 0; i-- {
+	for i := range slices.Backward(prepared) {
 		if err := prepared[i].committer.Rollback(ctx); err != nil {
 			if failedModule == "" {
 				failedModule = prepared[i].module.Name()

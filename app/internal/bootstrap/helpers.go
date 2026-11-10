@@ -232,32 +232,6 @@ func NeedsDefaultStartupSettings(resolved settings.Resolved) bool {
 		resolved.Transports.Rest == nil
 }
 
-type startupValidator struct {
-	strict bool
-	logger *slog.Logger
-	err    error
-}
-
-func (v *startupValidator) add(msg string, err error, attrs ...slog.Attr) {
-	if err == nil {
-		return
-	}
-	if v.strict {
-		v.err = errors.Join(v.err, fmt.Errorf("%s: %w", msg, err))
-		return
-	}
-	attrs = append(attrs, slog.Any("error", err))
-	args := make([]any, 0, len(attrs))
-	for _, attr := range attrs {
-		args = append(args, attr)
-	}
-	if v.logger != nil {
-		v.logger.Warn(msg, args...)
-		return
-	}
-	slog.Warn(msg, args...)
-}
-
 // ValidateStartupResolved validates already resolved startup settings.
 func ValidateStartupResolved(resolved settings.Resolved) error {
 	return ValidateStartupResolvedWithLogger(resolved, slog.Default())
@@ -268,15 +242,6 @@ func ValidateStartupResolvedWithLogger(
 	resolved settings.Resolved,
 	logger *slog.Logger,
 ) error {
-	strict := resolved.Admin.Validation.Strict
-	enable := strict || resolved.Admin.Validation.Enable
-	if err := settings.Validate(resolved); err != nil {
-		return err
-	}
-	if !enable {
-		return nil
-	}
-
-	validator := startupValidator{strict: strict, logger: logger}
-	return validator.err
+	_ = logger
+	return settings.Validate(resolved)
 }

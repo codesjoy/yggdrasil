@@ -237,7 +237,7 @@ func TestLifecycleRegisterSuccess(t *testing.T) {
 	runner, err := New(WithRegistry(mockReg))
 	require.NoError(t, err)
 
-	require.NoError(t, runner.register())
+	require.NoError(t, runner.registerWithContext(context.Background()))
 	assert.True(t, mockReg.registered)
 	assert.Equal(t, registryStateDone, runner.registryState)
 }
@@ -246,7 +246,7 @@ func TestLifecycleRegisterNilRegistry(t *testing.T) {
 	runner, err := New()
 	require.NoError(t, err)
 
-	require.NoError(t, runner.register())
+	require.NoError(t, runner.registerWithContext(context.Background()))
 	assert.Equal(t, registryStateInit, runner.registryState)
 }
 
@@ -258,7 +258,7 @@ func TestLifecycleRegisterAlreadyRegistered(t *testing.T) {
 	require.NoError(t, err)
 	runner.registryState = registryStateDone
 
-	require.NoError(t, runner.register())
+	require.NoError(t, runner.registerWithContext(context.Background()))
 	assert.False(t, mockReg.registered)
 }
 
@@ -270,7 +270,7 @@ func TestLifecycleRegisterError(t *testing.T) {
 	runner, err := New(WithRegistry(mockReg))
 	require.NoError(t, err)
 
-	err = runner.register()
+	err = runner.registerWithContext(context.Background())
 	require.Error(t, err)
 	assert.False(t, mockReg.deregistered)
 	assert.Equal(t, registryStateInit, runner.registryState)
@@ -284,7 +284,7 @@ func TestLifecycleDeregisterSuccess(t *testing.T) {
 
 	runner, err := New(WithRegistry(mockReg))
 	require.NoError(t, err)
-	require.NoError(t, runner.register())
+	require.NoError(t, runner.registerWithContext(context.Background()))
 
 	require.NoError(t, runner.deregister(context.Background()))
 	assert.True(t, mockReg.deregistered)
@@ -319,7 +319,7 @@ func TestLifecycleDeregisterError(t *testing.T) {
 
 	runner, err := New(WithRegistry(mockReg))
 	require.NoError(t, err)
-	require.NoError(t, runner.register())
+	require.NoError(t, runner.registerWithContext(context.Background()))
 
 	err = runner.deregister(context.Background())
 	require.Error(t, err)
@@ -438,7 +438,7 @@ func TestLifecycleRegistryStateTransitionsAreSafe(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_ = runner.register()
+			_ = runner.registerWithContext(context.Background())
 			_ = runner.deregister(context.Background())
 		}()
 	}

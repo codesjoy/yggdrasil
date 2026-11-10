@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/netip"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -166,19 +167,30 @@ func NewServer(cfg *Config, opts ...Option) (Server, error) {
 		opt(s)
 	}
 
+	router, rpcRouter, webRouter, err := s.buildRouters()
+	if err != nil {
+		return nil, err
+	}
+	s.Router = router
+	s.rpcRouter = rpcRouter
+	s.webRouter = webRouter
+	return s, nil
+}
+
+func (s *ServeMux) buildRouters() (chi.Router, chi.Router, chi.Router, error) {
 	r := chi.NewMux()
-	allMiddlewares := dedupStableStrings(cfg.Middleware.All)
+	allMiddlewares := dedupStableStrings(s.cfg.Middleware.All)
 	allChain, err := buildMiddlewareChain(
 		s.middlewareMap,
 		s.strictMiddleware,
 		allMiddlewares...,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	r.Use(allChain...)
 
-	rpcMiddlewaresRaw := cfg.Middleware.RPC
+	rpcMiddlewaresRaw := s.cfg.Middleware.RPC
 	if s.marshalerRegistry == nil {
 		rpcMiddlewaresRaw = append([]string{"marshaler"}, rpcMiddlewaresRaw...)
 	}
@@ -189,7 +201,7 @@ func NewServer(cfg *Config, opts ...Option) (Server, error) {
 		rpcMiddlewares...,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	rpcRouter := r.Group(func(r chi.Router) {
 		if s.marshalerRegistry != nil {
@@ -198,24 +210,20 @@ func NewServer(cfg *Config, opts ...Option) (Server, error) {
 		r.Use(rpcChain...)
 	})
 
-	webMiddlewares := dedupStableStrings(cfg.Middleware.Web)
+	webMiddlewares := dedupStableStrings(s.cfg.Middleware.Web)
 	webChain, err := buildMiddlewareChain(
 		s.middlewareMap,
 		s.strictMiddleware,
 		webMiddlewares...,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	webRouter := r.Group(func(r chi.Router) {
 		r.Use(webChain...)
 	})
 
-	s.Router = r
-	s.rpcRouter = rpcRouter
-	s.webRouter = webRouter
-
-	return s, nil
+	return r, rpcRouter, webRouter, nil
 }
 
 func buildMiddlewareChain(
@@ -508,7 +516,7 @@ func (s *ServeMux) forwardedClientIP(
 			return netip.Addr{}, false
 		}
 		chain = append(chain, remoteIP)
-		for index := len(chain) - 1; index >= 0; index-- {
+		for index := range slices.Backward(chain) {
 			if !s.isTrustedProxy(chain[index]) {
 				return chain[index], true
 			}
@@ -532,7 +540,7 @@ func (s *ServeMux) forwardedClientIP(
 func parseForwardedChain(values []string) ([]netip.Addr, bool) {
 	out := make([]netip.Addr, 0, len(values))
 	for _, value := range values {
-		for _, item := range strings.Split(value, ",") {
+		for item := range strings.SplitSeq(value, ",") {
 			item = strings.TrimSpace(item)
 			if item == "" {
 				return nil, false
@@ -579,26 +587,7 @@ func (s *ServeMux) errorHandler(w http.ResponseWriter, r *http.Request, err erro
 		return
 	}
 
-	header, _ := metadata.FromHeaderCtx(ctx)
-	trailerHeader, _ := metadata.FromTrailerCtx(ctx)
-
-	s.handleResponseHeader(w, header)
-
-	doForwardTrailers := s.requestAcceptsTrailers(r)
-
-	if doForwardTrailers && trailerHeader.Len() > 0 {
-		s.handleForwardResponseTrailerHeader(w, trailerHeader)
-		w.Header().Set("Transfer-Encoding", "chunked")
-	}
-
-	w.WriteHeader(int(st.HTTPCode()))
-	if _, err := w.Write(buf); err != nil {
-		slog.Error("failed to write response", slog.Any("error", err))
-	}
-
-	if doForwardTrailers && trailerHeader.Len() > 0 {
-		s.handleForwardResponseTrailer(w, trailerHeader)
-	}
+	s.writeResponse(w, r, buf, int(st.HTTPCode()))
 }
 
 func (s *ServeMux) successHandler(w http.ResponseWriter, r *http.Request, resp proto.Message) {
@@ -615,44 +604,52 @@ func (s *ServeMux) successHandler(w http.ResponseWriter, r *http.Request, resp p
 		return
 	}
 
+	s.writeResponse(w, r, buf, 0)
+}
+
+func (s *ServeMux) writeResponse(
+	w http.ResponseWriter,
+	r *http.Request,
+	body []byte,
+	statusCode int,
+) {
+	ctx := r.Context()
 	header, _ := metadata.FromHeaderCtx(ctx)
 	trailerHeader, _ := metadata.FromTrailerCtx(ctx)
-
 	s.handleResponseHeader(w, header)
 
 	doForwardTrailers := s.requestAcceptsTrailers(r)
-
-	if doForwardTrailers && trailerHeader.Len() > 0 {
+	forwardTrailers := doForwardTrailers && trailerHeader.Len() > 0
+	if forwardTrailers {
 		s.handleForwardResponseTrailerHeader(w, trailerHeader)
 		w.Header().Set("Transfer-Encoding", "chunked")
 	}
 
-	if _, err = w.Write(buf); err != nil {
+	if statusCode > 0 {
+		w.WriteHeader(statusCode)
+	}
+	if _, err := w.Write(body); err != nil {
 		slog.Error("failed to write response", slog.Any("error", err))
 	}
-
-	if doForwardTrailers && trailerHeader.Len() > 0 {
+	if forwardTrailers {
 		s.handleForwardResponseTrailer(w, trailerHeader)
 	}
 }
 
 func (s *ServeMux) handleResponseHeader(w http.ResponseWriter, md metadata.MD) {
 	for k, vs := range md {
-		if h, ok := s.outgoingHeaderMatcher(k); ok {
-			for _, v := range vs {
-				w.Header().Add(h, v)
-			}
+		h := s.outgoingHeaderMatcher(k)
+		for _, v := range vs {
+			w.Header().Add(h, v)
 		}
 	}
 }
 
-func (s *ServeMux) outgoingHeaderMatcher(key string) (string, bool) {
-	for _, item := range s.outHeaders {
-		if item == key {
-			return key, true
-		}
+func (s *ServeMux) outgoingHeaderMatcher(key string) string {
+	if slices.Contains(s.outHeaders, key) {
+		return key
 	}
-	return fmt.Sprintf("%s%s", MetadataHeaderPrefix, key), true
+	return MetadataHeaderPrefix + key
 }
 
 func (s *ServeMux) requestAcceptsTrailers(req *http.Request) bool {
@@ -662,27 +659,22 @@ func (s *ServeMux) requestAcceptsTrailers(req *http.Request) bool {
 
 func (s *ServeMux) handleForwardResponseTrailerHeader(w http.ResponseWriter, md metadata.MD) {
 	for k := range md {
-		if h, ok := s.outgoingTrailerMatcher(k); ok {
-			w.Header().Add("Trailer", h)
-		}
+		w.Header().Add("Trailer", s.outgoingTrailerMatcher(k))
 	}
 }
 
 func (s *ServeMux) handleForwardResponseTrailer(w http.ResponseWriter, md metadata.MD) {
 	for k, vs := range md {
-		if h, ok := s.outgoingTrailerMatcher(k); ok {
-			for _, v := range vs {
-				w.Header().Add(h, v)
-			}
+		h := s.outgoingTrailerMatcher(k)
+		for _, v := range vs {
+			w.Header().Add(h, v)
 		}
 	}
 }
 
-func (s *ServeMux) outgoingTrailerMatcher(key string) (string, bool) {
-	for _, item := range s.outTrailers {
-		if item == key {
-			return key, true
-		}
+func (s *ServeMux) outgoingTrailerMatcher(key string) string {
+	if slices.Contains(s.outTrailers, key) {
+		return key
 	}
-	return fmt.Sprintf("%s%s", MetadataTrailerPrefix, key), true
+	return MetadataTrailerPrefix + key
 }

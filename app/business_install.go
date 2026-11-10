@@ -19,8 +19,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 
 	internalinstall "github.com/codesjoy/yggdrasil/v3/app/internal/install"
+	internallifecycle "github.com/codesjoy/yggdrasil/v3/app/internal/lifecycle"
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
@@ -55,36 +57,65 @@ func (a *App) Prepare(ctx context.Context) error {
 // Compose executes one business composition callback against the prepared runtime.
 // If Prepare has not been called yet, Compose performs a lazy prepare first.
 func (a *App) Compose(ctx context.Context, fn ComposeFunc) (*BusinessBundle, error) {
+	if err := validateComposeInput(ctx, fn); err != nil {
+		return nil, a.recordComposeError(err)
+	}
+	rt, err := a.prepareComposeRuntime(ctx)
+	if err != nil {
+		return nil, a.recordComposeError(err)
+	}
+	bundle, err := fn(rt)
+	if err != nil {
+		err = wrapAssemblyStageError("compose", err)
+		a.mu.Lock()
+		a.recordAssemblyErrorLocked(assemblyStageCompose, err)
+		a.mu.Unlock()
+		return nil, a.failBeforeStart(
+			err,
+			"compose",
+			yassembly.ErrPreparedRuntimeRollbackFailed,
+		)
+	}
+	if bundle == nil {
+		bundle = &BusinessBundle{}
+	}
+	a.mu.Lock()
+	a.clearAssemblyErrorLocked(assemblyStageCompose)
+	a.mu.Unlock()
+	return bundle, nil
+}
+
+func validateComposeInput(ctx context.Context, fn ComposeFunc) error {
 	if fn == nil {
-		err := yassembly.NewError(
+		return yassembly.NewError(
 			yassembly.ErrComposeFailed,
 			"compose",
 			"compose function is nil",
 			nil,
 			nil,
 		)
-		a.mu.Lock()
-		a.recordAssemblyErrorLocked(assemblyStageCompose, err)
-		a.mu.Unlock()
-		return nil, err
 	}
 	if ctx == nil {
-		err := yassembly.NewError(
+		return yassembly.NewError(
 			yassembly.ErrComposeFailed,
 			"compose",
 			"compose context is nil",
 			nil,
 			nil,
 		)
-		a.mu.Lock()
-		a.recordAssemblyErrorLocked(assemblyStageCompose, err)
-		a.mu.Unlock()
-		return nil, err
 	}
+	return nil
+}
+
+func (a *App) recordComposeError(err error) error {
+	a.mu.Lock()
+	a.recordAssemblyErrorLocked(assemblyStageCompose, err)
+	a.mu.Unlock()
+	return err
+}
+
+func (a *App) prepareComposeRuntime(ctx context.Context) (Runtime, error) {
 	if err := a.Prepare(ctx); err != nil {
-		a.mu.Lock()
-		a.recordAssemblyErrorLocked(assemblyStageCompose, err)
-		a.mu.Unlock()
 		return nil, err
 	}
 	a.mu.Lock()
@@ -96,7 +127,6 @@ func (a *App) Compose(ctx context.Context, fn ComposeFunc) (*BusinessBundle, err
 			nil,
 			nil,
 		)
-		a.recordAssemblyErrorLocked(assemblyStageCompose, err)
 		a.mu.Unlock()
 		return nil, err
 	}
@@ -110,26 +140,9 @@ func (a *App) Compose(ctx context.Context, fn ComposeFunc) (*BusinessBundle, err
 			nil,
 			nil,
 		)
-		a.mu.Lock()
-		a.recordAssemblyErrorLocked(assemblyStageCompose, err)
-		a.mu.Unlock()
 		return nil, err
 	}
-	bundle, err := fn(rt)
-	if err != nil {
-		err = wrapAssemblyStageError("compose", err)
-		a.mu.Lock()
-		a.recordAssemblyErrorLocked(assemblyStageCompose, err)
-		a.mu.Unlock()
-		return nil, a.failBeforeStart(err, "compose", yassembly.ErrPreparedRuntimeRollbackFailed)
-	}
-	if bundle == nil {
-		bundle = &BusinessBundle{}
-	}
-	a.mu.Lock()
-	a.clearAssemblyErrorLocked(assemblyStageCompose)
-	a.mu.Unlock()
-	return bundle, nil
+	return rt, nil
 }
 
 // ComposeAndInstall composes a bundle and installs it in one step.
@@ -143,6 +156,23 @@ func (a *App) ComposeAndInstall(ctx context.Context, fn ComposeFunc) error {
 
 // InstallBusiness installs one composed business bundle.
 func (a *App) InstallBusiness(bundle *BusinessBundle) error {
+	if err := a.beginBusinessInstall(); err != nil {
+		return err
+	}
+	defer a.endBusinessInstall()
+	if err := a.validateBusinessInstall(); err != nil {
+		return err
+	}
+
+	err := a.installBundle(bundle)
+	if err == nil {
+		a.markBusinessInstalled()
+		return nil
+	}
+	return a.recordBusinessInstallFailure(err)
+}
+
+func (a *App) beginBusinessInstall() error {
 	if a == nil {
 		return internalinstall.ValidationError("app is not ready", nil)
 	}
@@ -157,11 +187,18 @@ func (a *App) InstallBusiness(bundle *BusinessBundle) error {
 	}
 
 	a.installMu.Lock()
-	defer a.installMu.Unlock()
 	a.installing.Store(true)
-	defer a.installing.Store(false)
+	return nil
+}
 
+func (a *App) endBusinessInstall() {
+	a.installing.Store(false)
+	a.installMu.Unlock()
+}
+
+func (a *App) validateBusinessInstall() error {
 	a.mu.Lock()
+	defer a.mu.Unlock()
 	if a.explicitBundleInstalled {
 		err := yassembly.NewError(
 			yassembly.ErrInstallRegistrationConflict,
@@ -171,7 +208,6 @@ func (a *App) InstallBusiness(bundle *BusinessBundle) error {
 			nil,
 		)
 		a.recordAssemblyErrorLocked(assemblyStageInstall, err)
-		a.mu.Unlock()
 		return err
 	}
 	if a.state < lifecycleStateInitialized || a.state >= lifecycleStateServing ||
@@ -184,29 +220,27 @@ func (a *App) InstallBusiness(bundle *BusinessBundle) error {
 			nil,
 		)
 		a.recordAssemblyErrorLocked(assemblyStageInstall, err)
-		a.mu.Unlock()
 		return err
 	}
-	a.mu.Unlock()
-
-	err := a.installBundle(bundle)
-	if err == nil {
-		a.mu.Lock()
-		a.explicitBundleInstalled = true
-		a.clearAssemblyErrorLocked(assemblyStageInstall)
-		if a.state < lifecycleStateBusinessInstalled {
-			a.state = lifecycleStateBusinessInstalled
-		}
-		a.mu.Unlock()
-	}
-	if err != nil {
-		err = internalinstall.WrapError(err)
-		a.mu.Lock()
-		a.recordAssemblyErrorLocked(assemblyStageInstall, err)
-		a.mu.Unlock()
-		return a.failBeforeStart(err, "install", yassembly.ErrPartialInstallRollbackFailed)
-	}
 	return nil
+}
+
+func (a *App) markBusinessInstalled() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.explicitBundleInstalled = true
+	a.clearAssemblyErrorLocked(assemblyStageInstall)
+	if a.state < lifecycleStateBusinessInstalled {
+		a.state = lifecycleStateBusinessInstalled
+	}
+}
+
+func (a *App) recordBusinessInstallFailure(err error) error {
+	err = internalinstall.WrapError(err)
+	a.mu.Lock()
+	a.recordAssemblyErrorLocked(assemblyStageInstall, err)
+	a.mu.Unlock()
+	return a.failBeforeStart(err, "install", yassembly.ErrPartialInstallRollbackFailed)
 }
 
 func (a *App) installBundle(bundle *BusinessBundle) error {
@@ -214,6 +248,27 @@ func (a *App) installBundle(bundle *BusinessBundle) error {
 		return nil
 	}
 	staged := newStagedInstall(a)
+	if err := stageBundleBindings(staged, bundle); err != nil {
+		return err
+	}
+	extensions, err := installBundleExtensions(staged, bundle.Extensions)
+	if err != nil {
+		return err
+	}
+	staged.diagnostics = append(staged.diagnostics, bundle.Diagnostics...)
+	if err = staged.commit(); err != nil {
+		if rollbackErr := staged.rollbackExtensions(extensions); rollbackErr != nil {
+			return internalinstall.ValidationError(
+				"install commit and rollback failed",
+				errors.Join(err, rollbackErr),
+			)
+		}
+		return err
+	}
+	return nil
+}
+
+func stageBundleBindings(staged *stagedInstall, bundle *BusinessBundle) error {
 	for _, item := range bundle.RPCBindings {
 		if err := staged.installRPCBinding(item); err != nil {
 			return err
@@ -244,14 +299,21 @@ func (a *App) installBundle(bundle *BusinessBundle) error {
 			return err
 		}
 	}
-	extensions := make([]BusinessInstallable, 0, len(bundle.Extensions))
-	for _, item := range bundle.Extensions {
+	return nil
+}
+
+func installBundleExtensions(
+	staged *stagedInstall,
+	items []BusinessInstallable,
+) ([]BusinessInstallable, error) {
+	extensions := make([]BusinessInstallable, 0, len(items))
+	for _, item := range items {
 		if item == nil {
 			continue
 		}
 		extensions = append(extensions, item)
 		ctx := &InstallContext{
-			Runtime:   a.runtime,
+			Runtime:   staged.app.runtime,
 			installer: staged,
 		}
 		if err := item.Install(ctx); err != nil {
@@ -260,57 +322,15 @@ func (a *App) installBundle(bundle *BusinessBundle) error {
 				err,
 			)
 			if rollbackErr := staged.rollbackExtensions(extensions); rollbackErr != nil {
-				return internalinstall.ValidationError(
+				return nil, internalinstall.ValidationError(
 					fmt.Sprintf("install extension %q rollback failed", item.Kind()),
 					errors.Join(installErr, rollbackErr),
 				)
 			}
-			return installErr
+			return nil, installErr
 		}
 	}
-	staged.diagnostics = append(staged.diagnostics, bundle.Diagnostics...)
-	if err := staged.commit(); err != nil {
-		if rollbackErr := staged.rollbackExtensions(extensions); rollbackErr != nil {
-			return internalinstall.ValidationError(
-				"install commit and rollback failed",
-				errors.Join(err, rollbackErr),
-			)
-		}
-		return err
-	}
-	return nil
-}
-
-func (a *App) installRPCBinding(binding RPCBinding) error {
-	staged := newStagedInstall(a)
-	if err := staged.installRPCBinding(binding); err != nil {
-		return err
-	}
-	return staged.commit()
-}
-
-func (a *App) installRESTBinding(binding RESTBinding) error {
-	staged := newStagedInstall(a)
-	if err := staged.installRESTBinding(binding); err != nil {
-		return err
-	}
-	return staged.commit()
-}
-
-func (a *App) installRawHTTPBinding(binding RawHTTPBinding) error {
-	staged := newStagedInstall(a)
-	if err := staged.installRawHTTPBinding(binding); err != nil {
-		return err
-	}
-	return staged.commit()
-}
-
-func (a *App) installGovernorHTTPBinding(binding GovernorHTTPBinding) error {
-	staged := newStagedInstall(a)
-	if err := staged.installGovernorHTTPBinding(binding); err != nil {
-		return err
-	}
-	return staged.commit()
+	return extensions, nil
 }
 
 func (a *App) installOptions() (*options, error) {
@@ -336,22 +356,6 @@ func (a *App) installServer(bindingType string) (server.Server, error) {
 		)
 	}
 	return a.opts.server, nil
-}
-
-func (a *App) addBackgroundTask(task BackgroundTask) error {
-	staged := newStagedInstall(a)
-	if err := staged.addBackgroundTask(task); err != nil {
-		return err
-	}
-	return staged.commit()
-}
-
-func (a *App) addBusinessHook(hook BusinessHook) error {
-	staged := newStagedInstall(a)
-	if err := staged.addBusinessHook(hook); err != nil {
-		return err
-	}
-	return staged.commit()
 }
 
 type stagedRPCBinding struct {
@@ -440,7 +444,7 @@ func (s *stagedInstall) installRPCBinding(binding RPCBinding) error {
 			nil,
 		)
 	}
-	if _, err := s.ensureServer("rpc"); err != nil {
+	if err := s.ensureServer("rpc"); err != nil {
 		return err
 	}
 	s.rpcServices[desc.ServiceName] = struct{}{}
@@ -480,7 +484,7 @@ func (s *stagedInstall) installRESTBinding(binding RESTBinding) error {
 		s.httpRoutes[key] = struct{}{}
 		routes = append(routes, key)
 	}
-	if _, err := s.ensureServer("rest"); err != nil {
+	if err := s.ensureServer("rest"); err != nil {
 		return err
 	}
 	s.restBindings = append(s.restBindings, stagedRESTBinding{
@@ -514,7 +518,7 @@ func (s *stagedInstall) installRawHTTPBinding(binding RawHTTPBinding) error {
 			nil,
 		)
 	}
-	if _, err := s.ensureServer("raw http"); err != nil {
+	if err := s.ensureServer("raw http"); err != nil {
 		return err
 	}
 	s.httpRoutes[key] = struct{}{}
@@ -584,16 +588,16 @@ func (s *stagedInstall) addBusinessHook(hook BusinessHook) error {
 	return nil
 }
 
-func (s *stagedInstall) ensureServer(bindingType string) (server.Server, error) {
+func (s *stagedInstall) ensureServer(bindingType string) error {
 	if s.svr != nil {
-		return s.svr, nil
+		return nil
 	}
 	svr, err := s.app.installServer(bindingType)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	s.svr = svr
-	return svr, nil
+	return nil
 }
 
 func (s *stagedInstall) commit() error {
@@ -645,16 +649,10 @@ func (s *stagedInstall) commit() error {
 	for _, task := range s.tasks {
 		s.app.opts.internalServers = append(s.app.opts.internalServers, task)
 	}
-	for _, hook := range s.hooks {
-		switch hook.Stage {
-		case BusinessHookBeforeStart:
-			s.app.opts.beforeStartHooks = append(s.app.opts.beforeStartHooks, hook.Func)
-		case BusinessHookBeforeStop:
-			s.app.opts.beforeStopHooks = append(s.app.opts.beforeStopHooks, hook.Func)
-		case BusinessHookAfterStop:
-			s.app.opts.afterStopHooks = append(s.app.opts.afterStopHooks, hook.Func)
-		}
-	}
+	beforeStart, beforeStop, afterStop := splitBusinessHooks(s.hooks)
+	s.app.opts.beforeStartHooks = append(s.app.opts.beforeStartHooks, beforeStart...)
+	s.app.opts.beforeStopHooks = append(s.app.opts.beforeStopHooks, beforeStop...)
+	s.app.opts.afterStopHooks = append(s.app.opts.afterStopHooks, afterStop...)
 	s.app.bundleDiagnostics = append(s.app.bundleDiagnostics, s.diagnostics...)
 	return nil
 }
@@ -665,15 +663,38 @@ func (a *App) installStagedLifecycle(
 ) error {
 	opts := make([]lifecycleOption, 0, len(tasks)+len(hooks)+1)
 	if len(tasks) > 0 {
-		servers := make([]InternalServer, 0, len(tasks))
-		for _, task := range tasks {
-			servers = append(servers, task)
+		servers := make([]InternalServer, len(tasks))
+		for index, task := range tasks {
+			servers[index] = task
 		}
-		opts = append(opts, withLifecycleInternalServers(servers...))
+		opts = append(opts, internallifecycle.WithInternalServers(servers...))
 	}
-	var beforeStart []func(context.Context) error
-	var beforeStop []func(context.Context) error
-	var afterStop []func(context.Context) error
+	beforeStart, beforeStop, afterStop := splitBusinessHooks(hooks)
+	if len(beforeStart) > 0 {
+		opts = append(opts, internallifecycle.WithBeforeStartHooks(beforeStart...))
+	}
+	if len(beforeStop) > 0 {
+		opts = append(opts, internallifecycle.WithBeforeStopHooks(beforeStop...))
+	}
+	if len(afterStop) > 0 {
+		opts = append(opts, internallifecycle.WithAfterStopHooks(afterStop...))
+	}
+	if len(opts) == 0 {
+		return nil
+	}
+	return a.lifecycle.Init(opts...)
+}
+
+func splitBusinessHooks(
+	hooks []BusinessHook,
+) (
+	[]func(context.Context) error,
+	[]func(context.Context) error,
+	[]func(context.Context) error,
+) {
+	beforeStart := make([]func(context.Context) error, 0, len(hooks))
+	beforeStop := make([]func(context.Context) error, 0, len(hooks))
+	afterStop := make([]func(context.Context) error, 0, len(hooks))
 	for _, hook := range hooks {
 		switch hook.Stage {
 		case BusinessHookBeforeStart:
@@ -684,24 +705,12 @@ func (a *App) installStagedLifecycle(
 			afterStop = append(afterStop, hook.Func)
 		}
 	}
-	if len(beforeStart) > 0 {
-		opts = append(opts, withLifecycleBeforeStartHooks(beforeStart...))
-	}
-	if len(beforeStop) > 0 {
-		opts = append(opts, withLifecycleBeforeStopHooks(beforeStop...))
-	}
-	if len(afterStop) > 0 {
-		opts = append(opts, withLifecycleAfterStopHooks(afterStop...))
-	}
-	if len(opts) == 0 {
-		return nil
-	}
-	return a.lifecycle.Init(opts...)
+	return beforeStart, beforeStop, afterStop
 }
 
 func (s *stagedInstall) rollbackExtensions(extensions []BusinessInstallable) error {
 	var err error
-	for index := len(extensions) - 1; index >= 0; index-- {
+	for index := range slices.Backward(extensions) {
 		item, ok := extensions[index].(BusinessInstallRollback)
 		if !ok {
 			continue

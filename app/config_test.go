@@ -148,7 +148,7 @@ func TestInitWithoutConfigFileLoadsDefaultEnvAndFlagSources(t *testing.T) {
 
 	manager := config.NewManager()
 	opts := &options{configManager: manager}
-	require.NoError(t, initConfigChain(opts))
+	require.NoError(t, initConfigChainWithLogger(opts, bootstrapRuntimeLogger))
 
 	var out struct {
 		Mode   string `mapstructure:"mode"`
@@ -190,7 +190,7 @@ func TestInitLoadsBootstrapConfigSourcesFromEnv(t *testing.T) {
 
 	manager := config.NewManager()
 	opts := &options{configManager: manager}
-	require.NoError(t, initConfigChain(opts))
+	require.NoError(t, initConfigChainWithLogger(opts, bootstrapRuntimeLogger))
 
 	var out struct {
 		Name string `mapstructure:"name"`
@@ -212,7 +212,7 @@ func TestInitLoadsBootstrapConfigSourcesFromFlagAfterEnv(t *testing.T) {
 
 	manager := config.NewManager()
 	opts := &options{configManager: manager}
-	require.NoError(t, initConfigChain(opts))
+	require.NoError(t, initConfigChainWithLogger(opts, bootstrapRuntimeLogger))
 
 	var out struct {
 		Name string `mapstructure:"name"`
@@ -227,7 +227,7 @@ func TestInitExplicitMissingConfigStillFails(t *testing.T) {
 	os.Args = []string{"yggdrasil-test", "--yggdrasil-config=missing.yaml"}
 
 	opts := &options{configManager: config.NewManager()}
-	require.Error(t, initConfigChain(opts))
+	require.Error(t, initConfigChainWithLogger(opts, bootstrapRuntimeLogger))
 }
 
 func TestInitWithConfigFileDoesNotLoadDefaultSources(t *testing.T) {
@@ -243,7 +243,7 @@ func TestInitWithConfigFileDoesNotLoadDefaultSources(t *testing.T) {
 
 	manager := config.NewManager()
 	opts := &options{configManager: manager}
-	require.NoError(t, initConfigChain(opts))
+	require.NoError(t, initConfigChainWithLogger(opts, bootstrapRuntimeLogger))
 
 	var fw struct {
 		Mode string `mapstructure:"mode"`
@@ -260,7 +260,7 @@ func TestInitBootstrapConfigSourcesEnvControlDoesNotPolluteSnapshot(t *testing.T
 
 	manager := config.NewManager()
 	opts := &options{configManager: manager}
-	require.NoError(t, initConfigChain(opts))
+	require.NoError(t, initConfigChainWithLogger(opts, bootstrapRuntimeLogger))
 
 	var fw struct {
 		Mode string `mapstructure:"mode"`
@@ -565,7 +565,7 @@ func TestValidateStartup_DoesNotFailForRuntimeResolvedBindings(t *testing.T) {
 			ct := configtest.New(t)
 			tt.configure(ct)
 			opts := &options{configManager: ct.Manager()}
-			require.NoError(t, validateStartup(opts))
+			require.NoError(t, validateStartupWithLogger(opts, bootstrapRuntimeLogger))
 		})
 	}
 }
@@ -585,7 +585,7 @@ func TestValidateStartup_Strict_FailsOnInvalidTLSSecurityProfileConfig(t *testin
 	)
 
 	opts := &options{configManager: ct.Manager()}
-	require.Error(t, validateStartup(opts))
+	require.Error(t, validateStartupWithLogger(opts, bootstrapRuntimeLogger))
 }
 
 func TestInitializeLocked_FailsWhenDefaultLoggerHandlerBuilderIsMissingAtRuntime(t *testing.T) {

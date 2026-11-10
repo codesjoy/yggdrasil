@@ -24,6 +24,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func resetCacheForTest() {
+	cachedAddr.Store("")
+}
+
 func TestIsWildcard(t *testing.T) {
 	for _, in := range []string{"", " ", "0.0.0.0", "::", "[::]", " 0.0.0.0 "} {
 		assert.True(t, IsWildcard(in), "expected wildcard: %q", in)

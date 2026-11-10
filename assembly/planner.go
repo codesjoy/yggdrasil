@@ -185,7 +185,7 @@ func (p *planner) validateBindings(bindings map[string][]string) error {
 		names := append([]string(nil), bindings[capability]...)
 		sort.Strings(names)
 		for _, name := range names {
-			if err := p.requireProvider(capability, name, ErrUnknownExplicitBinding); err != nil {
+			if err := p.requireProvider(capability, name); err != nil {
 				return err
 			}
 		}
@@ -216,27 +216,7 @@ func (p *planner) buildSpec() *Spec {
 		}
 		spec.Modules = append(spec.Modules, ref)
 	}
-	sort.Slice(
-		spec.Modules,
-		func(i, j int) bool { return spec.Modules[i].Name < spec.Modules[j].Name },
-	)
-	sort.Slice(spec.Decisions, func(i, j int) bool {
-		if spec.Decisions[i].Kind != spec.Decisions[j].Kind {
-			return spec.Decisions[i].Kind < spec.Decisions[j].Kind
-		}
-		if spec.Decisions[i].Target != spec.Decisions[j].Target {
-			return spec.Decisions[i].Target < spec.Decisions[j].Target
-		}
-		if spec.Decisions[i].Source != spec.Decisions[j].Source {
-			return spec.Decisions[i].Source < spec.Decisions[j].Source
-		}
-		if spec.Decisions[i].Value != spec.Decisions[j].Value {
-			return spec.Decisions[i].Value < spec.Decisions[j].Value
-		}
-		if spec.Decisions[i].Reason != spec.Decisions[j].Reason {
-			return spec.Decisions[i].Reason < spec.Decisions[j].Reason
-		}
-		return spec.Decisions[i].Stage < spec.Decisions[j].Stage
-	})
+	sortModuleRefs(spec.Modules)
+	sortDecisions(spec.Decisions)
 	return spec
 }

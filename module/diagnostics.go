@@ -15,6 +15,7 @@
 package module
 
 import (
+	"maps"
 	"reflect"
 	"sort"
 )
@@ -152,7 +153,20 @@ func modulesFromDiagnostics(state diagnosticsState) []ModuleDiag {
 // Diagnostics returns the full diagnostics snapshot.
 func (h *Hub) Diagnostics() Diagnostics {
 	state := h.diagnosticsState()
+	return Diagnostics{
+		Modules:             modulesFromDiagnostics(state),
+		Topology:            moduleNames(state.modules),
+		LastStableTopology:  moduleNames(state.lastStableTopology),
+		StartedModules:      startedModuleNames(state),
+		ReloadState:         state.reloadState,
+		DependencyErrors:    append([]string(nil), state.dependencyErrors...),
+		CapabilityConflicts: append([]string(nil), state.capabilityConflicts...),
+		Capabilities:        capabilityDiagnostics(state),
+		Bindings:            capabilityBindingDiagnostics(state),
+	}
+}
 
+func startedModuleNames(state diagnosticsState) []string {
 	startedModules := make([]string, 0, len(state.started))
 	for _, mod := range state.modules {
 		name := mod.Name()
@@ -161,7 +175,10 @@ func (h *Hub) Diagnostics() Diagnostics {
 		}
 	}
 	sort.Strings(startedModules)
+	return startedModules
+}
 
+func capabilityDiagnostics(state diagnosticsState) []CapabilityDiag {
 	specNames := make([]string, 0, len(state.capabilityBindings))
 	for specName := range state.capabilityBindings {
 		specNames = append(specNames, specName)
@@ -194,6 +211,10 @@ func (h *Hub) Diagnostics() Diagnostics {
 			Conflicts:   capabilityConflictsForSpec(binding.spec.Name, state.capabilityConflicts),
 		})
 	}
+	return capabilityItems
+}
+
+func capabilityBindingDiagnostics(state diagnosticsState) []CapabilityBindingDiag {
 	bindingNames := make(
 		[]string,
 		0,
@@ -250,43 +271,29 @@ func (h *Hub) Diagnostics() Diagnostics {
 			Conflicts: capabilityConflictsForSpec(specName, state.capabilityConflicts),
 		})
 	}
+	return bindingItems
+}
 
-	topology := make([]string, 0, len(state.modules))
-	for _, mod := range state.modules {
-		topology = append(topology, mod.Name())
+func moduleNames(modules []Module) []string {
+	names := make([]string, 0, len(modules))
+	for _, mod := range modules {
+		names = append(names, mod.Name())
 	}
-	lastStable := make([]string, 0, len(state.lastStableTopology))
-	for _, mod := range state.lastStableTopology {
-		lastStable = append(lastStable, mod.Name())
-	}
-
-	return Diagnostics{
-		Modules:             modulesFromDiagnostics(state),
-		Topology:            topology,
-		LastStableTopology:  lastStable,
-		StartedModules:      startedModules,
-		ReloadState:         state.reloadState,
-		DependencyErrors:    append([]string(nil), state.dependencyErrors...),
-		CapabilityConflicts: append([]string(nil), state.capabilityConflicts...),
-		Capabilities:        capabilityItems,
-		Bindings:            bindingItems,
-	}
+	return names
 }
 
 func cloneIntMap(in map[string]int) map[string]int {
-	out := make(map[string]int, len(in))
-	for key, value := range in {
-		out[key] = value
+	if in == nil {
+		return map[string]int{}
 	}
-	return out
+	return maps.Clone(in)
 }
 
 func cloneBoolMap(in map[string]bool) map[string]bool {
-	out := make(map[string]bool, len(in))
-	for key, value := range in {
-		out[key] = value
+	if in == nil {
+		return map[string]bool{}
 	}
-	return out
+	return maps.Clone(in)
 }
 
 // ReloadState returns current hub reload state.

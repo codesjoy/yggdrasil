@@ -58,8 +58,7 @@ type httpClientStream struct {
 	mu     sync.Mutex
 	recvMu sync.Mutex
 
-	reqMarshaler  marshaler.Marshaler
-	respMarshaler marshaler.Marshaler
+	reqMarshaler marshaler.Marshaler
 
 	beginTime  time.Time
 	reqPayload any
@@ -69,7 +68,6 @@ type httpClientStream struct {
 	respRecv        bool
 	responseStarted bool
 	responseReady   bool
-	responseStatus  int
 	responseBody    []byte
 	header          metadata.MD
 	trailer         metadata.MD
@@ -162,11 +160,10 @@ func (cs *httpClientStream) RecvMsg(m interface{}) error {
 		cs.mu.Unlock()
 		return xerror.New(code.Code_FAILED_PRECONDITION, "request not sent")
 	}
-	cs.respMarshaler = cs.configuredInbound
-	if cs.respMarshaler == nil {
-		cs.respMarshaler = marshaler.MarshalerForValue(m)
+	respMarshaler := cs.configuredInbound
+	if respMarshaler == nil {
+		respMarshaler = marshaler.MarshalerForValue(m)
 	}
-	respMarshaler := cs.respMarshaler
 	cs.mu.Unlock()
 
 	if err := cs.ensureResponse(); err != nil {
@@ -194,6 +191,17 @@ func (cs *httpClientStream) RecvMsg(m interface{}) error {
 	if beginTime.IsZero() {
 		beginTime = time.Now()
 	}
+	return cs.decodeResponse(m, respMarshaler, body, ctx, beginTime, statsHandler)
+}
+
+func (cs *httpClientStream) decodeResponse(
+	target any,
+	responseMarshaler marshaler.Marshaler,
+	body []byte,
+	ctx context.Context,
+	beginTime time.Time,
+	statsHandler stats.Handler,
+) error {
 	statsHandler.HandleRPC(ctx, &stats.RPCInPayloadBase{
 		Client:        true,
 		Payload:       nil,
@@ -203,39 +211,39 @@ func (cs *httpClientStream) RecvMsg(m interface{}) error {
 		Protocol:      Protocol,
 	})
 
-	if umErr := respMarshaler.Unmarshal(body, m); umErr != nil {
+	if err := responseMarshaler.Unmarshal(body, target); err != nil {
 		cs.mu.Lock()
-		cs.respErr = umErr
+		cs.respErr = err
 		cs.respRecv = true
 		cs.mu.Unlock()
-		statsHandler.HandleRPC(
-			ctx,
-			&stats.RPCEndBase{
-				Client:    true,
-				BeginTime: beginTime,
-				EndTime:   time.Now(),
-				Err:       umErr,
-				Protocol:  Protocol,
-			},
-		)
-		return umErr
+		handleClientReceiveEnd(ctx, statsHandler, beginTime, err)
+		return err
 	}
 
 	cs.mu.Lock()
 	cs.respErr = nil
 	cs.respRecv = true
 	cs.mu.Unlock()
+	handleClientReceiveEnd(ctx, statsHandler, beginTime, nil)
+	return nil
+}
+
+func handleClientReceiveEnd(
+	ctx context.Context,
+	statsHandler stats.Handler,
+	beginTime time.Time,
+	err error,
+) {
 	statsHandler.HandleRPC(
 		ctx,
 		&stats.RPCEndBase{
 			Client:    true,
 			BeginTime: beginTime,
 			EndTime:   time.Now(),
-			Err:       nil,
+			Err:       err,
 			Protocol:  Protocol,
 		},
 	)
-	return nil
 }
 
 func (cs *httpClientStream) ensureResponse() error {
@@ -272,6 +280,46 @@ func (cs *httpClientStream) ensureResponse() error {
 }
 
 func (cs *httpClientStream) executeResponse() {
+	execution := cs.responseExecution()
+	execution.statsHandler.HandleRPC(execution.ctx, &stats.RPCBeginBase{
+		Client:       true,
+		BeginTime:    execution.beginTime,
+		ClientStream: false,
+		ServerStream: false,
+		Protocol:     Protocol,
+	})
+
+	request, err := execution.newRequest()
+	if err != nil {
+		cs.finishResponse(nil, nil, nil, err, execution.headersReady)
+		return
+	}
+	response, err := execution.httpClient.Do(request)
+	if err != nil {
+		cs.finishResponse(nil, nil, nil, err, execution.headersReady)
+		return
+	}
+	defer response.Body.Close() //nolint:errcheck
+	cs.readResponse(execution, response)
+}
+
+type responseExecution struct {
+	ctx           context.Context
+	method        string
+	endpointAddr  string
+	defaultScheme string
+	httpClient    *http.Client
+	reqMarshaler  marshaler.Marshaler
+	respMarshaler marshaler.Marshaler
+	beginTime     time.Time
+	reqPayload    any
+	reqBytes      []byte
+	outMD         metadata.MD
+	statsHandler  stats.Handler
+	headersReady  chan struct{}
+}
+
+func (cs *httpClientStream) responseExecution() responseExecution {
 	cs.mu.Lock()
 	reqBytes := append([]byte(nil), cs.reqBytes...)
 	reqMarshaler := cs.reqMarshaler
@@ -297,17 +345,27 @@ func (cs *httpClientStream) executeResponse() {
 	if beginTime.IsZero() {
 		beginTime = time.Now()
 	}
-	statsHandler.HandleRPC(ctx, &stats.RPCBeginBase{
-		Client:       true,
-		BeginTime:    beginTime,
-		ClientStream: false,
-		ServerStream: false,
-		Protocol:     Protocol,
-	})
+	return responseExecution{
+		ctx:           ctx,
+		method:        method,
+		endpointAddr:  endpointAddr,
+		defaultScheme: defaultScheme,
+		httpClient:    hc,
+		reqMarshaler:  reqMarshaler,
+		respMarshaler: respMarshaler,
+		beginTime:     beginTime,
+		reqPayload:    reqPayload,
+		reqBytes:      reqBytes,
+		outMD:         outMD,
+		statsHandler:  statsHandler,
+		headersReady:  ch,
+	}
+}
 
-	url := endpointAddr
+func (execution responseExecution) newRequest() (*http.Request, error) {
+	url := execution.endpointAddr
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-		scheme := defaultScheme
+		scheme := execution.defaultScheme
 		if scheme == "" {
 			scheme = "http"
 		}
@@ -315,80 +373,87 @@ func (cs *httpClientStream) executeResponse() {
 	} else {
 		url = strings.TrimSuffix(url, "/")
 	}
-	url += method
+	url += execution.method
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBytes))
+	req, err := http.NewRequestWithContext(
+		execution.ctx,
+		http.MethodPost,
+		url,
+		bytes.NewReader(execution.reqBytes),
+	)
 	if err != nil {
-		cs.finishResponse(nil, nil, http.StatusInternalServerError, nil, err, ch)
-		return
+		return nil, err
 	}
-	req.Header.Set("Content-Type", reqMarshaler.ContentType(nil))
-	req.Header.Set("Accept", respMarshaler.ContentType(nil))
+	req.Header.Set("Content-Type", execution.reqMarshaler.ContentType(nil))
+	req.Header.Set("Accept", execution.respMarshaler.ContentType(nil))
 	req.Header.Set("TE", "trailers")
-	for key, values := range outMD {
+	for key, values := range execution.outMD {
 		for _, value := range values {
 			req.Header.Add(MetadataHeaderPrefix+key, value)
 		}
 	}
 
-	statsHandler.HandleRPC(ctx, &stats.OutHeaderBase{
+	execution.statsHandler.HandleRPC(execution.ctx, &stats.OutHeaderBase{
 		Client:         true,
-		Header:         outMD,
-		FullMethod:     method,
-		RemoteEndpoint: endpointAddr,
+		Header:         execution.outMD,
+		FullMethod:     execution.method,
+		RemoteEndpoint: execution.endpointAddr,
 		Protocol:       Protocol,
 	})
-	statsHandler.HandleRPC(ctx, &stats.RPCOutPayloadBase{
+	execution.statsHandler.HandleRPC(execution.ctx, &stats.RPCOutPayloadBase{
 		Client:        true,
-		Payload:       reqPayload,
-		Data:          reqBytes,
-		TransportSize: len(reqBytes),
+		Payload:       execution.reqPayload,
+		Data:          execution.reqBytes,
+		TransportSize: len(execution.reqBytes),
 		SendTime:      time.Now(),
 		Protocol:      Protocol,
 	})
+	return req, nil
+}
 
-	resp, err := hc.Do(req)
-	if err != nil {
-		cs.finishResponse(nil, nil, 0, nil, err, ch)
-		return
-	}
-	defer resp.Body.Close() //nolint:errcheck
-
+func (cs *httpClientStream) readResponse(
+	execution responseExecution,
+	resp *http.Response,
+) {
 	headerMD := extractMetadataWithPrefix(resp.Header, MetadataHeaderPrefix)
-	body, readErr := io.ReadAll(resp.Body)
-	if readErr != nil {
-		cs.finishResponse(headerMD, nil, resp.StatusCode, nil, readErr, ch)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		cs.finishResponse(headerMD, nil, nil, err, execution.headersReady)
 		return
 	}
 	trailerMD := extractMetadataWithPrefix(resp.Trailer, MetadataTrailerPrefix)
-	if resp.StatusCode != http.StatusOK {
-		var pb stpb.Status
-		unmarshalErr := respMarshaler.Unmarshal(body, &pb)
-		if unmarshalErr != nil || pb.Code == int32(code.Code_OK) {
-			err = xerror.New(
-				status.HTTPCodeToStuCode(int32(resp.StatusCode)),
-				fmt.Sprintf("http status %d %s", resp.StatusCode, http.StatusText(resp.StatusCode)),
-			)
-		} else {
-			err = status.FromProto(&pb).Err()
-		}
-		cs.finishResponse(headerMD, trailerMD, resp.StatusCode, nil, err, ch)
-		statsHandler.HandleRPC(ctx, &stats.RPCEndBase{
+	if err = execution.statusError(resp.StatusCode, body); err != nil {
+		cs.finishResponse(headerMD, trailerMD, nil, err, execution.headersReady)
+		execution.statsHandler.HandleRPC(execution.ctx, &stats.RPCEndBase{
 			Client:    true,
-			BeginTime: beginTime,
+			BeginTime: execution.beginTime,
 			EndTime:   time.Now(),
 			Err:       err,
 			Protocol:  Protocol,
 		})
 		return
 	}
-	cs.finishResponse(headerMD, trailerMD, resp.StatusCode, body, nil, ch)
+	cs.finishResponse(headerMD, trailerMD, body, nil, execution.headersReady)
+}
+
+func (execution responseExecution) statusError(statusCode int, body []byte) error {
+	if statusCode == http.StatusOK {
+		return nil
+	}
+	var pb stpb.Status
+	unmarshalErr := execution.respMarshaler.Unmarshal(body, &pb)
+	if unmarshalErr != nil || pb.Code == int32(code.Code_OK) {
+		return xerror.New(
+			status.HTTPCodeToStuCode(int32(statusCode)),
+			fmt.Sprintf("http status %d %s", statusCode, http.StatusText(statusCode)),
+		)
+	}
+	return status.FromProto(&pb).Err()
 }
 
 func (cs *httpClientStream) finishResponse(
 	h metadata.MD,
 	t metadata.MD,
-	statusCode int,
 	body []byte,
 	err error,
 	ch chan struct{},
@@ -397,7 +462,6 @@ func (cs *httpClientStream) finishResponse(
 	defer cs.mu.Unlock()
 	cs.header = h
 	cs.trailer = t
-	cs.responseStatus = statusCode
 	cs.responseBody = append([]byte(nil), body...)
 	cs.respErr = err
 	cs.responseReady = true
@@ -408,13 +472,6 @@ func (cs *httpClientStream) finishResponse(
 			close(ch)
 		}
 	}
-}
-
-func (cs *httpClientStream) finish(h, t metadata.MD, err error, ch chan struct{}) {
-	cs.finishResponse(h, t, http.StatusOK, nil, err, ch)
-	cs.mu.Lock()
-	cs.respRecv = true
-	cs.mu.Unlock()
 }
 
 type httpServerStream struct {
@@ -535,131 +592,110 @@ func (ss *httpServerStream) Finish(reply any, err error) {
 		TransportSize: 0,
 	})
 
-	doTrailers := requestAcceptsTrailers(req)
-	if doTrailers && trMD.Len() > 0 {
-		declareTrailers(w, trMD)
-		w.Header().Del("Content-Length")
-	}
-
+	forwardTrailers := prepareServerTrailers(w, req, trMD)
+	endErr := err
 	if err != nil {
-		st := status.FromError(err)
-		pb := st.Status()
-		buf, mErr := outbound.Marshal(pb)
-		if mErr != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte(`{"code":13,"message":"failed to marshal error message"}`))
+		if !writeServerError(ss.ctx, w, statsHandler, outbound, err) {
 			return
 		}
-		w.Header().Set("Content-Type", outbound.ContentType(pb))
-		if st.IsCode(code.Code_UNAUTHENTICATED) {
-			w.Header().Set("WWW-Authenticate", st.Message())
-		}
-		w.WriteHeader(int(st.HTTPCode()))
-		_, _ = w.Write(buf)
-		statsHandler.HandleRPC(ss.ctx, &stats.RPCOutPayloadBase{
-			Client:        false,
-			Payload:       pb,
-			Data:          buf,
-			TransportSize: len(buf),
-			SendTime:      time.Now(),
-			Protocol:      Protocol,
-		})
-		if doTrailers && trMD.Len() > 0 {
-			writeTrailers(w, trMD)
-			statsHandler.HandleRPC(ss.ctx, &stats.OutTrailerBase{Client: false, Trailer: trMD})
-		}
-		statsHandler.HandleRPC(
-			ss.ctx,
-			&stats.RPCEndBase{
-				Client:    false,
-				BeginTime: beginTime,
-				EndTime:   time.Now(),
-				Err:       err,
-				Protocol:  Protocol,
-			},
-		)
-		return
+	} else {
+		endErr = writeServerReply(ss.ctx, w, statsHandler, outbound, reply)
 	}
 
-	if reply == nil {
-		w.WriteHeader(http.StatusOK)
-		if doTrailers && trMD.Len() > 0 {
-			writeTrailers(w, trMD)
-			statsHandler.HandleRPC(ss.ctx, &stats.OutTrailerBase{Client: false, Trailer: trMD})
-		}
-		statsHandler.HandleRPC(
-			ss.ctx,
-			&stats.RPCEndBase{
-				Client:    false,
-				BeginTime: beginTime,
-				EndTime:   time.Now(),
-				Err:       nil,
-				Protocol:  Protocol,
-			},
-		)
-		return
-	}
-
-	if pm, ok := reply.(proto.Message); ok {
-		w.Header().Set("Content-Type", outbound.ContentType(pm))
-	}
-	buf, mErr := outbound.Marshal(reply)
-	if mErr != nil {
-		st := status.FromError(mErr)
-		pb := st.Status()
-		w.Header().Set("Content-Type", outbound.ContentType(pb))
-		w.WriteHeader(int(st.HTTPCode()))
-		if b, e2 := outbound.Marshal(pb); e2 == nil {
-			_, _ = w.Write(b)
-			statsHandler.HandleRPC(ss.ctx, &stats.RPCOutPayloadBase{
-				Client:        false,
-				Payload:       pb,
-				Data:          b,
-				TransportSize: len(b),
-				SendTime:      time.Now(),
-				Protocol:      Protocol,
-			})
-		}
-		if doTrailers && trMD.Len() > 0 {
-			writeTrailers(w, trMD)
-			statsHandler.HandleRPC(ss.ctx, &stats.OutTrailerBase{Client: false, Trailer: trMD})
-		}
-		statsHandler.HandleRPC(
-			ss.ctx,
-			&stats.RPCEndBase{
-				Client:    false,
-				BeginTime: beginTime,
-				EndTime:   time.Now(),
-				Err:       mErr,
-				Protocol:  Protocol,
-			},
-		)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(buf)
-	statsHandler.HandleRPC(ss.ctx, &stats.RPCOutPayloadBase{
-		Client:        false,
-		Payload:       reply,
-		Data:          buf,
-		TransportSize: len(buf),
-		SendTime:      time.Now(),
-		Protocol:      Protocol,
-	})
-	if doTrailers && trMD.Len() > 0 {
+	if forwardTrailers {
 		writeTrailers(w, trMD)
 		statsHandler.HandleRPC(ss.ctx, &stats.OutTrailerBase{Client: false, Trailer: trMD})
 	}
-	statsHandler.HandleRPC(
-		ss.ctx,
-		&stats.RPCEndBase{
-			Client:    false,
-			BeginTime: beginTime,
-			EndTime:   time.Now(),
-			Err:       nil,
-			Protocol:  Protocol,
-		},
-	)
+	statsHandler.HandleRPC(ss.ctx, &stats.RPCEndBase{
+		Client:    false,
+		BeginTime: beginTime,
+		EndTime:   time.Now(),
+		Err:       endErr,
+		Protocol:  Protocol,
+	})
+}
+
+func prepareServerTrailers(w http.ResponseWriter, req *http.Request, trailer metadata.MD) bool {
+	if !requestAcceptsTrailers(req) || trailer.Len() == 0 {
+		return false
+	}
+	declareTrailers(w, trailer)
+	w.Header().Del("Content-Length")
+	return true
+}
+
+func writeServerError(
+	ctx context.Context,
+	w http.ResponseWriter,
+	statsHandler stats.Handler,
+	outbound marshaler.Marshaler,
+	err error,
+) bool {
+	st := status.FromError(err)
+	pb := st.Status()
+	body, marshalErr := outbound.Marshal(pb)
+	if marshalErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"code":13,"message":"failed to marshal error message"}`))
+		return false
+	}
+	w.Header().Set("Content-Type", outbound.ContentType(pb))
+	if st.IsCode(code.Code_UNAUTHENTICATED) {
+		w.Header().Set("WWW-Authenticate", st.Message())
+	}
+	w.WriteHeader(int(st.HTTPCode()))
+	_, _ = w.Write(body)
+	emitServerPayload(ctx, statsHandler, pb, body)
+	return true
+}
+
+func writeServerReply(
+	ctx context.Context,
+	w http.ResponseWriter,
+	statsHandler stats.Handler,
+	outbound marshaler.Marshaler,
+	reply any,
+) error {
+	if reply == nil {
+		w.WriteHeader(http.StatusOK)
+		return nil
+	}
+	if message, ok := reply.(proto.Message); ok {
+		w.Header().Set("Content-Type", outbound.ContentType(message))
+	}
+	body, err := outbound.Marshal(reply)
+	if err == nil {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(body)
+		emitServerPayload(ctx, statsHandler, reply, body)
+		return nil
+	}
+
+	responseStatus := status.FromError(err)
+	errorStatus := responseStatus.Status()
+	w.Header().Set("Content-Type", outbound.ContentType(errorStatus))
+	w.WriteHeader(int(responseStatus.HTTPCode()))
+	if body, marshalErr := outbound.Marshal(errorStatus); marshalErr == nil {
+		_, _ = w.Write(body)
+		emitServerPayload(ctx, statsHandler, errorStatus, body)
+	}
+	return err
+}
+
+func emitServerPayload(
+	ctx context.Context,
+	statsHandler stats.Handler,
+	payload any,
+	body []byte,
+) {
+	statsHandler.HandleRPC(ctx, &stats.RPCOutPayloadBase{
+		Client:        false,
+		Payload:       payload,
+		Data:          body,
+		TransportSize: len(body),
+		SendTime:      time.Now(),
+		Protocol:      Protocol,
+	})
 }
 
 func (ss *httpServerStream) SetHeader(md metadata.MD) error {

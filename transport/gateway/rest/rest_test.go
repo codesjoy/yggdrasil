@@ -536,18 +536,15 @@ func TestServeMux_OutgoingHeaderMatcher(t *testing.T) {
 	}
 
 	// Matching key
-	h, ok := mux.outgoingHeaderMatcher("X-Custom")
-	assert.True(t, ok)
+	h := mux.outgoingHeaderMatcher("X-Custom")
 	assert.Equal(t, "X-Custom", h)
 
 	// Another matching key
-	h, ok = mux.outgoingHeaderMatcher("Authorization")
-	assert.True(t, ok)
+	h = mux.outgoingHeaderMatcher("Authorization")
 	assert.Equal(t, "Authorization", h)
 
 	// Non-matching key gets prefixed
-	h, ok = mux.outgoingHeaderMatcher("Trace-Id")
-	assert.True(t, ok)
+	h = mux.outgoingHeaderMatcher("Trace-Id")
 	assert.Equal(t, MetadataHeaderPrefix+"Trace-Id", h)
 }
 
@@ -557,13 +554,11 @@ func TestServeMux_OutgoingTrailerMatcher(t *testing.T) {
 	}
 
 	// Matching key
-	h, ok := mux.outgoingTrailerMatcher("X-Grpc-Status")
-	assert.True(t, ok)
+	h := mux.outgoingTrailerMatcher("X-Grpc-Status")
 	assert.Equal(t, "X-Grpc-Status", h)
 
 	// Non-matching key gets trailer prefix
-	h, ok = mux.outgoingTrailerMatcher("Custom-Trailer")
-	assert.True(t, ok)
+	h = mux.outgoingTrailerMatcher("Custom-Trailer")
 	assert.Equal(t, MetadataTrailerPrefix+"Custom-Trailer", h)
 }
 

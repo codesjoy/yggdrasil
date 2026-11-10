@@ -60,87 +60,111 @@ func (s *cloneState) normalize(value reflect.Value) reflect.Value {
 
 	switch value.Kind() {
 	case reflect.Interface:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		cloned := s.normalize(value.Elem())
-		out := reflect.New(value.Type()).Elem()
-		out.Set(cloned)
-		return out
+		return s.normalizeInterface(value)
 	case reflect.Pointer:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		key := objectKey(value)
-		if cloned, ok := s.objects[key]; ok {
-			return cloned
-		}
-		out := reflect.New(value.Type().Elem())
-		s.objects[key] = out
-		out.Elem().Set(s.normalize(value.Elem()))
-		return out
+		return s.normalizePointer(value)
 	case reflect.Map:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		key := objectKey(value)
-		if cloned, ok := s.objects[key]; ok {
-			return cloned
-		}
-		outType := value.Type()
-		if value.Type() == reflect.TypeOf(map[any]any{}) {
-			outType = reflect.TypeOf(map[string]any{})
-		}
-		out := reflect.MakeMapWithSize(outType, value.Len())
-		s.objects[key] = out
-		iter := value.MapRange()
-		for iter.Next() {
-			if value.Type() == reflect.TypeOf(map[any]any{}) {
-				out.SetMapIndex(
-					reflect.ValueOf(fmt.Sprintf("%v", iter.Key().Interface())),
-					s.normalize(iter.Value()),
-				)
-				continue
-			}
-			out.SetMapIndex(
-				s.normalize(iter.Key()),
-				s.normalize(iter.Value()),
-			)
-		}
-		return out
+		return s.normalizeMap(value)
 	case reflect.Slice:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		key := objectKey(value)
-		if cloned, ok := s.objects[key]; ok {
-			return cloned
-		}
-		out := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
-		s.objects[key] = out
-		for index := 0; index < value.Len(); index++ {
-			out.Index(index).Set(s.normalize(value.Index(index)))
-		}
-		return out
+		return s.normalizeSlice(value)
 	case reflect.Array:
-		out := reflect.New(value.Type()).Elem()
-		for index := 0; index < value.Len(); index++ {
-			out.Index(index).Set(s.normalize(value.Index(index)))
-		}
-		return out
+		return s.normalizeArray(value)
 	case reflect.Struct:
-		out := reflect.New(value.Type()).Elem()
-		source := reflect.New(value.Type()).Elem()
-		source.Set(value)
-		out.Set(source)
-		for index := 0; index < value.NumField(); index++ {
-			sourceField := writableField(source.Field(index))
-			writableField(out.Field(index)).Set(s.normalize(sourceField))
-		}
-		return out
+		return s.normalizeStruct(value)
 	default:
 		return value
 	}
+}
+
+func (s *cloneState) normalizeInterface(value reflect.Value) reflect.Value {
+	if value.IsNil() {
+		return reflect.Zero(value.Type())
+	}
+	cloned := s.normalize(value.Elem())
+	out := reflect.New(value.Type()).Elem()
+	out.Set(cloned)
+	return out
+}
+
+func (s *cloneState) normalizePointer(value reflect.Value) reflect.Value {
+	if value.IsNil() {
+		return reflect.Zero(value.Type())
+	}
+	key := objectKey(value)
+	if cloned, ok := s.objects[key]; ok {
+		return cloned
+	}
+	out := reflect.New(value.Type().Elem())
+	s.objects[key] = out
+	out.Elem().Set(s.normalize(value.Elem()))
+	return out
+}
+
+func (s *cloneState) normalizeMap(value reflect.Value) reflect.Value {
+	if value.IsNil() {
+		return reflect.Zero(value.Type())
+	}
+	key := objectKey(value)
+	if cloned, ok := s.objects[key]; ok {
+		return cloned
+	}
+	outType := value.Type()
+	if value.Type() == reflect.TypeOf(map[any]any{}) {
+		outType = reflect.TypeOf(map[string]any{})
+	}
+	out := reflect.MakeMapWithSize(outType, value.Len())
+	s.objects[key] = out
+	iter := value.MapRange()
+	for iter.Next() {
+		if value.Type() == reflect.TypeOf(map[any]any{}) {
+			out.SetMapIndex(
+				reflect.ValueOf(fmt.Sprintf("%v", iter.Key().Interface())),
+				s.normalize(iter.Value()),
+			)
+			continue
+		}
+		out.SetMapIndex(
+			s.normalize(iter.Key()),
+			s.normalize(iter.Value()),
+		)
+	}
+	return out
+}
+
+func (s *cloneState) normalizeSlice(value reflect.Value) reflect.Value {
+	if value.IsNil() {
+		return reflect.Zero(value.Type())
+	}
+	key := objectKey(value)
+	if cloned, ok := s.objects[key]; ok {
+		return cloned
+	}
+	out := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
+	s.objects[key] = out
+	for index := 0; index < value.Len(); index++ {
+		out.Index(index).Set(s.normalize(value.Index(index)))
+	}
+	return out
+}
+
+func (s *cloneState) normalizeArray(value reflect.Value) reflect.Value {
+	out := reflect.New(value.Type()).Elem()
+	for index := 0; index < value.Len(); index++ {
+		out.Index(index).Set(s.normalize(value.Index(index)))
+	}
+	return out
+}
+
+func (s *cloneState) normalizeStruct(value reflect.Value) reflect.Value {
+	out := reflect.New(value.Type()).Elem()
+	source := reflect.New(value.Type()).Elem()
+	source.Set(value)
+	out.Set(source)
+	for index := 0; index < value.NumField(); index++ {
+		sourceField := writableField(source.Field(index))
+		writableField(out.Field(index)).Set(s.normalize(sourceField))
+	}
+	return out
 }
 
 func objectKey(value reflect.Value) cloneKey {

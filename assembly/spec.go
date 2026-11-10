@@ -17,10 +17,12 @@
 package assembly
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -235,9 +237,28 @@ func Hash(spec *Spec) (string, error) {
 func Diff(oldSpec, newSpec *Spec) (*SpecDiff, error) {
 	oldCanonical := toCanonicalSpec(oldSpec)
 	newCanonical := toCanonicalSpec(newSpec)
+	diff := buildSpecDiff(oldCanonical, newCanonical)
+	if err := validateSpecDiff(oldSpec, newSpec, diff); err != nil {
+		return nil, err
+	}
+	return diff, nil
+}
+
+func buildSpecDiff(oldCanonical, newCanonical canonicalSpec) *SpecDiff {
 	diff := &SpecDiff{}
 	domains := map[string]struct{}{}
+	diffSpecMetadata(diff, oldCanonical, newCanonical, domains)
+	diffSpecDiagnostics(diff, oldCanonical, newCanonical, domains)
+	diff.HasChanges = specDiffHasChanges(diff)
+	diff.AffectedDomains = sortedKeys(domains)
+	return diff
+}
 
+func diffSpecMetadata(
+	diff *SpecDiff,
+	oldCanonical, newCanonical canonicalSpec,
+	domains map[string]struct{},
+) {
 	if oldCanonical.Mode != newCanonical.Mode {
 		diff.Mode = &ValueDiffEntry{
 			Target: "mode",
@@ -247,7 +268,7 @@ func Diff(oldSpec, newSpec *Spec) (*SpecDiff, error) {
 		domains["mode"] = struct{}{}
 	}
 
-	diff.Identity = diffStringMaps(
+	diff.Identity = diffValueSets(
 		identityDiffMap(oldCanonical.Identity),
 		identityDiffMap(newCanonical.Identity),
 	)
@@ -255,118 +276,39 @@ func Diff(oldSpec, newSpec *Spec) (*SpecDiff, error) {
 		domains["identity"] = struct{}{}
 	}
 
-	oldModules := make(map[string]ModuleRef, len(oldCanonical.Modules))
-	newModules := make(map[string]ModuleRef, len(newCanonical.Modules))
-	for _, item := range oldCanonical.Modules {
-		oldModules[item.Name] = item
-	}
-	for _, item := range newCanonical.Modules {
-		newModules[item.Name] = item
-	}
-	for name, item := range oldModules {
-		if _, ok := newModules[name]; !ok {
-			diff.Modules = append(diff.Modules, ModuleDiffEntry{
-				Name:    item.Name,
-				Kind:    item.Kind,
-				Source:  item.Source,
-				Action:  "removed",
-				Reasons: append([]string(nil), item.Reasons...),
-			})
-		}
-	}
-	for name, item := range newModules {
-		if _, ok := oldModules[name]; !ok {
-			diff.Modules = append(diff.Modules, ModuleDiffEntry{
-				Name:    item.Name,
-				Kind:    item.Kind,
-				Source:  item.Source,
-				Action:  "added",
-				Reasons: append([]string(nil), item.Reasons...),
-			})
-		}
-	}
-	for name, oldItem := range oldModules {
-		newItem, ok := newModules[name]
-		if !ok || stringSlicesEqual(oldItem.Reasons, newItem.Reasons) {
-			continue
-		}
-		diff.ModuleReasons = append(diff.ModuleReasons, ModuleReasonDiffEntry{
-			Name: name,
-			Old:  append([]string(nil), oldItem.Reasons...),
-			New:  append([]string(nil), newItem.Reasons...),
-		})
-	}
+	diffModules(diff, oldCanonical.Modules, newCanonical.Modules)
 	if len(diff.Modules) > 0 {
 		domains["modules"] = struct{}{}
 	}
 	if len(diff.ModuleReasons) > 0 {
 		domains["module_reasons"] = struct{}{}
 	}
-	sort.Slice(
-		diff.Modules,
-		func(i, j int) bool { return diff.Modules[i].Name < diff.Modules[j].Name },
-	)
-	sort.Slice(
-		diff.ModuleReasons,
-		func(i, j int) bool { return diff.ModuleReasons[i].Name < diff.ModuleReasons[j].Name },
-	)
 
 	oldDefaults := canonicalKVMap(oldCanonical.Defaults)
 	newDefaults := canonicalKVMap(newCanonical.Defaults)
-	for _, key := range unionKeys(oldDefaults, newDefaults) {
-		if oldDefaults[key] == newDefaults[key] {
-			continue
-		}
-		diff.Defaults = append(diff.Defaults, ValueDiffEntry{
-			Target: key,
-			Old:    oldDefaults[key],
-			New:    newDefaults[key],
-		})
-	}
+	diff.Defaults = diffValueSets(oldDefaults, newDefaults)
 	if len(diff.Defaults) > 0 {
 		domains["defaults"] = struct{}{}
 	}
 
-	oldChains := canonicalChainMap(oldCanonical.Chains)
-	newChains := canonicalChainMap(newCanonical.Chains)
-	for _, key := range unionKeys(oldChains, newChains) {
-		if chainsEqual(oldChains[key], newChains[key]) {
-			continue
-		}
-		diff.Chains = append(diff.Chains, ChainDiffEntry{
-			Target: key,
-			Old: Chain{
-				Template: oldChains[key].Template,
-				Version:  oldChains[key].Version,
-				Items:    append([]string(nil), oldChains[key].Items...),
-			},
-			New: Chain{
-				Template: newChains[key].Template,
-				Version:  newChains[key].Version,
-				Items:    append([]string(nil), newChains[key].Items...),
-			},
-		})
-	}
+	diffChains(diff, oldCanonical.Chains, newCanonical.Chains)
 	if len(diff.Chains) > 0 {
 		domains["chains"] = struct{}{}
 	}
 
 	oldOverrides := overrideDecisions(oldCanonical.Decisions)
 	newOverrides := overrideDecisions(newCanonical.Decisions)
-	for _, key := range unionKeys(oldOverrides, newOverrides) {
-		if oldOverrides[key] == newOverrides[key] {
-			continue
-		}
-		diff.Overrides = append(diff.Overrides, ValueDiffEntry{
-			Target: key,
-			Old:    oldOverrides[key],
-			New:    newOverrides[key],
-		})
-	}
+	diff.Overrides = diffValueSets(oldOverrides, newOverrides)
 	if len(diff.Overrides) > 0 {
 		domains["overrides"] = struct{}{}
 	}
+}
 
+func diffSpecDiagnostics(
+	diff *SpecDiff,
+	oldCanonical, newCanonical canonicalSpec,
+	domains map[string]struct{},
+) {
 	diff.Decisions = diffValueSets(
 		decisionDiffMap(oldCanonical.Decisions),
 		decisionDiffMap(newCanonical.Decisions),
@@ -390,8 +332,73 @@ func Diff(oldSpec, newSpec *Spec) (*SpecDiff, error) {
 	if len(diff.Conflicts) > 0 {
 		domains["conflicts"] = struct{}{}
 	}
+}
 
-	diff.HasChanges = diff.Mode != nil ||
+func diffModules(diff *SpecDiff, oldModules, newModules []ModuleRef) {
+	oldByName := make(map[string]ModuleRef, len(oldModules))
+	newByName := make(map[string]ModuleRef, len(newModules))
+	for _, item := range oldModules {
+		oldByName[item.Name] = item
+	}
+	for _, item := range newModules {
+		newByName[item.Name] = item
+	}
+	for name, item := range oldByName {
+		if _, ok := newByName[name]; !ok {
+			diff.Modules = append(diff.Modules, newModuleDiffEntry(item, "removed"))
+		}
+	}
+	for name, item := range newByName {
+		if _, ok := oldByName[name]; !ok {
+			diff.Modules = append(diff.Modules, newModuleDiffEntry(item, "added"))
+		}
+	}
+	for name, oldItem := range oldByName {
+		newItem, ok := newByName[name]
+		if !ok || slices.Equal(oldItem.Reasons, newItem.Reasons) {
+			continue
+		}
+		diff.ModuleReasons = append(diff.ModuleReasons, ModuleReasonDiffEntry{
+			Name: name,
+			Old:  append([]string(nil), oldItem.Reasons...),
+			New:  append([]string(nil), newItem.Reasons...),
+		})
+	}
+	slices.SortFunc(diff.Modules, func(left, right ModuleDiffEntry) int {
+		return cmp.Compare(left.Name, right.Name)
+	})
+	slices.SortFunc(diff.ModuleReasons, func(left, right ModuleReasonDiffEntry) int {
+		return cmp.Compare(left.Name, right.Name)
+	})
+}
+
+func newModuleDiffEntry(item ModuleRef, action string) ModuleDiffEntry {
+	return ModuleDiffEntry{
+		Name:    item.Name,
+		Kind:    item.Kind,
+		Source:  item.Source,
+		Action:  action,
+		Reasons: append([]string(nil), item.Reasons...),
+	}
+}
+
+func diffChains(diff *SpecDiff, oldItems, newItems []canonicalChain) {
+	oldChains := canonicalChainMap(oldItems)
+	newChains := canonicalChainMap(newItems)
+	for _, key := range unionKeys(oldChains, newChains) {
+		if chainsEqual(oldChains[key], newChains[key]) {
+			continue
+		}
+		diff.Chains = append(diff.Chains, ChainDiffEntry{
+			Target: key,
+			Old:    oldChains[key].chain(),
+			New:    newChains[key].chain(),
+		})
+	}
+}
+
+func specDiffHasChanges(diff *SpecDiff) bool {
+	return diff.Mode != nil ||
 		len(diff.Modules) > 0 ||
 		len(diff.ModuleReasons) > 0 ||
 		len(diff.Identity) > 0 ||
@@ -401,18 +408,19 @@ func Diff(oldSpec, newSpec *Spec) (*SpecDiff, error) {
 		len(diff.Decisions) > 0 ||
 		len(diff.Warnings) > 0 ||
 		len(diff.Conflicts) > 0
-	diff.AffectedDomains = unionKeys(domains, map[string]struct{}{})
+}
 
+func validateSpecDiff(oldSpec, newSpec *Spec, diff *SpecDiff) error {
 	oldHash, err := Hash(oldSpec)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	newHash, err := Hash(newSpec)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if oldHash == newHash && diff.HasChanges {
-		return nil, NewError(
+		return NewError(
 			ErrPlanDiffInconsistent,
 			stagePlan,
 			"plan diff reports changes but canonical hashes are equal",
@@ -421,7 +429,7 @@ func Diff(oldSpec, newSpec *Spec) (*SpecDiff, error) {
 		)
 	}
 	if oldHash != newHash && !diff.HasChanges {
-		return nil, NewError(
+		return NewError(
 			ErrPlanDiffInconsistent,
 			stagePlan,
 			"plan diff reports no changes but canonical hashes differ",
@@ -429,19 +437,7 @@ func Diff(oldSpec, newSpec *Spec) (*SpecDiff, error) {
 			map[string]string{"old_hash": oldHash, "new_hash": newHash},
 		)
 	}
-	return diff, nil
-}
-
-func stringSlicesEqual(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index] != right[index] {
-			return false
-		}
-	}
-	return true
+	return nil
 }
 
 func identityDiffMap(identity IdentitySpec) map[string]string {
@@ -458,39 +454,27 @@ func identityDiffMap(identity IdentitySpec) map[string]string {
 }
 
 func decisionDiffMap(decisions []Decision) map[string]string {
-	out := make(map[string]string, len(decisions))
-	occurrences := make(map[string]int, len(decisions))
-	for _, item := range decisions {
-		base := strings.Join(
+	return indexedDiffMap(decisions, func(item Decision) string {
+		return strings.Join(
 			[]string{item.Kind, item.Target, item.Source, item.Stage},
 			"\x00",
 		)
-		value, _ := json.Marshal(item)
-		key := indexedValueKey(base, occurrences[base])
-		occurrences[base]++
-		out[key] = string(value)
-	}
-	return out
+	})
 }
 
 func warningDiffMap(warnings []Warning) map[string]string {
-	out := make(map[string]string, len(warnings))
-	occurrences := make(map[string]int, len(warnings))
-	for _, item := range warnings {
-		base := item.Code
-		value, _ := json.Marshal(item)
-		key := indexedValueKey(base, occurrences[base])
-		occurrences[base]++
-		out[key] = string(value)
-	}
-	return out
+	return indexedDiffMap(warnings, func(item Warning) string { return item.Code })
 }
 
 func conflictDiffMap(conflicts []Conflict) map[string]string {
-	out := make(map[string]string, len(conflicts))
-	occurrences := make(map[string]int, len(conflicts))
-	for _, item := range conflicts {
-		base := item.Code
+	return indexedDiffMap(conflicts, func(item Conflict) string { return item.Code })
+}
+
+func indexedDiffMap[T any](items []T, baseKey func(T) string) map[string]string {
+	out := make(map[string]string, len(items))
+	occurrences := make(map[string]int, len(items))
+	for _, item := range items {
+		base := baseKey(item)
 		value, _ := json.Marshal(item)
 		key := indexedValueKey(base, occurrences[base])
 		occurrences[base]++
@@ -504,10 +488,6 @@ func indexedValueKey(base string, occurrence int) string {
 		return base
 	}
 	return fmt.Sprintf("%s#%d", base, occurrence+1)
-}
-
-func diffStringMaps(oldValues, newValues map[string]string) []ValueDiffEntry {
-	return diffValueSets(oldValues, newValues)
 }
 
 func diffValueSets(oldValues, newValues map[string]string) []ValueDiffEntry {
@@ -540,47 +520,16 @@ func toCanonicalSpec(spec *Spec) canonicalSpec {
 		Warnings:  append([]Warning(nil), spec.Warnings...),
 		Conflicts: append([]Conflict(nil), spec.Conflicts...),
 	}
-	sort.Slice(
-		out.Modules,
-		func(i, j int) bool { return out.Modules[i].Name < out.Modules[j].Name },
-	)
-	sort.Slice(out.Decisions, func(i, j int) bool {
-		if out.Decisions[i].Kind != out.Decisions[j].Kind {
-			return out.Decisions[i].Kind < out.Decisions[j].Kind
-		}
-		if out.Decisions[i].Target != out.Decisions[j].Target {
-			return out.Decisions[i].Target < out.Decisions[j].Target
-		}
-		if out.Decisions[i].Source != out.Decisions[j].Source {
-			return out.Decisions[i].Source < out.Decisions[j].Source
-		}
-		if out.Decisions[i].Value != out.Decisions[j].Value {
-			return out.Decisions[i].Value < out.Decisions[j].Value
-		}
-		if out.Decisions[i].Reason != out.Decisions[j].Reason {
-			return out.Decisions[i].Reason < out.Decisions[j].Reason
-		}
-		return out.Decisions[i].Stage < out.Decisions[j].Stage
-	})
-	sort.Slice(out.Warnings, func(i, j int) bool {
-		if out.Warnings[i].Code != out.Warnings[j].Code {
-			return out.Warnings[i].Code < out.Warnings[j].Code
-		}
-		return out.Warnings[i].Message < out.Warnings[j].Message
-	})
-	sort.Slice(out.Conflicts, func(i, j int) bool {
-		if out.Conflicts[i].Code != out.Conflicts[j].Code {
-			return out.Conflicts[i].Code < out.Conflicts[j].Code
-		}
-		return out.Conflicts[i].Message < out.Conflicts[j].Message
-	})
+	sortModuleRefs(out.Modules)
+	sortDecisions(out.Decisions)
+	sortWarnings(out.Warnings)
+	sortConflicts(out.Conflicts)
 	for key, value := range spec.Defaults {
 		out.Defaults = append(out.Defaults, canonicalKV{Key: key, Value: value})
 	}
-	sort.Slice(
-		out.Defaults,
-		func(i, j int) bool { return out.Defaults[i].Key < out.Defaults[j].Key },
-	)
+	slices.SortFunc(out.Defaults, func(left, right canonicalKV) int {
+		return cmp.Compare(left.Key, right.Key)
+	})
 	for key, value := range spec.Chains {
 		out.Chains = append(out.Chains, canonicalChain{
 			Key:      key,
@@ -589,8 +538,47 @@ func toCanonicalSpec(spec *Spec) canonicalSpec {
 			Items:    append([]string(nil), value.Items...),
 		})
 	}
-	sort.Slice(out.Chains, func(i, j int) bool { return out.Chains[i].Key < out.Chains[j].Key })
+	slices.SortFunc(out.Chains, func(left, right canonicalChain) int {
+		return cmp.Compare(left.Key, right.Key)
+	})
 	return out
+}
+
+func sortModuleRefs(items []ModuleRef) {
+	slices.SortFunc(items, func(left, right ModuleRef) int {
+		return cmp.Compare(left.Name, right.Name)
+	})
+}
+
+func sortDecisions(items []Decision) {
+	slices.SortFunc(items, func(left, right Decision) int {
+		return cmp.Or(
+			cmp.Compare(left.Kind, right.Kind),
+			cmp.Compare(left.Target, right.Target),
+			cmp.Compare(left.Source, right.Source),
+			cmp.Compare(left.Value, right.Value),
+			cmp.Compare(left.Reason, right.Reason),
+			cmp.Compare(left.Stage, right.Stage),
+		)
+	})
+}
+
+func sortWarnings(items []Warning) {
+	slices.SortFunc(items, func(left, right Warning) int {
+		return cmp.Or(
+			cmp.Compare(left.Code, right.Code),
+			cmp.Compare(left.Message, right.Message),
+		)
+	})
+}
+
+func sortConflicts(items []Conflict) {
+	slices.SortFunc(items, func(left, right Conflict) int {
+		return cmp.Or(
+			cmp.Compare(left.Code, right.Code),
+			cmp.Compare(left.Message, right.Message),
+		)
+	})
 }
 
 func dedupStrings(values []string) []string {
@@ -687,6 +675,14 @@ func canonicalChainMap(items []canonicalChain) map[string]canonicalChain {
 		out[item.Key] = item
 	}
 	return out
+}
+
+func (item canonicalChain) chain() Chain {
+	return Chain{
+		Template: item.Template,
+		Version:  item.Version,
+		Items:    append([]string(nil), item.Items...),
+	}
 }
 
 func unionKeys[T any](left, right map[string]T) []string {

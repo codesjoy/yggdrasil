@@ -452,7 +452,7 @@ func TestApp_StageCommitRollbackFoundationSnapshot(t *testing.T) {
 		app.stageFoundationSnapshot(snap)
 		assert.Equal(t, snap, app.preparedFoundationSnapshot)
 
-		app.rollbackFoundationSnapshot(snap)
+		app.rollbackFoundationSnapshotTransaction(snap, nil, false)
 		assert.Nil(t, app.preparedFoundationSnapshot)
 	})
 
@@ -462,7 +462,7 @@ func TestApp_StageCommitRollbackFoundationSnapshot(t *testing.T) {
 		snap2 := &Snapshot{Resolved: settings.Resolved{Mode: "2"}}
 
 		app.stageFoundationSnapshot(snap1)
-		app.rollbackFoundationSnapshot(snap2)
+		app.rollbackFoundationSnapshotTransaction(snap2, nil, false)
 		assert.Equal(t, snap1, app.preparedFoundationSnapshot)
 	})
 
@@ -480,32 +480,6 @@ func TestApp_StageCommitRollbackFoundationSnapshot(t *testing.T) {
 		require.NoError(t, committer.Rollback(context.Background()))
 		require.Same(t, previous, app.foundationSnapshot)
 		require.NoError(t, committer.Rollback(context.Background()))
-	})
-}
-
-// --- swapTracerShutdown / swapMeterShutdown ---
-
-func TestApp_SwapTracerShutdown(t *testing.T) {
-	t.Run("swaps and returns previous", func(t *testing.T) {
-		app := newTestApp(t, "test")
-		prev := func(context.Context) error { return nil }
-		next := func(context.Context) error { return nil }
-
-		app.swapTracerShutdown(prev)
-		returned := app.swapTracerShutdown(next)
-		assert.NotNil(t, returned)
-	})
-}
-
-func TestApp_SwapMeterShutdown(t *testing.T) {
-	t.Run("swaps and returns previous", func(t *testing.T) {
-		app := newTestApp(t, "test")
-		prev := func(context.Context) error { return nil }
-		next := func(context.Context) error { return nil }
-
-		app.swapMeterShutdown(prev)
-		returned := app.swapMeterShutdown(next)
-		assert.NotNil(t, returned)
 	})
 }
 

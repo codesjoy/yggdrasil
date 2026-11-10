@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/codesjoy/yggdrasil/v3/admin/governor"
+	internallifecycle "github.com/codesjoy/yggdrasil/v3/app/internal/lifecycle"
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	configchain "github.com/codesjoy/yggdrasil/v3/config/chain"
@@ -67,16 +68,17 @@ type options struct {
 }
 
 func (opts *options) buildLifecycleOptions() []lifecycleOption {
-	out := []lifecycleOption{
-		withLifecycleServer(opts.server),
-		withLifecycleGovernor(opts.governor),
-		withLifecycleRegistry(opts.registry),
-		withLifecycleShutdownTimeout(opts.shutdownTimeout),
-		withLifecycleBeforeStartHooks(opts.beforeStartHooks...),
-		withLifecycleBeforeStopHooks(opts.beforeStopHooks...),
-		withLifecycleAfterStopHooks(opts.afterStopHooks...),
-		withLifecycleInternalServers(opts.internalServers...),
-	}
+	out := make([]lifecycleOption, 0, 8+len(opts.lifecycleOptions))
+	out = append(out,
+		internallifecycle.WithServer(opts.server),
+		internallifecycle.WithGovernor(opts.governor),
+		internallifecycle.WithRegistry(opts.registry),
+		internallifecycle.WithShutdownTimeout(opts.shutdownTimeout),
+		internallifecycle.WithBeforeStartHooks(opts.beforeStartHooks...),
+		internallifecycle.WithBeforeStopHooks(opts.beforeStopHooks...),
+		internallifecycle.WithAfterStopHooks(opts.afterStopHooks...),
+		internallifecycle.WithInternalServers(opts.internalServers...),
+	)
 	out = append(out, opts.lifecycleOptions...)
 	return out
 }
@@ -119,7 +121,10 @@ func WithAfterStopHook(fns ...func(context.Context) error) Option {
 // WithCleanup register a cleanup function.
 func WithCleanup(name string, fn func(context.Context) error) Option {
 	return func(opts *options) error {
-		opts.lifecycleOptions = append(opts.lifecycleOptions, withLifecycleCleanup(name, fn))
+		opts.lifecycleOptions = append(
+			opts.lifecycleOptions,
+			internallifecycle.WithCleanup(name, fn),
+		)
 		return nil
 	}
 }

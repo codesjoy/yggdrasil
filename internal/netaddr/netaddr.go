@@ -71,10 +71,6 @@ func SelectPrimaryIPv4(ctx context.Context) string {
 	return addr
 }
 
-func resetCacheForTest() {
-	cachedAddr.Store("")
-}
-
 func probePrimaryIPv4(ctx context.Context) string {
 	if addr := probeDefaultRouteIPv4(ctx); addr != "" {
 		return addr

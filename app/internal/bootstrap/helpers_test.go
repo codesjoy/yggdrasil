@@ -131,23 +131,6 @@ func TestNeedsDefaultStartupSettings(t *testing.T) {
 	})
 }
 
-func TestStartupValidatorAdd(t *testing.T) {
-	t.Run("nil err is no-op", func(t *testing.T) {
-		v := &startupValidator{strict: true}
-		v.add("msg", nil)
-		assert.Nil(t, v.err)
-	})
-
-	t.Run("strict mode accumulates errors", func(t *testing.T) {
-		v := &startupValidator{strict: true}
-		v.add("msg1", errors.New("err1"))
-		v.add("msg2", errors.New("err2"))
-		require.Error(t, v.err)
-		assert.Contains(t, v.err.Error(), "msg1")
-		assert.Contains(t, v.err.Error(), "msg2")
-	})
-}
-
 type trackingConfigSource struct {
 	name    string
 	onClose func()

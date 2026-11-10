@@ -105,67 +105,91 @@ func cloneReflectValue(value reflect.Value) reflect.Value {
 	}
 	switch value.Kind() {
 	case reflect.Interface:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		cloned := cloneReflectValue(value.Elem())
-		out := reflect.New(value.Type()).Elem()
-		out.Set(cloned)
-		return out
+		return cloneReflectInterface(value)
 	case reflect.Pointer:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		out := reflect.New(value.Type().Elem())
-		out.Elem().Set(cloneReflectValue(value.Elem()))
-		return out
+		return cloneReflectPointer(value)
 	case reflect.Map:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		out := reflect.MakeMapWithSize(value.Type(), value.Len())
-		iter := value.MapRange()
-		for iter.Next() {
-			out.SetMapIndex(
-				cloneReflectValue(iter.Key()),
-				cloneReflectValue(iter.Value()),
-			)
-		}
-		return out
+		return cloneReflectMap(value)
 	case reflect.Slice:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		out := reflect.MakeSlice(value.Type(), value.Len(), value.Cap())
-		for index := 0; index < value.Len(); index++ {
-			out.Index(index).Set(cloneReflectValue(value.Index(index)))
-		}
-		return out
+		return cloneReflectSlice(value)
 	case reflect.Array:
-		out := reflect.New(value.Type()).Elem()
-		for index := 0; index < value.Len(); index++ {
-			out.Index(index).Set(cloneReflectValue(value.Index(index)))
-		}
-		return out
+		return cloneReflectArray(value)
 	case reflect.Struct:
-		out := reflect.New(value.Type()).Elem()
-		if value.CanInterface() {
-			out.Set(value)
-		}
-		for index := 0; index < value.NumField(); index++ {
-			field := out.Field(index)
-			if !field.CanSet() {
-				continue
-			}
-			cloned := cloneReflectValue(value.Field(index))
-			if cloned.IsValid() {
-				field.Set(cloned)
-			}
-		}
-		return out
+		return cloneReflectStruct(value)
 	default:
 		return value
 	}
+}
+
+func cloneReflectInterface(value reflect.Value) reflect.Value {
+	if value.IsNil() {
+		return reflect.Zero(value.Type())
+	}
+	cloned := cloneReflectValue(value.Elem())
+	out := reflect.New(value.Type()).Elem()
+	out.Set(cloned)
+	return out
+}
+
+func cloneReflectPointer(value reflect.Value) reflect.Value {
+	if value.IsNil() {
+		return reflect.Zero(value.Type())
+	}
+	out := reflect.New(value.Type().Elem())
+	out.Elem().Set(cloneReflectValue(value.Elem()))
+	return out
+}
+
+func cloneReflectMap(value reflect.Value) reflect.Value {
+	if value.IsNil() {
+		return reflect.Zero(value.Type())
+	}
+	out := reflect.MakeMapWithSize(value.Type(), value.Len())
+	iter := value.MapRange()
+	for iter.Next() {
+		out.SetMapIndex(
+			cloneReflectValue(iter.Key()),
+			cloneReflectValue(iter.Value()),
+		)
+	}
+	return out
+}
+
+func cloneReflectSlice(value reflect.Value) reflect.Value {
+	if value.IsNil() {
+		return reflect.Zero(value.Type())
+	}
+	out := reflect.MakeSlice(value.Type(), value.Len(), value.Cap())
+	for index := 0; index < value.Len(); index++ {
+		out.Index(index).Set(cloneReflectValue(value.Index(index)))
+	}
+	return out
+}
+
+func cloneReflectArray(value reflect.Value) reflect.Value {
+	out := reflect.New(value.Type()).Elem()
+	for index := 0; index < value.Len(); index++ {
+		out.Index(index).Set(cloneReflectValue(value.Index(index)))
+	}
+	return out
+}
+
+func cloneReflectStruct(value reflect.Value) reflect.Value {
+	out := reflect.New(value.Type()).Elem()
+	if value.CanInterface() {
+		out.Set(value)
+	}
+	for index := 0; index < value.NumField(); index++ {
+		field := out.Field(index)
+		if !field.CanSet() {
+			continue
+		}
+		cloned := cloneReflectValue(value.Field(index))
+		if cloned.IsValid() {
+			field.Set(cloned)
+		}
+	}
+	return out
 }
 
 // Copy returns a detached snapshot copy.

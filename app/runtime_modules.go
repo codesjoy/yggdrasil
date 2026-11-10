@@ -61,7 +61,24 @@ var (
 
 // --- Builtin capability modules ---
 
-type foundationBuiltinCapabilityModule struct{}
+type appLocalStaticModule struct{}
+
+func (appLocalStaticModule) IsolationMode() module.IsolationMode {
+	return module.IsolationModeAppLocal
+}
+
+func (appLocalStaticModule) Init(context.Context, config.View) error { return nil }
+
+func (appLocalStaticModule) PrepareReload(
+	context.Context,
+	config.View,
+) (module.ReloadCommitter, error) {
+	return staticReloadCommitter{}, nil
+}
+
+type foundationBuiltinCapabilityModule struct {
+	appLocalStaticModule
+}
 
 type staticReloadCommitter struct{}
 
@@ -71,19 +88,6 @@ func (staticReloadCommitter) Rollback(context.Context) error { return nil }
 func (foundationBuiltinCapabilityModule) Name() string { return "foundation.capabilities" }
 
 func (foundationBuiltinCapabilityModule) ConfigPath() string { return "yggdrasil" }
-
-func (foundationBuiltinCapabilityModule) IsolationMode() module.IsolationMode {
-	return module.IsolationModeAppLocal
-}
-
-func (foundationBuiltinCapabilityModule) Init(context.Context, config.View) error { return nil }
-
-func (foundationBuiltinCapabilityModule) PrepareReload(
-	context.Context,
-	config.View,
-) (module.ReloadCommitter, error) {
-	return staticReloadCommitter{}, nil
-}
 
 func appendSortedCapabilities(
 	out []module.Capability,
@@ -133,25 +137,14 @@ func (foundationBuiltinCapabilityModule) Capabilities() []module.Capability {
 	return out
 }
 
-type statsOtelCapabilityModule struct{}
+type statsOtelCapabilityModule struct {
+	appLocalStaticModule
+}
 
 func (statsOtelCapabilityModule) Name() string { return "observability.stats.otel" }
 
-func (statsOtelCapabilityModule) IsolationMode() module.IsolationMode {
-	return module.IsolationModeAppLocal
-}
-
 func (statsOtelCapabilityModule) ConfigPath() string {
 	return "yggdrasil.observability.telemetry.stats"
-}
-
-func (statsOtelCapabilityModule) Init(context.Context, config.View) error { return nil }
-
-func (statsOtelCapabilityModule) PrepareReload(
-	context.Context,
-	config.View,
-) (module.ReloadCommitter, error) {
-	return staticReloadCommitter{}, nil
 }
 
 func (statsOtelCapabilityModule) Capabilities() []module.Capability {
@@ -215,24 +208,13 @@ func splitConfigPath(path string) []string {
 	return out
 }
 
-type connectivityBuiltinCapabilityModule struct{}
+type connectivityBuiltinCapabilityModule struct {
+	appLocalStaticModule
+}
 
 func (connectivityBuiltinCapabilityModule) Name() string { return "connectivity.capabilities" }
 
-func (connectivityBuiltinCapabilityModule) IsolationMode() module.IsolationMode {
-	return module.IsolationModeAppLocal
-}
-
 func (connectivityBuiltinCapabilityModule) ConfigPath() string { return "yggdrasil" }
-
-func (connectivityBuiltinCapabilityModule) Init(context.Context, config.View) error { return nil }
-
-func (connectivityBuiltinCapabilityModule) PrepareReload(
-	context.Context,
-	config.View,
-) (module.ReloadCommitter, error) {
-	return staticReloadCommitter{}, nil
-}
 
 func (connectivityBuiltinCapabilityModule) Capabilities() []module.Capability {
 	out := make([]module.Capability, 0)
@@ -287,14 +269,11 @@ func (connectivityBuiltinCapabilityModule) Capabilities() []module.Capability {
 // --- Module structs ---
 
 type foundationRuntimeModule struct {
+	appLocalStaticModule
 	app *App
 }
 
 func (m foundationRuntimeModule) Name() string { return "foundation.runtime" }
-
-func (m foundationRuntimeModule) IsolationMode() module.IsolationMode {
-	return module.IsolationModeAppLocal
-}
 
 func (m foundationRuntimeModule) ConfigPath() string { return "yggdrasil" }
 
@@ -363,14 +342,11 @@ func (c *foundationRuntimeCommitter) Rollback(context.Context) error {
 }
 
 type connectivityRuntimeModule struct {
+	appLocalStaticModule
 	app *App
 }
 
 func (m connectivityRuntimeModule) Name() string { return "connectivity.runtime" }
-
-func (m connectivityRuntimeModule) IsolationMode() module.IsolationMode {
-	return module.IsolationModeAppLocal
-}
 
 func (m connectivityRuntimeModule) DependsOn() []string { return []string{"foundation.runtime"} }
 

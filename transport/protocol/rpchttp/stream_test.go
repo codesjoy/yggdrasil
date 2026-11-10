@@ -430,7 +430,7 @@ func TestHTTPClientStream_Header_WaitForResponse(t *testing.T) {
 
 	// Simulate the response arriving.
 	ch := cs.headersReady
-	cs.finish(metadata.Pairs("key1", "val1"), nil, nil, ch)
+	cs.finishResponse(metadata.Pairs("key1", "val1"), nil, nil, nil, ch)
 
 	<-done
 }
@@ -451,11 +451,11 @@ func TestHTTPClientStream_Header_WaitNilHeader(t *testing.T) {
 		close(done)
 	}()
 
-	cs.finish(nil, nil, nil, nil)
+	cs.finishResponse(nil, nil, nil, nil, cs.headersReady)
 	<-done
 }
 
-func TestHTTPClientStream_finish(t *testing.T) {
+func TestHTTPClientStream_finishResponse(t *testing.T) {
 	cs := &httpClientStream{
 		ctx: context.Background(),
 	}
@@ -464,32 +464,32 @@ func TestHTTPClientStream_finish(t *testing.T) {
 	testErr := errors.New("test error")
 
 	ch := make(chan struct{})
-	cs.finish(h, tr, testErr, ch)
+	cs.finishResponse(h, tr, nil, testErr, ch)
 
-	assert.True(t, cs.respRecv)
+	assert.True(t, cs.responseReady)
 	assert.Equal(t, testErr, cs.respErr)
 	assert.Equal(t, []string{"v1"}, cs.header.Get("h1"))
 	assert.Equal(t, []string{"v1"}, cs.trailer.Get("t1"))
 }
 
-func TestHTTPClientStream_finish_NilChannel(t *testing.T) {
+func TestHTTPClientStream_finishResponse_NilChannel(t *testing.T) {
 	cs := &httpClientStream{
 		ctx: context.Background(),
 	}
-	// finish with nil channel should not panic.
-	cs.finish(nil, nil, nil, nil)
-	assert.True(t, cs.respRecv)
+	// finishResponse with nil channel should not panic.
+	cs.finishResponse(nil, nil, nil, nil, nil)
+	assert.True(t, cs.responseReady)
 }
 
-func TestHTTPClientStream_finish_ChannelAlreadyClosed(t *testing.T) {
+func TestHTTPClientStream_finishResponse_ChannelAlreadyClosed(t *testing.T) {
 	cs := &httpClientStream{
 		ctx: context.Background(),
 	}
 	ch := make(chan struct{})
 	close(ch)
 	// Should not panic when channel is already closed.
-	cs.finish(nil, nil, nil, ch)
-	assert.True(t, cs.respRecv)
+	cs.finishResponse(nil, nil, nil, nil, ch)
+	assert.True(t, cs.responseReady)
 }
 
 // testMessage is a simple struct for testing marshal/unmarshal.

@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	internallifecycle "github.com/codesjoy/yggdrasil/v3/app/internal/lifecycle"
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
@@ -62,14 +63,14 @@ func TestBuildLifecycleOptionsIncludesAppCleanup(t *testing.T) {
 	tracerShutdowns := 0
 	meterShutdowns := 0
 	watchStops := 0
-	app.swapTracerShutdown(func(context.Context) error {
+	app.tracerShutdown = func(context.Context) error {
 		tracerShutdowns++
 		return nil
-	})
-	app.swapMeterShutdown(func(context.Context) error {
+	}
+	app.meterShutdown = func(context.Context) error {
 		meterShutdowns++
 		return nil
-	})
+	}
 	app.stopWatch = func() { watchStops++ }
 
 	require.NoError(t, app.lifecycle.Init(app.buildLifecycleOptions()...))
@@ -122,15 +123,17 @@ func TestWaitWaitsForStopBeforeStart(t *testing.T) {
 	releaseCleanup := make(chan struct{})
 	require.NoError(
 		t,
-		app.lifecycle.Init(withLifecycleCleanup("blocking", func(ctx context.Context) error {
-			close(cleanupEntered)
-			select {
-			case <-releaseCleanup:
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		})),
+		app.lifecycle.Init(
+			internallifecycle.WithCleanup("blocking", func(ctx context.Context) error {
+				close(cleanupEntered)
+				select {
+				case <-releaseCleanup:
+					return nil
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}),
+		),
 	)
 
 	stopDone := make(chan error, 1)
@@ -575,17 +578,6 @@ func TestApp_StopConfigWatchLocked(t *testing.T) {
 		app.stopConfigWatchLocked()
 		assert.True(t, called)
 		assert.Nil(t, app.stopWatch)
-	})
-}
-
-// --- reloadAsync ---
-
-func TestApp_ReloadAsync(t *testing.T) {
-	t.Run("does not panic on stopped app", func(t *testing.T) {
-		app := newTestApp(t, "test")
-		// reloadAsync launches a goroutine that calls Reload
-		// Just ensure it doesn't panic
-		app.reloadAsync()
 	})
 }
 

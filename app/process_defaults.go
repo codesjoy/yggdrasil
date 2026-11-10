@@ -15,7 +15,6 @@
 package app
 
 import (
-	"context"
 	"log/slog"
 	"sync"
 
@@ -106,14 +105,14 @@ func (lease *processDefaultsLease) install(snapshot *Snapshot) {
 	lease.installed = true
 }
 
-func (lease *processDefaultsLease) release(context.Context) error {
+func (lease *processDefaultsLease) release() {
 	if lease == nil {
-		return nil
+		return
 	}
 	lease.mu.Lock()
 	if lease.released {
 		lease.mu.Unlock()
-		return nil
+		return
 	}
 	lease.released = true
 	installed := lease.installed
@@ -150,5 +149,4 @@ func (lease *processDefaultsLease) release(context.Context) error {
 		processDefaultsOwner = nil
 	}
 	processDefaultsMu.Unlock()
-	return nil
 }

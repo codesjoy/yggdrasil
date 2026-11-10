@@ -90,106 +90,159 @@ type capabilityCollectResult struct {
 	moduleConflicts map[string][]string
 }
 
-func collectCapabilities(modules []Module) (capabilityCollectResult, error) {
-	index := map[string][]capabilityEntry{}
-	specs := map[string]CapabilitySpec{}
-	moduleConflicts := map[string][]string{}
-	var conflicts []string
-	addConflict := func(message string, mods ...Module) {
-		conflicts = append(conflicts, message)
-		for _, mod := range mods {
-			if mod == nil {
-				continue
-			}
-			name := mod.Name()
-			moduleConflicts[name] = append(moduleConflicts[name], message)
-		}
+type capabilityCollector struct {
+	index           map[string][]capabilityEntry
+	specs           map[string]CapabilitySpec
+	moduleConflicts map[string][]string
+	conflicts       []string
+}
+
+func newCapabilityCollector() *capabilityCollector {
+	return &capabilityCollector{
+		index:           map[string][]capabilityEntry{},
+		specs:           map[string]CapabilitySpec{},
+		moduleConflicts: map[string][]string{},
 	}
+}
+
+func (c *capabilityCollector) addConflict(message string, mods ...Module) {
+	c.conflicts = append(c.conflicts, message)
+	for _, mod := range mods {
+		if mod == nil {
+			continue
+		}
+		name := mod.Name()
+		c.moduleConflicts[name] = append(c.moduleConflicts[name], message)
+	}
+}
+
+func (c *capabilityCollector) collect(modules []Module) (bool, error) {
 	for _, mod := range modules {
 		provider, ok := mod.(CapabilityProvider)
 		if !ok {
 			continue
 		}
 		for _, cap := range provider.Capabilities() {
-			if cap.Spec.Name == "" {
-				return capabilityCollectResult{}, fmt.Errorf(
-					"module %q has capability with empty spec name",
-					mod.Name(),
-				)
+			partial, err := c.addCapability(mod, cap)
+			if err != nil {
+				return partial, err
 			}
-			if cap.Value == nil {
-				return capabilityCollectResult{}, fmt.Errorf(
-					"module %q capability %q has nil value",
-					mod.Name(),
-					cap.Spec.Name,
-				)
-			}
-			if cap.Spec.Type == nil {
-				return capabilityCollectResult{}, fmt.Errorf(
-					"module %q capability %q has empty type",
-					mod.Name(),
-					cap.Spec.Name,
-				)
-			}
-			if cap.Name == "" {
-				cap.Name = mod.Name()
-			}
-			currentSpec, exists := specs[cap.Spec.Name]
-			if exists {
-				if currentSpec.Cardinality != cap.Spec.Cardinality {
-					message := fmt.Sprintf(
-						"capability %q cardinality mismatch: %s vs %s",
-						cap.Spec.Name,
-						currentSpec.Cardinality,
-						cap.Spec.Cardinality,
-					)
-					addConflict(message, mod)
-					return capabilityCollectResult{
-						index:           index,
-						conflicts:       slicesUniq(conflicts),
-						moduleConflicts: normalizeModuleConflicts(moduleConflicts),
-					}, errors.New(message)
-				}
-				if currentSpec.Type != cap.Spec.Type {
-					message := fmt.Sprintf(
-						"capability %q type mismatch: %v vs %v",
-						cap.Spec.Name,
-						currentSpec.Type,
-						cap.Spec.Type,
-					)
-					addConflict(message, mod)
-					return capabilityCollectResult{
-						index:           index,
-						conflicts:       slicesUniq(conflicts),
-						moduleConflicts: normalizeModuleConflicts(moduleConflicts),
-					}, errors.New(message)
-				}
-			}
-			if !typeMatches(cap.Spec.Type, reflect.TypeOf(cap.Value)) {
-				message := fmt.Sprintf(
-					"module %q capability %q value type %v does not match %v",
-					mod.Name(),
-					cap.Spec.Name,
-					reflect.TypeOf(cap.Value),
-					cap.Spec.Type,
-				)
-				addConflict(message, mod)
-				return capabilityCollectResult{
-					index:           index,
-					conflicts:       slicesUniq(conflicts),
-					moduleConflicts: normalizeModuleConflicts(moduleConflicts),
-				}, errors.New(message)
-			}
-			specs[cap.Spec.Name] = cap.Spec
-			index[cap.Spec.Name] = append(index[cap.Spec.Name], capabilityEntry{
-				spec:      cap.Spec,
-				module:    mod,
-				name:      cap.Name,
-				value:     cap.Value,
-				valueType: reflect.TypeOf(cap.Value),
-			})
 		}
 	}
+	return false, nil
+}
+
+func (c *capabilityCollector) addCapability(mod Module, cap Capability) (bool, error) {
+	if err := validateCapability(mod, cap); err != nil {
+		return false, err
+	}
+	if cap.Name == "" {
+		cap.Name = mod.Name()
+	}
+	if currentSpec, exists := c.specs[cap.Spec.Name]; exists {
+		if message := capabilitySpecConflict(currentSpec, cap.Spec); message != "" {
+			c.addConflict(message, mod)
+			return true, errors.New(message)
+		}
+	}
+	valueType := reflect.TypeOf(cap.Value)
+	if !typeMatches(cap.Spec.Type, valueType) {
+		message := fmt.Sprintf(
+			"module %q capability %q value type %v does not match %v",
+			mod.Name(),
+			cap.Spec.Name,
+			valueType,
+			cap.Spec.Type,
+		)
+		c.addConflict(message, mod)
+		return true, errors.New(message)
+	}
+	c.specs[cap.Spec.Name] = cap.Spec
+	c.index[cap.Spec.Name] = append(c.index[cap.Spec.Name], capabilityEntry{
+		spec:      cap.Spec,
+		module:    mod,
+		name:      cap.Name,
+		value:     cap.Value,
+		valueType: valueType,
+	})
+	return false, nil
+}
+
+func (c *capabilityCollector) result(withBindings bool) capabilityCollectResult {
+	result := capabilityCollectResult{
+		index:           c.index,
+		conflicts:       slicesUniq(c.conflicts),
+		moduleConflicts: normalizeModuleConflicts(c.moduleConflicts),
+	}
+	if withBindings {
+		result.bindings = buildCapabilityBindings(c.index, c.specs)
+	}
+	return result
+}
+
+func collectCapabilities(modules []Module) (capabilityCollectResult, error) {
+	collector := newCapabilityCollector()
+	partial, err := collector.collect(modules)
+	if err != nil {
+		if partial {
+			return collector.result(false), err
+		}
+		return capabilityCollectResult{}, err
+	}
+	addCapabilityConflicts(collector.index, collector.specs, collector.addConflict)
+	result := collector.result(true)
+	if len(result.conflicts) > 0 {
+		return result, errors.New(strings.Join(result.conflicts, "; "))
+	}
+	return result, nil
+}
+
+func validateCapability(mod Module, cap Capability) error {
+	if cap.Spec.Name == "" {
+		return fmt.Errorf("module %q has capability with empty spec name", mod.Name())
+	}
+	if cap.Value == nil {
+		return fmt.Errorf(
+			"module %q capability %q has nil value",
+			mod.Name(),
+			cap.Spec.Name,
+		)
+	}
+	if cap.Spec.Type == nil {
+		return fmt.Errorf(
+			"module %q capability %q has empty type",
+			mod.Name(),
+			cap.Spec.Name,
+		)
+	}
+	return nil
+}
+
+func capabilitySpecConflict(current, next CapabilitySpec) string {
+	if current.Cardinality != next.Cardinality {
+		return fmt.Sprintf(
+			"capability %q cardinality mismatch: %s vs %s",
+			next.Name,
+			current.Cardinality,
+			next.Cardinality,
+		)
+	}
+	if current.Type != next.Type {
+		return fmt.Sprintf(
+			"capability %q type mismatch: %v vs %v",
+			next.Name,
+			current.Type,
+			next.Type,
+		)
+	}
+	return ""
+}
+
+func addCapabilityConflicts(
+	index map[string][]capabilityEntry,
+	specs map[string]CapabilitySpec,
+	addConflict func(string, ...Module),
+) {
 	for specName, entries := range index {
 		spec := specs[specName]
 		switch spec.Cardinality {
@@ -227,7 +280,12 @@ func collectCapabilities(modules []Module) (capabilityCollectResult, error) {
 			}
 		}
 	}
+}
 
+func buildCapabilityBindings(
+	index map[string][]capabilityEntry,
+	specs map[string]CapabilitySpec,
+) map[string]capabilityBinding {
 	specNames := make([]string, 0, len(index))
 	for specName := range index {
 		specNames = append(specNames, specName)
@@ -248,17 +306,7 @@ func collectCapabilities(modules []Module) (capabilityCollectResult, error) {
 			entries: entries,
 		}
 	}
-
-	result := capabilityCollectResult{
-		index:           index,
-		bindings:        bindings,
-		conflicts:       slicesUniq(conflicts),
-		moduleConflicts: normalizeModuleConflicts(moduleConflicts),
-	}
-	if len(result.conflicts) > 0 {
-		return result, errors.New(strings.Join(result.conflicts, "; "))
-	}
-	return result, nil
+	return bindings
 }
 
 func typeMatches(expect reflect.Type, actual reflect.Type) bool {

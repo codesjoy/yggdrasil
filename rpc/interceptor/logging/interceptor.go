@@ -54,6 +54,23 @@ func providerNames() []string {
 	return []string{typeLogging, typeLogger}
 }
 
+func buildProviders[P any](
+	source any,
+	opts []ProviderOption,
+	build func(string, *logging) P,
+) ([]P, error) {
+	loggingCfg, err := loadConfig(source)
+	if err != nil {
+		return nil, err
+	}
+	names := providerNames()
+	out := make([]P, 0, len(names))
+	for _, name := range names {
+		out = append(out, build(name, newLogging(loggingCfg, opts...)))
+	}
+	return out, nil
+}
+
 // BuiltinUnaryClientProviders returns built-in unary client interceptor providers.
 func BuiltinUnaryClientProviders() []interceptor.UnaryClientInterceptorProvider {
 	return BuiltinUnaryClientProvidersWithConfig(nil)
@@ -83,25 +100,17 @@ func BuiltinUnaryClientProvidersWithConfigE(
 	source any,
 	opts ...ProviderOption,
 ) ([]interceptor.UnaryClientInterceptorProvider, error) {
-	loggingCfg, err := loadConfig(source)
-	if err != nil {
-		return nil, err
-	}
-	names := providerNames()
-	out := make([]interceptor.UnaryClientInterceptorProvider, 0, len(names))
-	for _, name := range names {
-		l := newLogging(loggingCfg, opts...)
-		out = append(
-			out,
-			interceptor.NewUnaryClientInterceptorProvider(
-				name,
-				func(string) interceptor.UnaryClientInterceptor {
-					return l.UnaryClientInterceptor
-				},
-			),
+	return buildProviders(source, opts, func(
+		name string,
+		l *logging,
+	) interceptor.UnaryClientInterceptorProvider {
+		return interceptor.NewUnaryClientInterceptorProvider(
+			name,
+			func(string) interceptor.UnaryClientInterceptor {
+				return l.UnaryClientInterceptor
+			},
 		)
-	}
-	return out, nil
+	})
 }
 
 // BuiltinStreamClientProviders returns built-in stream client interceptor providers.
@@ -133,25 +142,17 @@ func BuiltinStreamClientProvidersWithConfigE(
 	source any,
 	opts ...ProviderOption,
 ) ([]interceptor.StreamClientInterceptorProvider, error) {
-	loggingCfg, err := loadConfig(source)
-	if err != nil {
-		return nil, err
-	}
-	names := providerNames()
-	out := make([]interceptor.StreamClientInterceptorProvider, 0, len(names))
-	for _, name := range names {
-		l := newLogging(loggingCfg, opts...)
-		out = append(
-			out,
-			interceptor.NewStreamClientInterceptorProvider(
-				name,
-				func(string) interceptor.StreamClientInterceptor {
-					return l.StreamClientInterceptor
-				},
-			),
+	return buildProviders(source, opts, func(
+		name string,
+		l *logging,
+	) interceptor.StreamClientInterceptorProvider {
+		return interceptor.NewStreamClientInterceptorProvider(
+			name,
+			func(string) interceptor.StreamClientInterceptor {
+				return l.StreamClientInterceptor
+			},
 		)
-	}
-	return out, nil
+	})
 }
 
 // BuiltinUnaryServerProviders returns built-in unary server interceptor providers.
@@ -183,25 +184,17 @@ func BuiltinUnaryServerProvidersWithConfigE(
 	source any,
 	opts ...ProviderOption,
 ) ([]interceptor.UnaryServerInterceptorProvider, error) {
-	loggingCfg, err := loadConfig(source)
-	if err != nil {
-		return nil, err
-	}
-	names := providerNames()
-	out := make([]interceptor.UnaryServerInterceptorProvider, 0, len(names))
-	for _, name := range names {
-		l := newLogging(loggingCfg, opts...)
-		out = append(
-			out,
-			interceptor.NewUnaryServerInterceptorProvider(
-				name,
-				func() interceptor.UnaryServerInterceptor {
-					return l.UnaryServerInterceptor
-				},
-			),
+	return buildProviders(source, opts, func(
+		name string,
+		l *logging,
+	) interceptor.UnaryServerInterceptorProvider {
+		return interceptor.NewUnaryServerInterceptorProvider(
+			name,
+			func() interceptor.UnaryServerInterceptor {
+				return l.UnaryServerInterceptor
+			},
 		)
-	}
-	return out, nil
+	})
 }
 
 // BuiltinStreamServerProviders returns built-in stream server interceptor providers.
@@ -233,25 +226,17 @@ func BuiltinStreamServerProvidersWithConfigE(
 	source any,
 	opts ...ProviderOption,
 ) ([]interceptor.StreamServerInterceptorProvider, error) {
-	loggingCfg, err := loadConfig(source)
-	if err != nil {
-		return nil, err
-	}
-	names := providerNames()
-	out := make([]interceptor.StreamServerInterceptorProvider, 0, len(names))
-	for _, name := range names {
-		l := newLogging(loggingCfg, opts...)
-		out = append(
-			out,
-			interceptor.NewStreamServerInterceptorProvider(
-				name,
-				func() interceptor.StreamServerInterceptor {
-					return l.StreamServerInterceptor
-				},
-			),
+	return buildProviders(source, opts, func(
+		name string,
+		l *logging,
+	) interceptor.StreamServerInterceptorProvider {
+		return interceptor.NewStreamServerInterceptorProvider(
+			name,
+			func() interceptor.StreamServerInterceptor {
+				return l.StreamServerInterceptor
+			},
 		)
-	}
-	return out, nil
+	})
 }
 
 func loadConfig(source any) (*Config, error) {
@@ -277,17 +262,12 @@ func newLogging(cfg *Config, opts ...ProviderOption) *logging {
 	return out
 }
 
-func (l *logging) logAttrs(
-	ctx context.Context,
-	level slog.Level,
-	message string,
-	fields ...slog.Attr,
-) {
+func (l *logging) logAttrs(ctx context.Context, level slog.Level, fields ...slog.Attr) {
 	if l != nil && l.logger != nil {
-		l.logger.LogAttrs(ctx, level, message, fields...)
+		l.logger.LogAttrs(ctx, level, "access", fields...)
 		return
 	}
-	slog.LogAttrs(ctx, level, message, fields...)
+	slog.LogAttrs(ctx, level, "access", fields...)
 }
 
 // UnaryServerInterceptor is a unary server interceptor.
@@ -344,7 +324,7 @@ func (l *logging) UnaryServerInterceptor(
 			}
 			lv = slog.LevelInfo
 		}
-		l.logAttrs(ctx, lv, "access", fields...)
+		l.logAttrs(ctx, lv, fields...)
 	}()
 	return handler(ctx, req)
 }
@@ -394,7 +374,7 @@ func (l *logging) StreamServerInterceptor(
 		} else {
 			lv = slog.LevelInfo
 		}
-		l.logAttrs(ss.Context(), lv, "access", fields...)
+		l.logAttrs(ss.Context(), lv, fields...)
 	}()
 	return handler(srv, ss)
 }
@@ -430,38 +410,50 @@ func (l *logging) UnaryClientInterceptor(
 			fields = append(fields, slog.String("stack", string(stack)))
 			event = "recover"
 		}
-		fields = append(fields,
-			slog.String("type", "unary"),
-			slog.String("method", method),
-			slog.Float64("cost", float64(cost)/float64(time.Millisecond)),
-			slog.Int("code", int(st.Code())),
-			slog.String("event", event))
-		if l.cfg.PrintReqAndRes {
-			fields = append(fields, slog.Any("req", req))
-		}
-
-		var lv slog.Level
-		if err != nil {
-			fields = append(fields, slog.Any("error", err))
-			if st.HTTPCode() >= http.StatusInternalServerError {
-				lv = slog.LevelError
-			} else {
-				lv = slog.LevelWarn
-			}
-		} else {
-			if l.cfg.PrintReqAndRes {
-				fields = append(fields, slog.Any("res", reply))
-			}
-			if l.cfg.SlowThreshold <= cost {
-				lv = slog.LevelWarn
-			} else {
-				lv = slog.LevelInfo
-			}
-		}
-		l.logAttrs(ctx, lv, "access", fields...)
+		l.logUnaryClient(ctx, method, req, reply, st, event, cost, err, fields)
 	}()
 	err = invoker(ctx, method, req, reply)
 	return
+}
+
+func (l *logging) logUnaryClient(
+	ctx context.Context,
+	method string,
+	req, reply any,
+	st *status.Status,
+	event string,
+	cost time.Duration,
+	err error,
+	fields []slog.Attr,
+) {
+	fields = append(fields,
+		slog.String("type", "unary"),
+		slog.String("method", method),
+		slog.Float64("cost", float64(cost)/float64(time.Millisecond)),
+		slog.Int("code", int(st.Code())),
+		slog.String("event", event))
+	if l.cfg.PrintReqAndRes {
+		fields = append(fields, slog.Any("req", req))
+	}
+	var lv slog.Level
+	if err != nil {
+		fields = append(fields, slog.Any("error", err))
+		if st.HTTPCode() >= http.StatusInternalServerError {
+			lv = slog.LevelError
+		} else {
+			lv = slog.LevelWarn
+		}
+	} else {
+		if l.cfg.PrintReqAndRes {
+			fields = append(fields, slog.Any("res", reply))
+		}
+		if l.cfg.SlowThreshold <= cost {
+			lv = slog.LevelWarn
+		} else {
+			lv = slog.LevelInfo
+		}
+	}
+	l.logAttrs(ctx, lv, fields...)
 }
 
 // StreamClientInterceptor is a stream client interceptor.
@@ -510,7 +502,7 @@ func (l *logging) StreamClientInterceptor(
 		} else {
 			lv = slog.LevelInfo
 		}
-		l.logAttrs(ctx, lv, "access", fields...)
+		l.logAttrs(ctx, lv, fields...)
 	}()
 	return streamer(ctx, desc, method)
 }

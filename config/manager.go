@@ -124,16 +124,9 @@ func (m *Manager) LoadLayer(name string, priority Priority, src source.Source) e
 		return err
 	}
 
-	var changeCh <-chan source.Data
-	var stop chan struct{}
-	if watchable, ok := src.(source.Watchable); ok {
-		changeCh, err = watchable.Watch()
-		if err != nil {
-			return err
-		}
-		if changeCh != nil {
-			stop = make(chan struct{})
-		}
+	changeCh, stop, err := prepareSourceWatch(src)
+	if err != nil {
+		return err
 	}
 
 	oldSrc, oldStop, notify, watchID, committed := m.commitExternalLayer(name, layer{
@@ -149,26 +142,54 @@ func (m *Manager) LoadLayer(name string, priority Priority, src source.Source) e
 		}
 		return errManagerClosed
 	}
-	if oldStop != nil {
-		close(oldStop)
-	}
-	if oldSrc != nil && oldSrc != src {
-		_ = oldSrc.Close()
-	}
+	retireSource(oldSrc, oldStop, src)
 	m.dispatch(notify)
-
-	if changeCh != nil {
-		m.mu.Lock()
-		active := !m.closed
-		if active {
-			m.watchWG.Add(1)
-		}
-		m.mu.Unlock()
-		if active {
-			go m.watchLayer(name, watchID, changeCh, stop)
-		}
-	}
+	m.startSourceWatch(name, watchID, changeCh, stop)
 	return nil
+}
+
+func prepareSourceWatch(src source.Source) (<-chan source.Data, chan struct{}, error) {
+	watchable, ok := src.(source.Watchable)
+	if !ok {
+		return nil, nil, nil
+	}
+	changeCh, err := watchable.Watch()
+	if err != nil {
+		return nil, nil, err
+	}
+	if changeCh == nil {
+		return nil, nil, nil
+	}
+	return changeCh, make(chan struct{}), nil
+}
+
+func retireSource(previous source.Source, stop chan struct{}, current source.Source) {
+	if stop != nil {
+		close(stop)
+	}
+	if previous != nil && previous != current {
+		_ = previous.Close()
+	}
+}
+
+func (m *Manager) startSourceWatch(
+	name string,
+	watchID uint64,
+	changeCh <-chan source.Data,
+	stop chan struct{},
+) {
+	if changeCh == nil {
+		return
+	}
+	m.mu.Lock()
+	active := !m.closed
+	if active {
+		m.watchWG.Add(1)
+	}
+	m.mu.Unlock()
+	if active {
+		go m.watchLayer(name, watchID, changeCh, stop)
+	}
 }
 
 // Close stops watched sources and closes all owned sources.
@@ -305,11 +326,7 @@ func (m *Manager) replaceLayerData(name string, watchID uint64, data map[string]
 		return
 	}
 	m.layers[name] = next
-	oldSnapshot := m.snapshotMap
-	merged := m.mergeLocked()
-	m.snapshotMap = merged
-	m.snapshot.Store(NewSnapshot(merged))
-	notify := m.collectNotificationsLocked(oldSnapshot, merged)
+	notify := m.publishSnapshotLocked()
 	m.mu.Unlock()
 	m.dispatch(notify)
 }
@@ -338,19 +355,7 @@ func (m *Manager) commitExternalLayer(
 	}
 	m.layers[name] = next
 
-	merged := m.mergeLocked()
-	if reflect.DeepEqual(m.snapshotMap, merged) {
-		m.snapshotMap = merged
-		return prev.src, prev.stop, nil, next.watchID, true
-	}
-
-	oldSnapshot := m.snapshotMap
-	m.snapshotMap = merged
-	m.snapshot.Store(NewSnapshot(merged))
-	return prev.src, prev.stop, m.collectNotificationsLocked(
-		oldSnapshot,
-		merged,
-	), next.watchID, true
+	return prev.src, prev.stop, m.publishSnapshotLocked(), next.watchID, true
 }
 
 func (m *Manager) mergeLocked() map[string]any {
@@ -382,6 +387,18 @@ func (m *Manager) mergeLocked() map[string]any {
 		merged = tree.MergeMaps(merged, item.data)
 	}
 	return merged
+}
+
+func (m *Manager) publishSnapshotLocked() []notification {
+	next := m.mergeLocked()
+	previous := m.snapshotMap
+	if reflect.DeepEqual(previous, next) {
+		m.snapshotMap = next
+		return nil
+	}
+	m.snapshotMap = next
+	m.snapshot.Store(NewSnapshot(next))
+	return m.collectNotificationsLocked(previous, next)
 }
 
 func (m *Manager) collectNotificationsLocked(prev, next map[string]any) []notification {

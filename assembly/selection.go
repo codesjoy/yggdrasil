@@ -16,6 +16,7 @@ package assembly
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -239,7 +240,7 @@ func (p *planner) resolveDefaults() error {
 
 func (p *planner) selectDefault(capability string) (string, string, error) {
 	if forced, ok := p.codeOverrides.ForcedDefaults[capability]; ok {
-		if err := p.requireProvider(capability, forced, ErrUnknownExplicitBinding); err != nil {
+		if err := p.requireProvider(capability, forced); err != nil {
 			return "", "", err
 		}
 		p.decisions = append(p.decisions, Decision{
@@ -253,7 +254,7 @@ func (p *planner) selectDefault(capability string) (string, string, error) {
 		return forced, "code_override", nil
 	}
 	if forced, ok := p.configOverrides.ForcedDefaults[capability]; ok {
-		if err := p.requireProvider(capability, forced, ErrUnknownExplicitBinding); err != nil {
+		if err := p.requireProvider(capability, forced); err != nil {
 			return "", "", err
 		}
 		p.decisions = append(p.decisions, Decision{
@@ -268,7 +269,7 @@ func (p *planner) selectDefault(capability string) (string, string, error) {
 	}
 
 	if explicit, ok := explicitDefaultValue(p.input.Resolved, p.input.Snapshot, capability); ok {
-		if err := p.requireProvider(capability, explicit, ErrUnknownExplicitBinding); err != nil {
+		if err := p.requireProvider(capability, explicit); err != nil {
 			return "", "", err
 		}
 		return explicit, "explicit_config", nil
@@ -456,15 +457,10 @@ func fallbackDefault(capability string, available []string) (string, bool) {
 }
 
 func providerAvailable(available []string, target string) bool {
-	for _, item := range available {
-		if item == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(available, target)
 }
 
-func (p *planner) requireProvider(capability, name string, code ErrorCode) error {
+func (p *planner) requireProvider(capability, name string) error {
 	if name == "" {
 		return nil
 	}
@@ -486,7 +482,7 @@ func (p *planner) requireProvider(capability, name string, code ErrorCode) error
 		)
 	}
 	return newError(
-		code,
+		ErrUnknownExplicitBinding,
 		stagePlan,
 		fmt.Sprintf("capability %q provider %q is not available", capability, name),
 		nil,
@@ -606,7 +602,7 @@ func (p *planner) expandTemplate(
 func (p *planner) validateChainItems(path string, items []string) error {
 	specName := capabilityForChain(path)
 	for _, item := range items {
-		if err := p.requireProvider(specName, item, ErrUnknownExplicitBinding); err != nil {
+		if err := p.requireProvider(specName, item); err != nil {
 			return err
 		}
 	}

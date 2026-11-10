@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	internalbootstrap "github.com/codesjoy/yggdrasil/v3/app/internal/bootstrap"
+	internallifecycle "github.com/codesjoy/yggdrasil/v3/app/internal/lifecycle"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	configchain "github.com/codesjoy/yggdrasil/v3/config/chain"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
@@ -39,10 +40,6 @@ const (
 	configSourcesFlagName = internalbootstrap.ConfigSourcesFlagName
 	defaultConfigPath     = internalbootstrap.DefaultConfigPath
 )
-
-func initConfigChain(opts *options) error {
-	return initConfigChainWithLogger(opts, bootstrapRuntimeLogger)
-}
 
 func initConfigChainWithLogger(opts *options, logger *slog.Logger) error {
 	if logger == nil {
@@ -287,7 +284,7 @@ func registerConfigSourceCleanup(opts *options) {
 	}
 	opts.lifecycleOptions = append(
 		opts.lifecycleOptions,
-		withLifecycleCleanup("config_sources", func(context.Context) error {
+		internallifecycle.WithCleanup("config_sources", func(context.Context) error {
 			return closeManagedConfigSources(opts)
 		}),
 	)
@@ -343,10 +340,6 @@ func resolveResolvedSettings(opts *options) (settings.Resolved, error) {
 		return settings.Resolved{}, err
 	}
 	return resolved, nil
-}
-
-func validateStartup(opts *options) error {
-	return validateStartupWithLogger(opts, bootstrapRuntimeLogger)
 }
 
 func validateStartupWithLogger(opts *options, logger *slog.Logger) error {

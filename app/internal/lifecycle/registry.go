@@ -23,10 +23,6 @@ import (
 	yserver "github.com/codesjoy/yggdrasil/v3/transport/runtime/server"
 )
 
-func (runner *Runner) register() error {
-	return runner.registerWithContext(context.Background())
-}
-
 func (runner *Runner) registerWithContext(ctx context.Context) error {
 	if runner.registry == nil {
 		return nil

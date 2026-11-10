@@ -329,44 +329,7 @@ func (runner *Runner) Start(ctx context.Context) error {
 		startCtx, cancel := context.WithCancel(ctx)
 		runner.startCancel = cancel
 		runner.mu.Unlock()
-
-		err := runner.startSequence(startCtx)
-
-		runner.mu.Lock()
-		startCancel := runner.startCancel
-		runner.startCancel = nil
-		stopRequested := runner.state == runnerStateStopping
-		if err == nil && stopRequested {
-			err = context.Canceled
-		}
-		runner.startErr = err
-		if err == nil {
-			runner.state = runnerStateRunning
-			runner.setRunning(true)
-		} else {
-			runner.state = runnerStateStopping
-			runner.setRunning(false)
-		}
-		close(runner.startDone)
-		runner.mu.Unlock()
-
-		if startCancel != nil {
-			startCancel()
-		}
-		if err != nil {
-			return errors.Join(err, runner.Stop(context.WithoutCancel(ctx)))
-		}
-		shutdownCtx := context.WithoutCancel(ctx)
-		go func() {
-			<-runner.serveDone
-			if stopErr := runner.Stop(shutdownCtx); stopErr != nil {
-				runner.loggerOrDefault().Error(
-					"failed to stop after server exit",
-					slog.Any("error", stopErr),
-				)
-			}
-		}()
-		return nil
+		return runner.startAndMonitor(ctx, startCtx)
 	case runnerStateStarting:
 		startDone := runner.startDone
 		runner.mu.Unlock()
@@ -386,6 +349,46 @@ func (runner *Runner) Start(ctx context.Context) error {
 		runner.mu.Unlock()
 		return errRunnerStopped
 	}
+}
+
+func (runner *Runner) startAndMonitor(ctx, startCtx context.Context) error {
+	err := runner.startSequence(startCtx)
+
+	runner.mu.Lock()
+	startCancel := runner.startCancel
+	runner.startCancel = nil
+	stopRequested := runner.state == runnerStateStopping
+	if err == nil && stopRequested {
+		err = context.Canceled
+	}
+	runner.startErr = err
+	if err == nil {
+		runner.state = runnerStateRunning
+		runner.setRunning(true)
+	} else {
+		runner.state = runnerStateStopping
+		runner.setRunning(false)
+	}
+	close(runner.startDone)
+	runner.mu.Unlock()
+
+	if startCancel != nil {
+		startCancel()
+	}
+	if err != nil {
+		return errors.Join(err, runner.Stop(context.WithoutCancel(ctx)))
+	}
+	shutdownCtx := context.WithoutCancel(ctx)
+	go func() {
+		<-runner.serveDone
+		if stopErr := runner.Stop(shutdownCtx); stopErr != nil {
+			runner.loggerOrDefault().Error(
+				"failed to stop after server exit",
+				slog.Any("error", stopErr),
+			)
+		}
+	}()
+	return nil
 }
 
 // Wait blocks until shutdown has fully completed.
@@ -485,7 +488,6 @@ func (runner *Runner) startSequence(ctx context.Context) error {
 	}
 	runner.launchServe("governor", runner.governor.Serve, nil)
 	for index, item := range runner.internalServers {
-		index := index
 		internalServer := item
 		runner.launchServe(fmt.Sprintf("internal server[%d]", index), internalServer.Serve, nil)
 	}
@@ -515,9 +517,7 @@ func (runner *Runner) launchServe(
 	serve func() error,
 	result chan<- error,
 ) {
-	runner.serveWG.Add(1)
-	go func() {
-		defer runner.serveWG.Done()
+	runner.serveWG.Go(func() {
 		err := serve()
 		if result != nil {
 			result <- err
@@ -525,7 +525,7 @@ func (runner *Runner) launchServe(
 		if err != nil {
 			runner.noteServeExit(fmt.Errorf("%s: %w", name, err))
 		}
-	}()
+	})
 }
 
 func (runner *Runner) noteServeExit(err error) {
@@ -565,19 +565,10 @@ func (runner *Runner) waitForMainServer(
 }
 
 func (runner *Runner) waitForGovernor(ctx context.Context) error {
-	result := make(chan error, 1)
-	go func() {
-		result <- runner.governor.WaitStarted(ctx)
-	}()
-	select {
-	case err := <-result:
-		if err != nil {
-			return fmt.Errorf("wait governor startup: %w", err)
-		}
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+	if err := runner.governor.WaitStarted(ctx); err != nil {
+		return fmt.Errorf("wait governor startup: %w", err)
 	}
+	return nil
 }
 
 func attrsToAny(attrs ...slog.Attr) []any {
@@ -640,18 +631,15 @@ func (runner *Runner) stopServers(ctx context.Context) error {
 	errs := make([]error, len(targets))
 	var wg sync.WaitGroup
 	for index := range targets {
-		index := index
 		target := targets[index]
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			errs[index] = runner.stopManagedComponent(
 				ctx,
 				target.name,
 				target.stop,
 				target.attrs...,
 			)
-		}()
+		})
 	}
 	wg.Wait()
 

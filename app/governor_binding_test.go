@@ -76,7 +76,7 @@ func TestInstallGovernorHTTPBinding_Rejections(t *testing.T) {
 	handler := func(http.ResponseWriter, *http.Request) {}
 
 	t.Run("builtin path rejected", func(t *testing.T) {
-		err := app.installGovernorHTTPBinding(GovernorHTTPBinding{
+		err := installGovernorBinding(app, GovernorHTTPBinding{
 			Method:  http.MethodGet,
 			Path:    "/configs",
 			Handler: handler,
@@ -86,12 +86,12 @@ func TestInstallGovernorHTTPBinding_Rejections(t *testing.T) {
 	})
 
 	t.Run("duplicate path rejected", func(t *testing.T) {
-		require.NoError(t, app.installGovernorHTTPBinding(GovernorHTTPBinding{
+		require.NoError(t, installGovernorBinding(app, GovernorHTTPBinding{
 			Method:  http.MethodGet,
 			Path:    "/dup",
 			Handler: handler,
 		}))
-		err := app.installGovernorHTTPBinding(GovernorHTTPBinding{
+		err := installGovernorBinding(app, GovernorHTTPBinding{
 			Method:  http.MethodPost,
 			Path:    "/dup",
 			Handler: handler,
@@ -101,13 +101,21 @@ func TestInstallGovernorHTTPBinding_Rejections(t *testing.T) {
 	})
 
 	t.Run("invalid binding rejected", func(t *testing.T) {
-		err := app.installGovernorHTTPBinding(GovernorHTTPBinding{
+		err := installGovernorBinding(app, GovernorHTTPBinding{
 			Method:  http.MethodGet,
 			Path:    "no-slash",
 			Handler: handler,
 		})
 		require.Error(t, err)
 	})
+}
+
+func installGovernorBinding(app *App, binding GovernorHTTPBinding) error {
+	staged := newStagedInstall(app)
+	if err := staged.installGovernorHTTPBinding(binding); err != nil {
+		return err
+	}
+	return staged.commit()
 }
 
 // newGovernorBindingTestApp prepares an app whose governor config is supplied

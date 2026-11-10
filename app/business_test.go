@@ -332,7 +332,7 @@ func TestApp_AddBusinessHook(t *testing.T) {
 			Stage: BusinessHookBeforeStart,
 			Func:  func(context.Context) error { return nil },
 		}
-		err := app.addBusinessHook(hook)
+		err := installBusinessHook(app, hook)
 		require.NoError(t, err)
 		assert.Len(t, app.opts.beforeStartHooks, 1)
 	})
@@ -345,7 +345,7 @@ func TestApp_AddBusinessHook(t *testing.T) {
 			Stage: BusinessHookBeforeStop,
 			Func:  func(context.Context) error { return nil },
 		}
-		err := app.addBusinessHook(hook)
+		err := installBusinessHook(app, hook)
 		require.NoError(t, err)
 		assert.Len(t, app.opts.beforeStopHooks, 1)
 	})
@@ -358,7 +358,7 @@ func TestApp_AddBusinessHook(t *testing.T) {
 			Stage: BusinessHookAfterStop,
 			Func:  func(context.Context) error { return nil },
 		}
-		err := app.addBusinessHook(hook)
+		err := installBusinessHook(app, hook)
 		require.NoError(t, err)
 		assert.Len(t, app.opts.afterStopHooks, 1)
 	})
@@ -371,7 +371,7 @@ func TestApp_AddBusinessHook(t *testing.T) {
 			Stage: BusinessHookBeforeStart,
 			Func:  nil,
 		}
-		err := app.addBusinessHook(hook)
+		err := installBusinessHook(app, hook)
 		require.Error(t, err)
 	})
 
@@ -383,7 +383,7 @@ func TestApp_AddBusinessHook(t *testing.T) {
 			Stage: BusinessHookStage("unknown"),
 			Func:  func(context.Context) error { return nil },
 		}
-		err := app.addBusinessHook(hook)
+		err := installBusinessHook(app, hook)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported")
 	})
@@ -396,7 +396,7 @@ func TestApp_AddBackgroundTask(t *testing.T) {
 		data := minimalV3Config("grpc")
 		app, _ := newInitializedAppWithConfig(t, "test-app", data)
 		task := &mockInternalServer{}
-		err := app.addBackgroundTask(task)
+		err := installBackgroundTask(app, task)
 		require.NoError(t, err)
 		assert.Len(t, app.opts.internalServers, 1)
 	})
@@ -404,9 +404,25 @@ func TestApp_AddBackgroundTask(t *testing.T) {
 	t.Run("nil task error", func(t *testing.T) {
 		data := minimalV3Config("grpc")
 		app, _ := newInitializedAppWithConfig(t, "test-app", data)
-		err := app.addBackgroundTask(nil)
+		err := installBackgroundTask(app, nil)
 		require.Error(t, err)
 	})
+}
+
+func installBusinessHook(app *App, hook BusinessHook) error {
+	staged := newStagedInstall(app)
+	if err := staged.addBusinessHook(hook); err != nil {
+		return err
+	}
+	return staged.commit()
+}
+
+func installBackgroundTask(app *App, task BackgroundTask) error {
+	staged := newStagedInstall(app)
+	if err := staged.addBackgroundTask(task); err != nil {
+		return err
+	}
+	return staged.commit()
 }
 
 // --- App.InstallBusiness edge cases ---
