@@ -15,8 +15,10 @@
 package lifecycle
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -72,6 +74,22 @@ func TestLifecycleInitAfterRunDoesNotReconfigure(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, runner.running)
 	assert.Zero(t, runner.shutdownTimeout)
+}
+
+func TestLifecycleUsesExplicitLogger(t *testing.T) {
+	var explicit bytes.Buffer
+	var global bytes.Buffer
+	oldDefault := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(oldDefault) })
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&global, nil)))
+
+	runner, err := New(WithLogger(slog.New(slog.NewJSONHandler(&explicit, nil))))
+	require.NoError(t, err)
+	runner.running = true
+	require.NoError(t, runner.Init())
+
+	assert.Contains(t, explicit.String(), "settings are no longer applied")
+	assert.Empty(t, global.String())
 }
 
 func TestLifecycleRunHooks(t *testing.T) {
@@ -650,6 +668,52 @@ func TestLifecycleWaitReturnsAfterServerStops(t *testing.T) {
 		require.NoError(t, err)
 	case <-time.After(2 * time.Second):
 		t.Fatal("Wait did not observe the completed shutdown")
+	}
+}
+
+func TestLifecycleWaitFromIdleStopsWithoutPanic(t *testing.T) {
+	runner, err := New()
+	require.NoError(t, err)
+
+	waitDone := make(chan error, 1)
+	go func() {
+		waitDone <- runner.Wait()
+	}()
+
+	select {
+	case err := <-waitDone:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Wait did not return for an idle runner")
+	}
+	require.NoError(t, runner.Wait())
+}
+
+func TestLifecycleConcurrentWaitAndStopFromIdle(t *testing.T) {
+	runner, err := New()
+	require.NoError(t, err)
+
+	start := make(chan struct{})
+	results := make(chan error, 3)
+	var wg sync.WaitGroup
+	for index := 0; index < 3; index++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			if index == 0 {
+				results <- runner.Stop(context.Background())
+				return
+			}
+			results <- runner.Wait()
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	for result := range results {
+		require.NoError(t, result)
 	}
 }
 

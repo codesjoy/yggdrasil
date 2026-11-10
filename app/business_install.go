@@ -143,6 +143,24 @@ func (a *App) ComposeAndInstall(ctx context.Context, fn ComposeFunc) error {
 
 // InstallBusiness installs one composed business bundle.
 func (a *App) InstallBusiness(bundle *BusinessBundle) error {
+	if a == nil {
+		return internalinstall.ValidationError("app is not ready", nil)
+	}
+	if a.installing.Load() {
+		return yassembly.NewError(
+			yassembly.ErrInstallRegistrationConflict,
+			"install",
+			"business bundle installation is already in progress",
+			nil,
+			nil,
+		)
+	}
+
+	a.installMu.Lock()
+	defer a.installMu.Unlock()
+	a.installing.Store(true)
+	defer a.installing.Store(false)
+
 	a.mu.Lock()
 	if a.explicitBundleInstalled {
 		err := yassembly.NewError(
@@ -169,15 +187,18 @@ func (a *App) InstallBusiness(bundle *BusinessBundle) error {
 		a.mu.Unlock()
 		return err
 	}
-	err := a.installBundleLocked(bundle)
+	a.mu.Unlock()
+
+	err := a.installBundle(bundle)
 	if err == nil {
+		a.mu.Lock()
 		a.explicitBundleInstalled = true
 		a.clearAssemblyErrorLocked(assemblyStageInstall)
 		if a.state < lifecycleStateBusinessInstalled {
 			a.state = lifecycleStateBusinessInstalled
 		}
+		a.mu.Unlock()
 	}
-	a.mu.Unlock()
 	if err != nil {
 		err = internalinstall.WrapError(err)
 		a.mu.Lock()
@@ -188,7 +209,7 @@ func (a *App) InstallBusiness(bundle *BusinessBundle) error {
 	return nil
 }
 
-func (a *App) installBundleLocked(bundle *BusinessBundle) error {
+func (a *App) installBundle(bundle *BusinessBundle) error {
 	if bundle == nil {
 		return nil
 	}
@@ -248,7 +269,16 @@ func (a *App) installBundleLocked(bundle *BusinessBundle) error {
 		}
 	}
 	staged.diagnostics = append(staged.diagnostics, bundle.Diagnostics...)
-	return staged.commit()
+	if err := staged.commit(); err != nil {
+		if rollbackErr := staged.rollbackExtensions(extensions); rollbackErr != nil {
+			return internalinstall.ValidationError(
+				"install commit and rollback failed",
+				errors.Join(err, rollbackErr),
+			)
+		}
+		return err
+	}
+	return nil
 }
 
 func (a *App) installRPCBinding(binding RPCBinding) error {
@@ -372,6 +402,7 @@ func newStagedInstall(app *App) *stagedInstall {
 		governorRoutes: map[string]struct{}{},
 	}
 	if app != nil {
+		app.mu.Lock()
 		for key := range app.installedRPCServices {
 			staged.rpcServices[key] = struct{}{}
 		}
@@ -384,6 +415,7 @@ func newStagedInstall(app *App) *stagedInstall {
 		if app.opts != nil {
 			staged.svr = app.opts.server
 		}
+		app.mu.Unlock()
 	}
 	return staged
 }
@@ -568,9 +600,21 @@ func (s *stagedInstall) commit() error {
 	if s.app == nil || s.app.opts == nil {
 		return internalinstall.ValidationError("app is not ready", nil)
 	}
+	s.app.mu.Lock()
+	ready := s.app.state >= lifecycleStateInitialized &&
+		s.app.state < lifecycleStateServing &&
+		s.app.state != lifecycleStateStopped &&
+		!s.app.stopping.Load()
+	s.app.mu.Unlock()
+	if !ready {
+		return internalinstall.ValidationError("runtime is not ready", nil)
+	}
 	if err := s.app.installStagedLifecycle(s.tasks, s.hooks); err != nil {
 		return internalinstall.ValidationError("install staged lifecycle", err)
 	}
+
+	s.app.mu.Lock()
+	defer s.app.mu.Unlock()
 	if s.svr != nil {
 		s.app.opts.server = s.svr
 	}

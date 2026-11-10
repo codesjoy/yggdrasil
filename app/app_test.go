@@ -15,9 +15,11 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"os"
 	"reflect"
@@ -29,6 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
 	"github.com/codesjoy/yggdrasil/v3/module"
@@ -39,6 +42,19 @@ func TestNewOptionError(t *testing.T) {
 		return errors.New("inject init error")
 	})
 	require.Error(t, err)
+}
+
+func TestRuntimeLoggerBeforeSnapshotUsesPrivateDiscardLogger(t *testing.T) {
+	var global bytes.Buffer
+	oldDefault := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(oldDefault) })
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&global, nil)))
+
+	app, err := New("bootstrap-logger")
+	require.NoError(t, err)
+	require.NotSame(t, oldDefault, app.runtimeLogger())
+	app.runtimeLogger().Error("bootstrap-only message")
+	assert.Empty(t, global.String())
 }
 
 func TestBuildLifecycleOptionsIncludesAppCleanup(t *testing.T) {
@@ -210,21 +226,37 @@ type noOpReloadCommitter struct{}
 func (noOpReloadCommitter) Commit(context.Context) error   { return nil }
 func (noOpReloadCommitter) Rollback(context.Context) error { return nil }
 
-func TestWithModulesRegistersBusinessModules(t *testing.T) {
+func TestWithModulesRegistersCandidatesAndRequiresExplicitEnable(t *testing.T) {
+	moduleName := "test.extra.module"
 	app := newInitializedApp(
 		t,
 		"with-modules",
-		WithModules(testExtraModule{name: "test.extra.module"}),
+		WithModules(testExtraModule{name: moduleName}),
 	)
 	diag := app.hub.Diagnostics()
 	names := make([]string, 0, len(diag.Topology))
 	names = append(names, diag.Topology...)
-	require.Contains(t, names, "test.extra.module")
+	require.NotContains(t, names, moduleName)
+
+	enabled := newInitializedApp(
+		t,
+		"with-modules-enabled",
+		WithModules(testExtraModule{name: moduleName}),
+		WithPlanOverrides(yassembly.EnableModule(moduleName)),
+	)
+	diag = enabled.hub.Diagnostics()
+	names = append(names[:0], diag.Topology...)
+	require.Contains(t, names, moduleName)
 }
 
 func TestPrepareThenStopRunsModuleCleanup(t *testing.T) {
 	mod := &lifecycleTestModule{name: "prepare-stop.module"}
-	app := newInitializedApp(t, "prepare-stop-cleanup", WithModules(mod))
+	app := newInitializedApp(
+		t,
+		"prepare-stop-cleanup",
+		WithModules(mod),
+		WithPlanOverrides(yassembly.EnableModule(mod.Name())),
+	)
 
 	require.NoError(t, app.Stop(context.Background()))
 	require.Equal(t, int32(1), mod.stopped.Load())
@@ -243,6 +275,7 @@ func TestStopWaitsForInFlightReload(t *testing.T) {
 		"reload-stop-serial",
 		configData,
 		WithModules(mod, testTransportModule{recorder: newTransportRecorder()}),
+		WithPlanOverrides(yassembly.EnableModule(mod.Name())),
 	)
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })
 
@@ -325,7 +358,11 @@ func TestReloadUpdatesCapabilityBindingsAndMarksRestartRequired(t *testing.T) {
 			memory.NewSource("test", minimalV3Config("http")),
 		),
 	)
-	require.NoError(t, app.Reload(context.Background()))
+	requireAssemblyErrorCode(
+		t,
+		app.Reload(context.Background()),
+		yassembly.ErrReloadRequiresRestart,
+	)
 
 	state := app.hub.ReloadState()
 	require.True(t, state.RestartRequired)
@@ -334,6 +371,62 @@ func TestReloadUpdatesCapabilityBindingsAndMarksRestartRequired(t *testing.T) {
 	binding := findBindingDiag(t, diag, "transport.server.provider")
 	require.Equal(t, []string{"http"}, binding.Requested)
 	require.Equal(t, []string{"http"}, binding.Resolved)
+}
+
+func TestReloadRestartRequiredRemainsStickyAndDoesNotAdvanceStablePlan(t *testing.T) {
+	app, manager := newInitializedAppWithConfig(
+		t,
+		"restart-sticky",
+		minimalV3Config("grpc"),
+	)
+	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+
+	app.mu.Lock()
+	app.state = lifecycleStateRunning
+	app.mu.Unlock()
+
+	stablePlan := app.runtimePlan()
+	stableSpec := app.assemblySpec
+	stableHash := app.lastStablePlanHash
+	stableResolved := app.opts.resolvedSettings
+	require.NotNil(t, stablePlan)
+	require.NotNil(t, app.runtimeAssembly)
+	require.Same(t, stableSpec, app.runtimeAssembly.Spec)
+
+	require.NoError(t, manager.LoadLayer(
+		"test",
+		config.PriorityOverride,
+		memory.NewSource("test", minimalV3Config("http")),
+	))
+	requireAssemblyErrorCode(
+		t,
+		app.Reload(context.Background()),
+		yassembly.ErrReloadRequiresRestart,
+	)
+	require.Same(t, stablePlan, app.runtimePlan())
+	require.Same(t, stableSpec, app.assemblySpec)
+	require.Same(t, stableSpec, app.runtimeAssembly.Spec)
+	require.Equal(t, stableHash, app.lastStablePlanHash)
+	require.Equal(t, stableResolved, app.opts.resolvedSettings)
+
+	requireAssemblyErrorCode(
+		t,
+		app.Reload(context.Background()),
+		yassembly.ErrReloadRequiresRestart,
+	)
+
+	require.NoError(t, manager.LoadLayer(
+		"test",
+		config.PriorityOverride,
+		memory.NewSource("test", minimalV3Config("grpc")),
+	))
+	requireAssemblyErrorCode(
+		t,
+		app.Reload(context.Background()),
+		yassembly.ErrReloadRequiresRestart,
+	)
+	require.Same(t, stablePlan, app.runtimePlan())
+	require.Equal(t, stableHash, app.lastStablePlanHash)
 }
 
 func TestDiagnosticsPayloadIncludesModuleHubState(t *testing.T) {

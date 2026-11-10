@@ -224,7 +224,7 @@ func (s *Server) listen() (net.Listener, error) {
 		return nil, errors.New("governor already serve")
 	}
 	lc := net.ListenConfig{}
-	return lc.Listen(context.Background(), "tcp4", s.cfg.Address())
+	return lc.Listen(context.Background(), "tcp", s.cfg.Address())
 }
 
 func (s *Server) markStarted(err error) {

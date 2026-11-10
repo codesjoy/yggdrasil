@@ -75,6 +75,22 @@ func (s *blockingReadSource) Read() (source.Data, error) {
 	return s.testSource.Read()
 }
 
+type blockingData struct {
+	data    source.Data
+	started chan struct{}
+	release chan struct{}
+}
+
+func (d *blockingData) Bytes() []byte {
+	return d.data.Bytes()
+}
+
+func (d *blockingData) Unmarshal(target any) error {
+	close(d.started)
+	<-d.release
+	return d.data.Unmarshal(target)
+}
+
 func waitFor(t *testing.T, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -120,6 +136,33 @@ func TestManagerLoadLayerRespectsPriorityAndReplacement(t *testing.T) {
 	})))
 	require.NoError(t, manager.Section("app").Decode(&cfg))
 	require.Equal(t, 10001, cfg.Port)
+}
+
+func TestManagerLoadLayerReplacementUsesNewPriority(t *testing.T) {
+	manager := NewManager()
+	t.Cleanup(func() { require.NoError(t, manager.Close()) })
+
+	require.NoError(
+		t,
+		manager.LoadLayer("shared", PriorityFile, memory.NewSource("shared", map[string]any{
+			"value": "file",
+		})),
+	)
+	require.NoError(
+		t,
+		manager.LoadLayer("other", PriorityDefaults, memory.NewSource("other", map[string]any{
+			"value": "default",
+		})),
+	)
+	require.Equal(t, "file", manager.Snapshot().Value().(map[string]any)["value"])
+
+	require.NoError(
+		t,
+		manager.LoadLayer("shared", PriorityDefaults, memory.NewSource("shared", map[string]any{
+			"value": "replacement",
+		})),
+	)
+	require.Equal(t, "default", manager.Snapshot().Value().(map[string]any)["value"])
 }
 
 func TestTypedSectionWatchIsScoped(t *testing.T) {
@@ -294,6 +337,113 @@ func TestManagerWatchLayerUpdatesAndIgnoresInvalidPayload(t *testing.T) {
 	changeCh <- source.NewBytesData([]byte(`not-json`), json.Unmarshal)
 	time.Sleep(50 * time.Millisecond)
 	require.True(t, last.Load())
+}
+
+func TestManagerWatchableReplacementCanCloseAndDropsRetiredUpdates(t *testing.T) {
+	manager := NewManager()
+	t.Cleanup(func() { _ = manager.Close() })
+	changeCh := make(chan source.Data, 1)
+	src := &watchableTestSource{
+		testSource: &testSource{
+			name: "watch",
+			kind: "test",
+			data: source.NewMapData(map[string]any{
+				"app": map[string]any{"value": "initial"},
+			}),
+		},
+		watchCh: changeCh,
+	}
+	require.NoError(t, manager.LoadLayer("shared", PriorityFile, src))
+
+	blocked := &blockingData{
+		data: source.NewMapData(map[string]any{
+			"app": map[string]any{"value": "stale"},
+		}),
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	changeCh <- blocked
+	select {
+	case <-blocked.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("watcher did not start decoding the stale update")
+	}
+
+	require.NoError(
+		t,
+		manager.LoadLayer(
+			"shared",
+			PriorityOverride,
+			memory.NewSource("replacement", map[string]any{
+				"app": map[string]any{"value": "fresh"},
+			}),
+		),
+	)
+	close(blocked.release)
+
+	waitFor(t, func() bool {
+		value, _ := Lookup(manager.Snapshot().Value(), "app", "value").(string)
+		return value == "fresh"
+	})
+	require.NotPanics(t, func() {
+		require.NoError(t, manager.Close())
+	})
+}
+
+func TestManagerRetiredWatcherDoesNotReportErrors(t *testing.T) {
+	manager := NewManager()
+	defer func() { require.NoError(t, manager.Close()) }()
+
+	changeCh := make(chan source.Data, 1)
+	src := &watchableTestSource{
+		testSource: &testSource{
+			name: "watch",
+			kind: "test",
+			data: source.NewMapData(map[string]any{
+				"app": map[string]any{"value": "initial"},
+			}),
+		},
+		watchCh: changeCh,
+	}
+	require.NoError(t, manager.LoadLayer("shared", PriorityFile, src))
+
+	errorsCh := make(chan error, 1)
+	cancel := manager.WatchWithError(nil, func(Snapshot) {}, func(err error) {
+		select {
+		case errorsCh <- err:
+		default:
+		}
+	})
+	defer cancel()
+
+	blocked := &blockingData{
+		data:    source.NewBytesData([]byte(`not-json`), json.Unmarshal),
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	changeCh <- blocked
+	select {
+	case <-blocked.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("watcher did not start decoding the stale error")
+	}
+	require.NoError(
+		t,
+		manager.LoadLayer(
+			"shared",
+			PriorityOverride,
+			memory.NewSource("replacement", map[string]any{
+				"app": map[string]any{"value": "fresh"},
+			}),
+		),
+	)
+	close(blocked.release)
+
+	select {
+	case err := <-errorsCh:
+		t.Fatalf("retired watcher reported an error: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
 }
 
 func TestManagerWatchWithErrorReportsInvalidPayload(t *testing.T) {

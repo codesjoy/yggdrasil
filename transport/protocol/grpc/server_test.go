@@ -257,6 +257,35 @@ func TestServer_Info(t *testing.T) {
 	assert.Equal(t, "test:123", info.Address)
 	assert.Equal(t, Protocol, info.Protocol)
 	assert.Equal(t, attr, info.Attributes)
+	info.Attributes["zone"] = "changed"
+	assert.Equal(t, "us-west", s.Info().Attributes["zone"])
+}
+
+func TestServer_InfoConcurrentWithStart(t *testing.T) {
+	ConfigureBuiltinCodecs()
+	cfg := ServerConfig{Address: "127.0.0.1:0"}
+	require.NoError(t, cfg.SetDefault())
+
+	s := &server{
+		stoppedCh:    make(chan struct{}),
+		opts:         cfg,
+		statsHandler: stats.NoOpHandler,
+		handle:       func(remote.ServerStream) {},
+	}
+	s.ctx, s.cancel = context.WithCancel(context.Background())
+	s.grpcServer = ggrpc.NewServer(s.serverOptions()...)
+	t.Cleanup(func() {
+		_ = s.Stop(context.Background())
+	})
+
+	startDone := make(chan error, 1)
+	go func() {
+		startDone <- s.Start()
+	}()
+	for range 100 {
+		_ = s.Info().Address
+	}
+	require.NoError(t, <-startDone)
 }
 
 func TestServer_Stop_NotStarted(t *testing.T) {

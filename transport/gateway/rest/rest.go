@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"reflect"
 	"strconv"
 	"strings"
@@ -53,6 +54,7 @@ type Config struct {
 	AcceptHeader      []string      `mapstructure:"accept_header"`
 	OutHeader         []string      `mapstructure:"out_header"`
 	OutTrailer        []string      `mapstructure:"out_trailer"`
+	TrustedProxyCIDRs []string      `mapstructure:"trusted_proxy_cidrs"`
 	Middleware        struct {
 		RPC []string `mapstructure:"rpc"`
 		Web []string `mapstructure:"web"`
@@ -73,7 +75,7 @@ type serverInfo struct {
 }
 
 func (s *serverInfo) GetAttributes() map[string]string {
-	return s.attributes
+	return cloneStringMap(s.attributes)
 }
 
 func (s *serverInfo) GetAddress() string {
@@ -100,9 +102,10 @@ type ServeMux struct {
 
 	info *serverInfo
 
-	acceptHeaders []string
-	outHeaders    []string
-	outTrailers   []string
+	acceptHeaders  []string
+	outHeaders     []string
+	outTrailers    []string
+	trustedProxies []netip.Prefix
 
 	marshalerRegistry marshaler.Registry
 	middlewareMap     map[string]Provider
@@ -142,6 +145,10 @@ func NewServer(cfg *Config, opts ...Option) (Server, error) {
 
 	host := listenaddr.ResolveBindHost(cfg.Host)
 	address := net.JoinHostPort(host, strconv.Itoa(cfg.Port))
+	trustedProxies, err := parseTrustedProxyCIDRs(cfg.TrustedProxyCIDRs)
+	if err != nil {
+		return nil, err
+	}
 
 	s := &ServeMux{
 		cfg: cfg,
@@ -149,9 +156,10 @@ func NewServer(cfg *Config, opts ...Option) (Server, error) {
 			address:    address,
 			attributes: map[string]string{},
 		},
-		acceptHeaders: cfg.AcceptHeader,
-		outHeaders:    cfg.OutHeader,
-		outTrailers:   cfg.OutTrailer,
+		acceptHeaders:  cfg.AcceptHeader,
+		outHeaders:     cfg.OutHeader,
+		outTrailers:    cfg.OutTrailer,
+		trustedProxies: trustedProxies,
 	}
 
 	for _, opt := range opts {
@@ -285,19 +293,19 @@ func (s *ServeMux) Start() error {
 		s.svr = nil
 		return err
 	}
-	s.info.address = lis.Addr().String()
+	boundAddress := lis.Addr().String()
 	advertiseAddress, err := listenaddr.ResolveAdvertiseAddress(
 		"tcp",
-		s.info.address,
+		boundAddress,
 		s.cfg.AdvertiseAddress,
 	)
 	if err != nil {
 		_ = lis.Close()
 		s.started = false
 		s.listener = nil
-		s.info.address = ""
 		return err
 	}
+	s.info.address = boundAddress
 	s.info.advertiseAddress = advertiseAddress
 	s.listener = lis
 	s.svr = &http.Server{
@@ -363,7 +371,27 @@ func (s *ServeMux) Stop(ctx context.Context) error {
 
 // Info returns the server info.
 func (s *ServeMux) Info() ServerInfo {
-	return s.info
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.info == nil {
+		return &serverInfo{attributes: map[string]string{}}
+	}
+	return &serverInfo{
+		address:          s.info.address,
+		advertiseAddress: s.info.advertiseAddress,
+		attributes:       cloneStringMap(s.info.attributes),
+	}
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return map[string]string{}
+	}
+	out := make(map[string]string, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }
 
 func (s *ServeMux) extractInMetadata(r *http.Request) metadata.MD {
@@ -385,28 +413,138 @@ func (s *ServeMux) extractInMetadata(r *http.Request) metadata.MD {
 }
 
 func (s *ServeMux) getPeer(r *http.Request) *peer.Peer {
-	ip, portStr, _ := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
-	port, _ := strconv.Atoi(portStr)
-	clientIP := r.Header.Get("X-Forwarded-For")
-	clientIP = strings.TrimSpace(strings.Split(clientIP, ",")[0])
-	if clientIP == "" {
-		clientIP = strings.TrimSpace(r.Header.Get("X-Real-Ip"))
-	}
-	if clientIP != "" {
-		ip = clientIP
+	remoteIP, port := parseRemoteAddr(r.RemoteAddr)
+	clientIP := remoteIP
+	if s.isTrustedProxy(remoteIP) {
+		if forwarded, ok := s.forwardedClientIP(r, remoteIP); ok {
+			clientIP = forwarded
+			port = 0
+		}
 	}
 	var localAddr net.Addr
+	s.mu.Lock()
 	if s.listener != nil {
 		localAddr = s.listener.Addr()
 	}
+	s.mu.Unlock()
+	var tcpIP net.IP
+	if clientIP.IsValid() {
+		tcpIP = net.IP(clientIP.Unmap().AsSlice())
+	}
 	return &peer.Peer{
 		Addr: &net.TCPAddr{
-			IP:   net.ParseIP(ip),
+			IP:   tcpIP,
 			Port: port,
 		},
 		LocalAddr: localAddr,
 		Protocol:  "http",
 	}
+}
+
+func parseTrustedProxyCIDRs(values []string) ([]netip.Prefix, error) {
+	out := make([]netip.Prefix, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if strings.Contains(value, "/") {
+			prefix, err := netip.ParsePrefix(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid trusted proxy CIDR %q: %w", value, err)
+			}
+			out = append(out, prefix.Masked())
+			continue
+		}
+		address, err := netip.ParseAddr(value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid trusted proxy address %q: %w", value, err)
+		}
+		address = address.Unmap()
+		bits := 128
+		if address.Is4() {
+			bits = 32
+		}
+		out = append(out, netip.PrefixFrom(address, bits))
+	}
+	return out, nil
+}
+
+func parseRemoteAddr(value string) (netip.Addr, int) {
+	value = strings.TrimSpace(value)
+	host, portText, err := net.SplitHostPort(value)
+	if err != nil {
+		host = strings.Trim(value, "[]")
+		portText = ""
+	}
+	address, err := netip.ParseAddr(strings.Trim(host, "[]"))
+	if err != nil {
+		return netip.Addr{}, 0
+	}
+	port, _ := strconv.Atoi(portText)
+	return address.Unmap(), port
+}
+
+func (s *ServeMux) isTrustedProxy(address netip.Addr) bool {
+	if !address.IsValid() || len(s.trustedProxies) == 0 {
+		return false
+	}
+	address = address.Unmap()
+	for _, prefix := range s.trustedProxies {
+		if prefix.Contains(address) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *ServeMux) forwardedClientIP(
+	request *http.Request,
+	remoteIP netip.Addr,
+) (netip.Addr, bool) {
+	if values := request.Header.Values("X-Forwarded-For"); len(values) > 0 {
+		chain, ok := parseForwardedChain(values)
+		if !ok {
+			return netip.Addr{}, false
+		}
+		chain = append(chain, remoteIP)
+		for index := len(chain) - 1; index >= 0; index-- {
+			if !s.isTrustedProxy(chain[index]) {
+				return chain[index], true
+			}
+		}
+		if len(chain) > 0 {
+			return chain[0], true
+		}
+		return netip.Addr{}, false
+	}
+	value := strings.TrimSpace(request.Header.Get("X-Real-Ip"))
+	if value == "" {
+		return netip.Addr{}, false
+	}
+	address, err := netip.ParseAddr(value)
+	if err != nil {
+		return netip.Addr{}, false
+	}
+	return address.Unmap(), true
+}
+
+func parseForwardedChain(values []string) ([]netip.Addr, bool) {
+	out := make([]netip.Addr, 0, len(values))
+	for _, value := range values {
+		for _, item := range strings.Split(value, ",") {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				return nil, false
+			}
+			address, err := netip.ParseAddr(strings.Trim(item, "[]"))
+			if err != nil {
+				return nil, false
+			}
+			out = append(out, address.Unmap())
+		}
+	}
+	return out, len(out) > 0
 }
 
 func (s *ServeMux) errorHandler(w http.ResponseWriter, r *http.Request, err error) {

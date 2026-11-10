@@ -18,6 +18,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/codesjoy/yggdrasil/v3/capabilities"
 	"github.com/codesjoy/yggdrasil/v3/config"
@@ -62,11 +63,27 @@ var (
 
 type foundationBuiltinCapabilityModule struct{}
 
+type staticReloadCommitter struct{}
+
+func (staticReloadCommitter) Commit(context.Context) error   { return nil }
+func (staticReloadCommitter) Rollback(context.Context) error { return nil }
+
 func (foundationBuiltinCapabilityModule) Name() string { return "foundation.capabilities" }
 
 func (foundationBuiltinCapabilityModule) ConfigPath() string { return "yggdrasil" }
 
+func (foundationBuiltinCapabilityModule) IsolationMode() module.IsolationMode {
+	return module.IsolationModeAppLocal
+}
+
 func (foundationBuiltinCapabilityModule) Init(context.Context, config.View) error { return nil }
+
+func (foundationBuiltinCapabilityModule) PrepareReload(
+	context.Context,
+	config.View,
+) (module.ReloadCommitter, error) {
+	return staticReloadCommitter{}, nil
+}
 
 func appendSortedCapabilities(
 	out []module.Capability,
@@ -120,11 +137,22 @@ type statsOtelCapabilityModule struct{}
 
 func (statsOtelCapabilityModule) Name() string { return "observability.stats.otel" }
 
+func (statsOtelCapabilityModule) IsolationMode() module.IsolationMode {
+	return module.IsolationModeAppLocal
+}
+
 func (statsOtelCapabilityModule) ConfigPath() string {
 	return "yggdrasil.observability.telemetry.stats"
 }
 
 func (statsOtelCapabilityModule) Init(context.Context, config.View) error { return nil }
+
+func (statsOtelCapabilityModule) PrepareReload(
+	context.Context,
+	config.View,
+) (module.ReloadCommitter, error) {
+	return staticReloadCommitter{}, nil
+}
 
 func (statsOtelCapabilityModule) Capabilities() []module.Capability {
 	return appendSortedCapabilities(nil, statsHandlerCapabilitySpec, map[string]any{
@@ -191,9 +219,20 @@ type connectivityBuiltinCapabilityModule struct{}
 
 func (connectivityBuiltinCapabilityModule) Name() string { return "connectivity.capabilities" }
 
+func (connectivityBuiltinCapabilityModule) IsolationMode() module.IsolationMode {
+	return module.IsolationModeAppLocal
+}
+
 func (connectivityBuiltinCapabilityModule) ConfigPath() string { return "yggdrasil" }
 
 func (connectivityBuiltinCapabilityModule) Init(context.Context, config.View) error { return nil }
+
+func (connectivityBuiltinCapabilityModule) PrepareReload(
+	context.Context,
+	config.View,
+) (module.ReloadCommitter, error) {
+	return staticReloadCommitter{}, nil
+}
 
 func (connectivityBuiltinCapabilityModule) Capabilities() []module.Capability {
 	out := make([]module.Capability, 0)
@@ -253,6 +292,10 @@ type foundationRuntimeModule struct {
 
 func (m foundationRuntimeModule) Name() string { return "foundation.runtime" }
 
+func (m foundationRuntimeModule) IsolationMode() module.IsolationMode {
+	return module.IsolationModeAppLocal
+}
+
 func (m foundationRuntimeModule) ConfigPath() string { return "yggdrasil" }
 
 func (m foundationRuntimeModule) Init(context.Context, config.View) error {
@@ -273,25 +316,49 @@ func (m foundationRuntimeModule) PrepareReload(
 		return nil, err
 	}
 	m.app.stageFoundationSnapshot(next)
-	return foundationRuntimeCommitter{app: m.app, next: next}, nil
+	return &foundationRuntimeCommitter{app: m.app, next: next}, nil
 }
 
 type foundationRuntimeCommitter struct {
-	app  *App
-	next *Snapshot
+	mu sync.Mutex
+
+	app      *App
+	next     *Snapshot
+	previous *Snapshot
+
+	committed bool
+	closed    bool
 }
 
-func (c foundationRuntimeCommitter) Commit(context.Context) error {
-	if c.app != nil {
-		c.app.commitFoundationSnapshot(c.next)
+func (c *foundationRuntimeCommitter) Commit(context.Context) error {
+	if c == nil {
+		return nil
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed || c.committed {
+		return nil
+	}
+	if c.app != nil {
+		c.previous = c.app.commitFoundationSnapshotTransaction(c.next)
+	}
+	c.committed = true
 	return nil
 }
 
-func (c foundationRuntimeCommitter) Rollback(context.Context) error {
-	if c.app != nil {
-		c.app.rollbackFoundationSnapshot(c.next)
+func (c *foundationRuntimeCommitter) Rollback(context.Context) error {
+	if c == nil {
+		return nil
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return nil
+	}
+	if c.app != nil {
+		c.app.rollbackFoundationSnapshotTransaction(c.next, c.previous, c.committed)
+	}
+	c.closed = true
 	return nil
 }
 
@@ -300,6 +367,10 @@ type connectivityRuntimeModule struct {
 }
 
 func (m connectivityRuntimeModule) Name() string { return "connectivity.runtime" }
+
+func (m connectivityRuntimeModule) IsolationMode() module.IsolationMode {
+	return module.IsolationModeAppLocal
+}
 
 func (m connectivityRuntimeModule) DependsOn() []string { return []string{"foundation.runtime"} }
 

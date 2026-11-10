@@ -108,6 +108,7 @@ func (h *Hub) stopSequence(ctx context.Context, startedSeq []Module) error {
 		mod := startedSeq[i]
 		item, ok := mod.(Stoppable)
 		if !ok {
+			h.markStopped(mod.Name())
 			continue
 		}
 		if err := item.Stop(ctx); err != nil {
@@ -115,7 +116,9 @@ func (h *Hub) stopSequence(ctx context.Context, startedSeq []Module) error {
 				multiErr,
 				fmt.Errorf("module %q stop failed: %w", mod.Name(), err),
 			)
+			continue
 		}
+		h.markStopped(mod.Name())
 	}
 	return multiErr
 }
@@ -173,7 +176,30 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 		h.snapshot = snap
 		h.reloadState = ReloadState{
 			Phase:           ReloadPhaseIdle,
-			RestartRequired: restartRequired,
+			RestartRequired: h.restartRequired,
+		}
+		h.mu.Unlock()
+		return nil
+	}
+
+	nonReloadable := make([]Module, 0)
+	for _, mod := range affected {
+		if _, ok := mod.(Reloadable); !ok {
+			nonReloadable = append(nonReloadable, mod)
+		}
+	}
+	if len(nonReloadable) > 0 {
+		h.mu.Lock()
+		for _, mod := range nonReloadable {
+			h.restartFlag[mod.Name()] = true
+		}
+		h.restartRequired = true
+		if forceAll {
+			h.reloadAll = true
+		}
+		h.reloadState = ReloadState{
+			Phase:           ReloadPhaseIdle,
+			RestartRequired: true,
 		}
 		h.mu.Unlock()
 		return nil
@@ -181,16 +207,7 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 
 	prepared := make([]preparedReload, 0, len(affected))
 	for _, mod := range affected {
-		item, ok := mod.(Reloadable)
-		if !ok {
-			h.mu.Lock()
-			h.restartFlag[mod.Name()] = true
-			h.restartRequired = true
-			restartRequired = true
-			h.reloadState.RestartRequired = true
-			h.mu.Unlock()
-			continue
-		}
+		item := mod.(Reloadable)
 		committer, err := item.PrepareReload(ctx, moduleView(mod, snap))
 		if err != nil {
 			rollbackModule, rollbackErr := rollbackPrepared(ctx, prepared)
@@ -211,8 +228,14 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 				state = state.withError(errors.Join(err, rollbackErr))
 			}
 			h.mu.Lock()
+			if forceAll {
+				h.reloadAll = true
+			}
 			if state.RestartRequired {
 				h.restartRequired = true
+			}
+			if h.restartRequired {
+				state.RestartRequired = true
 			}
 			h.restartFlag[mod.Name()] = true
 			h.reloadState = state
@@ -249,6 +272,9 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 				state = state.withError(errors.Join(err, rollbackErr))
 			}
 			h.mu.Lock()
+			if forceAll {
+				h.reloadAll = true
+			}
 			h.restartRequired = true
 			h.reloadState = state
 			h.restartFlag[item.module.Name()] = true
@@ -276,6 +302,9 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 	}
 	if finalizeErr != nil {
 		h.mu.Lock()
+		if forceAll {
+			h.reloadAll = true
+		}
 		h.snapshot = snap
 		h.restartRequired = true
 		h.reloadState = ReloadState{
@@ -293,7 +322,7 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 	h.snapshot = snap
 	h.reloadState = ReloadState{
 		Phase:           ReloadPhaseIdle,
-		RestartRequired: restartRequired,
+		RestartRequired: h.restartRequired,
 	}
 	h.mu.Unlock()
 	return nil
@@ -386,5 +415,11 @@ func configChanged(mod Module, oldSnap, newSnap config.Snapshot) bool {
 func (h *Hub) markStarted(name string) {
 	h.mu.Lock()
 	h.started[name] = true
+	h.mu.Unlock()
+}
+
+func (h *Hub) markStopped(name string) {
+	h.mu.Lock()
+	h.started[name] = false
 	h.mu.Unlock()
 }

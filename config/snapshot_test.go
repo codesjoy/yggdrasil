@@ -15,6 +15,7 @@
 package config
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -81,4 +82,118 @@ func TestSnapshotHelpersAndDecodeEdgeCases(t *testing.T) {
 
 	var intTarget int
 	require.Error(t, NewSnapshot("bad").Decode(&intTarget))
+}
+
+func TestSnapshotDeepClonesTypedValuesAndDecodeResults(t *testing.T) {
+	type child struct {
+		Labels map[string]string
+	}
+	type typedConfig struct {
+		Values     []string
+		Index      map[string]int
+		Fixed      [2]string
+		Child      *child
+		private    []string
+		privateMap map[string][]string
+	}
+
+	source := &typedConfig{
+		Values: []string{"one", "two"},
+		Index:  map[string]int{"one": 1},
+		Fixed:  [2]string{"left", "right"},
+		Child: &child{
+			Labels: map[string]string{"env": "test"},
+		},
+		private:    []string{"hidden"},
+		privateMap: map[string][]string{"hidden": {"value"}},
+	}
+	snapshot := NewSnapshot(source)
+
+	source.Values[0] = "mutated"
+	source.Index["one"] = 99
+	source.Child.Labels["env"] = "mutated"
+	source.private[0] = "mutated"
+	source.privateMap["hidden"][0] = "mutated"
+
+	fromValue, ok := snapshot.Value().(*typedConfig)
+	require.True(t, ok)
+	require.Equal(t, "one", fromValue.Values[0])
+	require.Equal(t, 1, fromValue.Index["one"])
+	require.Equal(t, "test", fromValue.Child.Labels["env"])
+	require.Equal(t, "hidden", fromValue.private[0])
+	require.Equal(t, "value", fromValue.privateMap["hidden"][0])
+	fromValue.Values[1] = "mutated"
+	fromValue.private[0] = "value-mutated"
+	fromValue.privateMap["hidden"][0] = "value-mutated"
+	require.Equal(t, "two", snapshot.Value().(*typedConfig).Values[1])
+	require.Equal(t, "hidden", snapshot.Value().(*typedConfig).private[0])
+	require.Equal(t, "value", snapshot.Value().(*typedConfig).privateMap["hidden"][0])
+
+	var decoded *typedConfig
+	require.NoError(t, snapshot.Decode(&decoded))
+	decoded.Values[0] = "decoded"
+	decoded.Index["one"] = 42
+	decoded.Child.Labels["env"] = "decoded"
+	decoded.private[0] = "decoded"
+	decoded.privateMap["hidden"][0] = "decoded"
+	require.Equal(t, "one", snapshot.Value().(*typedConfig).Values[0])
+	require.Equal(t, 1, snapshot.Value().(*typedConfig).Index["one"])
+	require.Equal(t, "test", snapshot.Value().(*typedConfig).Child.Labels["env"])
+	require.Equal(t, "hidden", snapshot.Value().(*typedConfig).private[0])
+	require.Equal(t, "value", snapshot.Value().(*typedConfig).privateMap["hidden"][0])
+}
+
+func TestSnapshotPreservesCyclesAndRepeatedReferences(t *testing.T) {
+	type node struct {
+		Next *node
+		Data map[string]any
+	}
+	type graph struct {
+		Left  *node
+		Right *node
+	}
+
+	shared := &node{Data: map[string]any{}}
+	shared.Next = shared
+	shared.Data["self"] = shared.Data
+	snapshot := NewSnapshot(graph{Left: shared, Right: shared})
+
+	cloned := snapshot.Value().(graph)
+	require.Same(t, cloned.Left, cloned.Right)
+	require.Same(t, cloned.Left, cloned.Left.Next)
+	require.Equal(
+		t,
+		reflect.ValueOf(cloned.Left.Data).UnsafePointer(),
+		reflect.ValueOf(cloned.Left.Data["self"]).UnsafePointer(),
+	)
+
+	shared.Data["value"] = "source"
+	require.NotContains(t, cloned.Left.Data, "value")
+	cloned.Left.Data["value"] = "clone"
+	value := snapshot.Value().(graph)
+	require.NotContains(t, value.Left.Data, "value")
+}
+
+func TestSnapshotDecodeDoesNotAliasNestedTypedMapValues(t *testing.T) {
+	type typedConfig struct {
+		Values []string
+		Index  map[string]int
+	}
+	value := &typedConfig{
+		Values: []string{"one"},
+		Index:  map[string]int{"one": 1},
+	}
+	snapshot := NewSnapshot(map[string]any{"typed": value})
+	value.Values[0] = "mutated"
+
+	var decoded struct {
+		Typed *typedConfig `mapstructure:"typed"`
+	}
+	require.NoError(t, snapshot.Decode(&decoded))
+	decoded.Typed.Values[0] = "decoded"
+	decoded.Typed.Index["one"] = 42
+
+	original := snapshot.Value().(map[string]any)["typed"].(*typedConfig)
+	require.Equal(t, "one", original.Values[0])
+	require.Equal(t, 1, original.Index["one"])
 }

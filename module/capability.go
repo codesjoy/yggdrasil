@@ -211,7 +211,7 @@ func collectCapabilities(modules []Module) (capabilityCollectResult, error) {
 				)
 				addConflict(message, modulesOfEntries(entries)...)
 			}
-		case NamedOne:
+		case NamedOne, OrderedMany:
 			seen := map[string]struct{}{}
 			for _, item := range entries {
 				if _, ok := seen[item.name]; ok {
@@ -455,6 +455,13 @@ func ResolveOrdered[T any](h *Hub, spec CapabilitySpec, names []string) ([]T, er
 	}
 	index := map[string]capabilityEntry{}
 	for _, item := range entries {
+		if _, exists := index[item.name]; exists {
+			return nil, fmt.Errorf(
+				"capability %q has duplicate provider name %q",
+				spec.Name,
+				item.name,
+			)
+		}
 		index[item.name] = item
 	}
 	out := make([]T, 0, len(names))

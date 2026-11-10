@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 	internalidentity "github.com/codesjoy/yggdrasil/v3/internal/identity"
@@ -142,6 +143,7 @@ func TestModuleSuppliedResolverProviderIsUsedByRuntimeSnapshotAndClient(t *testi
 		},
 	},
 		WithModules(resolverCapabilityModule{}),
+		WithPlanOverrides(yassembly.EnableModule("test.resolver.capability")),
 	)
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })
 	snapshot := app.currentRuntimeSnapshot()
@@ -462,6 +464,22 @@ func TestApp_StageCommitRollbackFoundationSnapshot(t *testing.T) {
 		app.stageFoundationSnapshot(snap1)
 		app.rollbackFoundationSnapshot(snap2)
 		assert.Equal(t, snap1, app.preparedFoundationSnapshot)
+	})
+
+	t.Run("transaction rollback restores a committed snapshot", func(t *testing.T) {
+		app := newTestApp(t, "test")
+		previous := &Snapshot{Resolved: settings.Resolved{Mode: "previous"}}
+		next := &Snapshot{Resolved: settings.Resolved{Mode: "next"}}
+		app.foundationSnapshot = previous
+		app.stageFoundationSnapshot(next)
+
+		committer := &foundationRuntimeCommitter{app: app, next: next}
+		require.NoError(t, committer.Commit(context.Background()))
+		require.Same(t, next, app.foundationSnapshot)
+		require.NoError(t, committer.Commit(context.Background()))
+		require.NoError(t, committer.Rollback(context.Background()))
+		require.Same(t, previous, app.foundationSnapshot)
+		require.NoError(t, committer.Rollback(context.Background()))
 	})
 }
 

@@ -150,6 +150,7 @@ Conflict rules:
 - if multiple legal candidates exist at the same source level with the same score, return `AmbiguousDefault`;
 - do not silently choose the lexicographically first module for convenience;
 - `WithModules(...)` affects the candidate set but is not a forced binding;
+- a module without `AutoSpec` remains disabled unless `WithPlanOverrides(assembly.EnableModule(name))`, a framework requirement, or dependency closure selects it;
 - forced binding requires `ForceDefault` or explicit config.
 
 ## 7. Default Chain Templates

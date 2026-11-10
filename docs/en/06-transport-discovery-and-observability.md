@@ -83,6 +83,11 @@ cancellation. When a non-200 response body cannot be decoded as an RPC status,
 the client exposes only the HTTP status and generic status text, never the raw
 response body.
 
+REST peer metadata trusts `X-Forwarded-For` and `X-Real-IP` only when the
+socket peer matches `trusted_proxy_cidrs`; the default is an empty list, which
+ignores both headers. Configure every proxy hop and select the first untrusted
+address while walking the forwarded chain from right to left.
+
 ## 4. Security Profiles
 
 Security follows a Provider -> Profile -> Material pipeline:

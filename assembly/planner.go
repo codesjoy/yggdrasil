@@ -139,23 +139,16 @@ func (p *planner) validateModuleIsolation() error {
 			p.input.ProcessDefaults {
 			continue
 		}
-		warning := Warning{
-			Code: "ModuleRequiresProcessDefaults",
-			Message: fmt.Sprintf(
+		return newError(
+			ErrIsolationRequiresProcessDefaults,
+			stagePlan,
+			fmt.Sprintf(
 				"module %q declares process-default dependencies but process defaults are disabled",
 				mod.Name(),
 			),
-		}
-		p.warnings = append(p.warnings, warning)
-		if p.input.Resolved.Admin.Validation.Strict {
-			return newError(
-				ErrIsolationRequiresProcessDefaults,
-				stagePlan,
-				warning.Message,
-				nil,
-				map[string]string{"module": mod.Name()},
-			)
-		}
+			nil,
+			map[string]string{"module": mod.Name()},
+		)
 	}
 	return nil
 }

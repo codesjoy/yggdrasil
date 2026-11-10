@@ -277,6 +277,28 @@ func TestReloadPrepareFailureSetsState(t *testing.T) {
 	require.Equal(t, ReloadFailedStagePrepare, state.FailedStage)
 }
 
+func TestReloadRearmsForceAllAfterPrepareFailure(t *testing.T) {
+	m := &testModule{
+		name:       "a",
+		path:       "mod.a",
+		prepareErr: errors.New("bad config"),
+	}
+	h := NewHub()
+	require.NoError(t, h.Use(m))
+	require.NoError(t, h.Seal())
+	snapshot := config.NewSnapshot(map[string]any{
+		"mod": map[string]any{"a": map[string]any{"v": 1}},
+	})
+	require.NoError(t, h.Init(context.Background(), snapshot))
+
+	h.MarkCapabilityBindingsChanged()
+	require.Error(t, h.Reload(context.Background(), snapshot))
+
+	m.prepareErr = nil
+	require.NoError(t, h.Reload(context.Background(), snapshot))
+	require.Equal(t, int32(1), m.commits.Load())
+}
+
 func TestReloadCommitFailureSetsFailedStageCommit(t *testing.T) {
 	a := &testModule{
 		name:      "a",
@@ -362,12 +384,23 @@ func TestRestartRequiredStickyAcrossSuccessfulReload(t *testing.T) {
 	require.NoError(t, h.Reload(context.Background(), config.NewSnapshot(map[string]any{
 		"mod": map[string]any{
 			"a": map[string]any{"v": 2},
-			"b": map[string]any{"v": 1},
+			"b": map[string]any{"v": 2},
 		},
 	})))
 	state := h.ReloadState()
 	require.Equal(t, ReloadPhaseIdle, state.Phase)
 	require.True(t, state.RestartRequired)
+	require.Zero(t, b.commits.Load())
+	require.Equal(
+		t,
+		1,
+		h.snapshot.Value().(map[string]any)["mod"].(map[string]any)["a"].(map[string]any)["v"],
+	)
+	require.Equal(
+		t,
+		1,
+		h.snapshot.Value().(map[string]any)["mod"].(map[string]any)["b"].(map[string]any)["v"],
+	)
 	require.NoError(t, h.Reload(context.Background(), config.NewSnapshot(map[string]any{
 		"mod": map[string]any{
 			"a": map[string]any{"v": 2},

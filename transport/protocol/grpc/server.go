@@ -295,12 +295,25 @@ func (s *server) Stop(ctx context.Context) error {
 }
 
 func (s *server) Info() remote.ServerInfo {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return remote.ServerInfo{
 		Address:          s.address,
 		AdvertiseAddress: s.advertiseAddress,
 		Protocol:         Protocol,
-		Attributes:       s.opts.Attr,
+		Attributes:       cloneStringMap(s.opts.Attr),
 	}
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return map[string]string{}
+	}
+	out := make(map[string]string, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }
 
 func (s *server) Start() error {

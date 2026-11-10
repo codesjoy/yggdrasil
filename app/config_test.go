@@ -15,8 +15,10 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,6 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	internalbootstrap "github.com/codesjoy/yggdrasil/v3/app/internal/bootstrap"
+	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	configchain "github.com/codesjoy/yggdrasil/v3/config/chain"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
@@ -157,6 +160,26 @@ func TestInitWithoutConfigFileLoadsDefaultEnvAndFlagSources(t *testing.T) {
 	assert.Equal(t, "prod", out.Mode)
 	assert.Equal(t, []string{"grpc", "http"}, out.Server.Transports)
 	assert.True(t, manager.Section("server").Empty())
+}
+
+func TestInitConfigChainUsesExplicitLogger(t *testing.T) {
+	withTestFlagSet(t)
+	chdir(t, t.TempDir())
+
+	var explicit bytes.Buffer
+	var global bytes.Buffer
+	oldDefault := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(oldDefault) })
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&global, nil)))
+
+	opts := &options{configManager: config.NewManager()}
+	require.NoError(t, initConfigChainWithLogger(
+		opts,
+		slog.New(slog.NewJSONHandler(&explicit, nil)),
+	))
+
+	assert.Contains(t, explicit.String(), "loading default config sources")
+	assert.Empty(t, global.String())
 }
 
 func TestInitLoadsBootstrapConfigSourcesFromEnv(t *testing.T) {
@@ -399,6 +422,7 @@ func TestConfigWatchKeepsServingChangesUntilRunning(t *testing.T) {
 		"config-watch-serving",
 		configData,
 		WithModules(mod, testTransportModule{recorder: newTransportRecorder()}),
+		WithPlanOverrides(yassembly.EnableModule(mod.Name())),
 	)
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })
 

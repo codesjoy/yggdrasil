@@ -46,6 +46,7 @@ type layer struct {
 	data     map[string]any
 	src      source.Source
 	stop     chan struct{}
+	watchID  uint64
 }
 
 type watcher struct {
@@ -135,7 +136,7 @@ func (m *Manager) LoadLayer(name string, priority Priority, src source.Source) e
 		}
 	}
 
-	oldSrc, oldStop, notify, committed := m.commitLayer(name, layer{
+	oldSrc, oldStop, notify, watchID, committed := m.commitExternalLayer(name, layer{
 		name:     name,
 		priority: priority,
 		data:     normalized,
@@ -164,7 +165,7 @@ func (m *Manager) LoadLayer(name string, priority Priority, src source.Source) e
 		}
 		m.mu.Unlock()
 		if active {
-			go m.watchLayer(name, changeCh, stop)
+			go m.watchLayer(name, watchID, changeCh, stop)
 		}
 	}
 	return nil
@@ -256,7 +257,12 @@ func (m *Manager) WatchWithError(
 	return m.watch(path, fn, onError)
 }
 
-func (m *Manager) watchLayer(name string, changeCh <-chan source.Data, stop <-chan struct{}) {
+func (m *Manager) watchLayer(
+	name string,
+	watchID uint64,
+	changeCh <-chan source.Data,
+	stop <-chan struct{},
+) {
 	defer m.watchWG.Done()
 	for {
 		select {
@@ -268,65 +274,83 @@ func (m *Manager) watchLayer(name string, changeCh <-chan source.Data, stop <-ch
 			}
 			normalized, err := decodeSourceData(change)
 			if err != nil {
-				m.dispatchError(fmt.Errorf(
+				m.dispatchWatchError(watchID, fmt.Errorf(
 					"config layer %q watch decode failed: %w",
 					name,
 					err,
 				))
 				continue
 			}
-			m.replaceLayerData(name, normalized)
+			m.replaceLayerData(name, watchID, normalized)
 		}
 	}
 }
 
-func (m *Manager) replaceLayerData(name string, data map[string]any) {
-	_, _, notify, _ := m.commitLayer(name, layer{name: name, data: data})
+func (m *Manager) replaceLayerData(name string, watchID uint64, data map[string]any) {
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return
+	}
+	prev, exists := m.layers[name]
+	if !exists || prev.watchID == 0 || prev.watchID != watchID {
+		m.mu.Unlock()
+		return
+	}
+
+	next := prev
+	next.data = data
+	if reflect.DeepEqual(prev.data, data) {
+		m.mu.Unlock()
+		return
+	}
+	m.layers[name] = next
+	oldSnapshot := m.snapshotMap
+	merged := m.mergeLocked()
+	m.snapshotMap = merged
+	m.snapshot.Store(NewSnapshot(merged))
+	notify := m.collectNotificationsLocked(oldSnapshot, merged)
+	m.mu.Unlock()
 	m.dispatch(notify)
 }
 
-func (m *Manager) commitLayer(
+func (m *Manager) commitExternalLayer(
 	name string,
 	next layer,
-) (source.Source, chan struct{}, []notification, bool) {
+) (source.Source, chan struct{}, []notification, uint64, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
-		return nil, nil, nil, false
+		return nil, nil, nil, 0, false
 	}
 
 	prev, exists := m.layers[name]
 	if exists {
 		next.order = prev.order
-		if next.priority == 0 && prev.priority != 0 {
-			next.priority = prev.priority
-		}
-		if next.src == nil {
-			next.src = prev.src
-		}
-		if next.stop == nil {
-			next.stop = prev.stop
-		}
 	} else {
 		m.nextOrder++
 		next.order = m.nextOrder
 		m.order = append(m.order, name)
+	}
+	if next.stop != nil {
+		m.nextWatchID++
+		next.watchID = m.nextWatchID
 	}
 	m.layers[name] = next
 
 	merged := m.mergeLocked()
 	if reflect.DeepEqual(m.snapshotMap, merged) {
 		m.snapshotMap = merged
-		if next.src == prev.src {
-			return nil, nil, nil, true
-		}
-		return prev.src, prev.stop, nil, true
+		return prev.src, prev.stop, nil, next.watchID, true
 	}
 
 	oldSnapshot := m.snapshotMap
 	m.snapshotMap = merged
 	m.snapshot.Store(NewSnapshot(merged))
-	return prev.src, prev.stop, m.collectNotificationsLocked(oldSnapshot, merged), true
+	return prev.src, prev.stop, m.collectNotificationsLocked(
+		oldSnapshot,
+		merged,
+	), next.watchID, true
 }
 
 func (m *Manager) mergeLocked() map[string]any {
@@ -386,11 +410,26 @@ func (m *Manager) dispatch(items []notification) {
 	}
 }
 
-func (m *Manager) dispatchError(err error) {
+func (m *Manager) dispatchWatchError(watchID uint64, err error) {
 	if err == nil {
 		return
 	}
 	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return
+	}
+	active := false
+	for _, item := range m.layers {
+		if item.watchID == watchID {
+			active = true
+			break
+		}
+	}
+	if !active {
+		m.mu.Unlock()
+		return
+	}
 	callbacks := make([]func(error), 0, len(m.watchers))
 	for _, item := range m.watchers {
 		if item.onError != nil {

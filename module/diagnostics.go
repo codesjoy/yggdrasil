@@ -70,25 +70,76 @@ type Diagnostics struct {
 	Bindings            []CapabilityBindingDiag `json:"bindings"`
 }
 
+type diagnosticsState struct {
+	modules             []Module
+	lastStableTopology  []Module
+	topologyLayer       map[string]int
+	started             map[string]bool
+	restartRequired     map[string]bool
+	reloadState         ReloadState
+	dependencyErrors    []string
+	capabilityConflicts []string
+	moduleConflicts     map[string][]string
+	capabilityBindings  map[string]capabilityBinding
+	requestedBindings   map[string][]string
+}
+
 // Modules returns a diagnostics snapshot of all modules.
 func (h *Hub) Modules() []ModuleDiag {
+	return modulesFromDiagnostics(h.diagnosticsState())
+}
+
+func (h *Hub) diagnosticsState() diagnosticsState {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	result := make([]ModuleDiag, 0, len(h.topoOrder))
-	for i, mod := range h.topoOrder {
+
+	moduleConflicts := make(map[string][]string, len(h.moduleConflicts))
+	for name, items := range h.moduleConflicts {
+		moduleConflicts[name] = append([]string(nil), items...)
+	}
+	capabilityBindings := make(map[string]capabilityBinding, len(h.capabilityBindings))
+	for name, binding := range h.capabilityBindings {
+		cloned := binding
+		cloned.entries = append([]capabilityEntry(nil), binding.entries...)
+		capabilityBindings[name] = cloned
+	}
+	requestedBindings := make(map[string][]string, len(h.requestedBindings))
+	for name, items := range h.requestedBindings {
+		requestedBindings[name] = append([]string(nil), items...)
+	}
+
+	return diagnosticsState{
+		modules:             append([]Module(nil), h.topoOrder...),
+		lastStableTopology:  append([]Module(nil), h.lastStableTopo...),
+		topologyLayer:       cloneIntMap(h.topoLayer),
+		started:             cloneBoolMap(h.started),
+		restartRequired:     cloneBoolMap(h.restartFlag),
+		reloadState:         h.reloadState,
+		dependencyErrors:    append([]string(nil), h.dependencyErrors...),
+		capabilityConflicts: append([]string(nil), h.capabilityConflicts...),
+		moduleConflicts:     moduleConflicts,
+		capabilityBindings:  capabilityBindings,
+		requestedBindings:   requestedBindings,
+	}
+}
+
+func modulesFromDiagnostics(state diagnosticsState) []ModuleDiag {
+	result := make([]ModuleDiag, 0, len(state.modules))
+	for index, mod := range state.modules {
+		name := mod.Name()
 		item := ModuleDiag{
-			Name:                mod.Name(),
+			Name:                name,
 			DependsOn:           dependsOn(mod),
-			TopoIndex:           i,
-			TopoLayer:           h.topoLayer[mod.Name()],
-			Started:             h.started[mod.Name()],
-			RestartRequired:     h.restartFlag[mod.Name()],
-			ReloadPhase:         string(h.reloadState.Phase),
-			CapabilityConflicts: append([]string(nil), h.moduleConflicts[mod.Name()]...),
+			TopoIndex:           index,
+			TopoLayer:           state.topologyLayer[name],
+			Started:             state.started[name],
+			RestartRequired:     state.restartRequired[name],
+			ReloadPhase:         string(state.reloadState.Phase),
+			CapabilityConflicts: append([]string(nil), state.moduleConflicts[name]...),
 		}
-		item.DependencyErrors = moduleDependencyErrors(mod.Name(), h.dependencyErrors)
-		if h.reloadState.FailedModule == mod.Name() {
-			item.LastReloadError = h.reloadState.LastErrorText
+		item.DependencyErrors = moduleDependencyErrors(name, state.dependencyErrors)
+		if state.reloadState.FailedModule == name {
+			item.LastReloadError = state.reloadState.LastErrorText
 		}
 		if reporter, ok := mod.(ReloadReporter); ok {
 			item.ReloadPhase = string(reporter.ReloadState().Phase)
@@ -100,32 +151,35 @@ func (h *Hub) Modules() []ModuleDiag {
 
 // Diagnostics returns the full diagnostics snapshot.
 func (h *Hub) Diagnostics() Diagnostics {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	state := h.diagnosticsState()
 
-	startedModules := make([]string, 0, len(h.started))
-	for _, mod := range h.topoOrder {
-		if h.started[mod.Name()] {
-			startedModules = append(startedModules, mod.Name())
+	startedModules := make([]string, 0, len(state.started))
+	for _, mod := range state.modules {
+		name := mod.Name()
+		if state.started[name] {
+			startedModules = append(startedModules, name)
 		}
 	}
 	sort.Strings(startedModules)
 
-	specNames := make([]string, 0, len(h.capabilityBindings))
-	for specName := range h.capabilityBindings {
+	specNames := make([]string, 0, len(state.capabilityBindings))
+	for specName := range state.capabilityBindings {
 		specNames = append(specNames, specName)
 	}
 	sort.Strings(specNames)
 	capabilityItems := make([]CapabilityDiag, 0, len(specNames))
 	for _, specName := range specNames {
-		binding := h.capabilityBindings[specName]
+		binding := state.capabilityBindings[specName]
 		providers := make([]CapabilityProviderDiag, 0, len(binding.entries))
 		for _, entry := range binding.entries {
 			typeName := ""
 			if entry.valueType != nil {
 				typeName = entry.valueType.String()
 			} else {
-				typeName = reflect.TypeOf(entry.value).String()
+				valueType := reflect.TypeOf(entry.value)
+				if valueType != nil {
+					typeName = valueType.String()
+				}
 			}
 			providers = append(providers, CapabilityProviderDiag{
 				Module: entry.module.Name(),
@@ -137,19 +191,23 @@ func (h *Hub) Diagnostics() Diagnostics {
 			Spec:        binding.spec.Name,
 			Cardinality: binding.spec.Cardinality.String(),
 			Providers:   providers,
-			Conflicts:   capabilityConflictsForSpec(binding.spec.Name, h.capabilityConflicts),
+			Conflicts:   capabilityConflictsForSpec(binding.spec.Name, state.capabilityConflicts),
 		})
 	}
-	bindingNames := make([]string, 0, len(h.requestedBindings)+len(h.capabilityBindings))
+	bindingNames := make(
+		[]string,
+		0,
+		len(state.requestedBindings)+len(state.capabilityBindings),
+	)
 	seenBindingName := map[string]struct{}{}
-	for specName := range h.requestedBindings {
+	for specName := range state.requestedBindings {
 		if _, ok := seenBindingName[specName]; ok {
 			continue
 		}
 		seenBindingName[specName] = struct{}{}
 		bindingNames = append(bindingNames, specName)
 	}
-	for specName := range h.capabilityBindings {
+	for specName := range state.capabilityBindings {
 		if _, ok := seenBindingName[specName]; ok {
 			continue
 		}
@@ -159,8 +217,8 @@ func (h *Hub) Diagnostics() Diagnostics {
 	sort.Strings(bindingNames)
 	bindingItems := make([]CapabilityBindingDiag, 0, len(bindingNames))
 	for _, specName := range bindingNames {
-		requested := append([]string(nil), h.requestedBindings[specName]...)
-		binding := h.capabilityBindings[specName]
+		requested := append([]string(nil), state.requestedBindings[specName]...)
+		binding := state.capabilityBindings[specName]
 		available := make([]string, 0, len(binding.entries))
 		availableSet := make(map[string]struct{}, len(binding.entries))
 		for _, entry := range binding.entries {
@@ -189,30 +247,46 @@ func (h *Hub) Diagnostics() Diagnostics {
 			Requested: requested,
 			Resolved:  resolved,
 			Missing:   missing,
-			Conflicts: capabilityConflictsForSpec(specName, h.capabilityConflicts),
+			Conflicts: capabilityConflictsForSpec(specName, state.capabilityConflicts),
 		})
 	}
 
-	topology := make([]string, 0, len(h.topoOrder))
-	for _, mod := range h.topoOrder {
+	topology := make([]string, 0, len(state.modules))
+	for _, mod := range state.modules {
 		topology = append(topology, mod.Name())
 	}
-	lastStable := make([]string, 0, len(h.lastStableTopo))
-	for _, mod := range h.lastStableTopo {
+	lastStable := make([]string, 0, len(state.lastStableTopology))
+	for _, mod := range state.lastStableTopology {
 		lastStable = append(lastStable, mod.Name())
 	}
 
 	return Diagnostics{
-		Modules:             h.Modules(),
+		Modules:             modulesFromDiagnostics(state),
 		Topology:            topology,
 		LastStableTopology:  lastStable,
 		StartedModules:      startedModules,
-		ReloadState:         h.reloadState,
-		DependencyErrors:    append([]string(nil), h.dependencyErrors...),
-		CapabilityConflicts: append([]string(nil), h.capabilityConflicts...),
+		ReloadState:         state.reloadState,
+		DependencyErrors:    append([]string(nil), state.dependencyErrors...),
+		CapabilityConflicts: append([]string(nil), state.capabilityConflicts...),
 		Capabilities:        capabilityItems,
 		Bindings:            bindingItems,
 	}
+}
+
+func cloneIntMap(in map[string]int) map[string]int {
+	out := make(map[string]int, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
+func cloneBoolMap(in map[string]bool) map[string]bool {
+	out := make(map[string]bool, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }
 
 // ReloadState returns current hub reload state.

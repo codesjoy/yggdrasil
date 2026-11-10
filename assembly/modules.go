@@ -38,6 +38,9 @@ func (p *planner) resolveModules() error {
 		if name == "" {
 			continue
 		}
+		if _, exists := all[name]; exists {
+			return fmt.Errorf("module %q already exists", name)
+		}
 		all[name] = mod
 		order = append(order, name)
 	}
@@ -69,18 +72,22 @@ func (p *planner) resolveModules() error {
 			p.moduleReasons[name] = append(p.moduleReasons[name], moduleReason(name))
 			continue
 		}
-		auto, ok := mod.(module.AutoDescribed)
-		if !ok {
-			enabled[name] = mod
-			p.moduleReasons[name] = append(p.moduleReasons[name], moduleReason(name))
-			continue
+
+		auto, autoDescribed := mod.(module.AutoDescribed)
+		var (
+			autoSpec     module.AutoSpec
+			matchReasons []string
+			matchedRules []MatchedAutoRule
+		)
+		if autoDescribed {
+			autoSpec = auto.AutoSpec()
+			if err := p.validateAutoModule(mod, autoSpec); err != nil {
+				return err
+			}
+			matchReasons, matchedRules = p.matchAutoModule(mod, autoSpec)
 		}
-		autoSpec := auto.AutoSpec()
-		if err := p.validateAutoModule(mod, autoSpec); err != nil {
-			return err
-		}
-		matchReasons, matchedRules := p.matchAutoModule(mod, autoSpec)
-		if _, forceEnabled := p.codeOverrides.EnabledModules[name]; forceEnabled {
+		_, forceEnabled := p.codeOverrides.EnabledModules[name]
+		if forceEnabled {
 			matchReasons = append(matchReasons, "enabled by WithPlanOverrides")
 			p.decisions = append(p.decisions, Decision{
 				Kind:   "override.enable_module",
@@ -95,12 +102,17 @@ func (p *planner) resolveModules() error {
 			continue
 		}
 		enabled[name] = mod
-		p.autoModules[name] = autoModuleState{
-			spec:         autoSpec,
-			matchedRules: matchedRules,
+		if !autoDescribed {
+			p.moduleReasons[name] = append(p.moduleReasons[name], moduleReason(name))
+		}
+		if autoDescribed {
+			p.autoModules[name] = autoModuleState{
+				spec:         autoSpec,
+				matchedRules: matchedRules,
+			}
+			p.matchedAutoRules = append(p.matchedAutoRules, matchedRules...)
 		}
 		p.moduleReasons[name] = append(p.moduleReasons[name], matchReasons...)
-		p.matchedAutoRules = append(p.matchedAutoRules, matchedRules...)
 	}
 	p.modules = p.expandModuleDependencies(enabled, all)
 	for _, mod := range p.modules {

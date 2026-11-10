@@ -293,6 +293,57 @@ func TestResolveOrdered_DuplicateName(t *testing.T) {
 	require.Contains(t, err.Error(), "duplicated in ordered list")
 }
 
+func TestSeal_RejectsDuplicateOrderedManyProviderNames(t *testing.T) {
+	h := NewHub()
+	require.NoError(t, h.Use(
+		orderedCapProvider{
+			name:  "m1",
+			cap:   "ord.cap",
+			prov:  "duplicate",
+			value: namedStringer("A"),
+		},
+		orderedCapProvider{
+			name:  "m2",
+			cap:   "ord.cap",
+			prov:  "duplicate",
+			value: namedStringer("B"),
+		},
+	))
+	err := h.Seal()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "duplicate provider name")
+}
+
+func TestResolveOrdered_DefensivelyRejectsDuplicateProviderNames(t *testing.T) {
+	spec := CapabilitySpec{
+		Name:        "ord.cap",
+		Cardinality: OrderedMany,
+		Type:        reflect.TypeOf((*fmt.Stringer)(nil)).Elem(),
+	}
+	h := &Hub{
+		sealed: true,
+		capabilityIdx: map[string][]capabilityEntry{
+			spec.Name: {
+				{
+					spec:      spec,
+					name:      "duplicate",
+					value:     namedStringer("A"),
+					valueType: reflect.TypeOf(namedStringer("")),
+				},
+				{
+					spec:      spec,
+					name:      "duplicate",
+					value:     namedStringer("B"),
+					valueType: reflect.TypeOf(namedStringer("")),
+				},
+			},
+		},
+	}
+	_, err := ResolveOrdered[fmt.Stringer](h, spec, []string{"duplicate"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "duplicate provider name")
+}
+
 func TestResolveOrdered_MissingProvider(t *testing.T) {
 	h := NewHub()
 	require.NoError(t, h.Use(

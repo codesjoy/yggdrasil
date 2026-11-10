@@ -156,6 +156,7 @@ flowchart LR
 - 同一 capability、同一来源层级、同分且多个合法候选时，返回 `AmbiguousDefault`。
 - 不能为了“方便”隐式选字典序第一个。
 - `WithModules(...)` 只影响候选集，不等于强制绑定。
+- 未实现 `AutoSpec` 的模块只有通过 `WithPlanOverrides(assembly.EnableModule(name))`、框架必需模块或依赖闭包选择后才会启用。
 - 真正强制绑定必须使用 `ForceDefault` 或显式配置。
 
 ## 7. 默认链模板

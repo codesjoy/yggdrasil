@@ -291,13 +291,13 @@ func TestApp_InstallOptions(t *testing.T) {
 	})
 }
 
-// --- App.installBundleLocked ---
+// --- App.installBundle ---
 
 func TestApp_InstallBundleLocked(t *testing.T) {
 	t.Run("nil bundle returns nil", func(t *testing.T) {
 		data := minimalV3Config("grpc")
 		app, _ := newInitializedAppWithConfig(t, "test-app", data)
-		err := app.installBundleLocked(nil)
+		err := app.installBundle(nil)
 		require.NoError(t, err)
 	})
 
@@ -316,7 +316,7 @@ func TestApp_InstallBundleLocked(t *testing.T) {
 				},
 			},
 		}
-		err := app.installBundleLocked(bundle)
+		err := app.installBundle(bundle)
 		require.NoError(t, err)
 	})
 }

@@ -15,28 +15,18 @@
 // Package tree provides internal config tree normalization helpers.
 package tree
 
-import "fmt"
+import (
+	"fmt"
+	"reflect"
+	"unsafe"
+)
 
 // NormalizeValue recursively normalizes nested map types and deep-clones structured values.
 func NormalizeValue(v any) any {
-	switch item := v.(type) {
-	case map[string]any:
-		return NormalizeMap(item)
-	case map[any]any:
-		normalized := make(map[string]any, len(item))
-		for k, val := range item {
-			normalized[fmt.Sprintf("%v", k)] = NormalizeValue(val)
-		}
-		return normalized
-	case []any:
-		out := make([]any, len(item))
-		for i := range item {
-			out[i] = NormalizeValue(item[i])
-		}
-		return out
-	default:
-		return v
+	if v == nil {
+		return nil
 	}
+	return newCloneState().normalize(reflect.ValueOf(v)).Interface()
 }
 
 // NormalizeMap recursively normalizes nested values and returns a deep clone.
@@ -44,11 +34,137 @@ func NormalizeMap(src map[string]any) map[string]any {
 	if src == nil {
 		return map[string]any{}
 	}
-	out := make(map[string]any, len(src))
-	for k, v := range src {
-		out[k] = NormalizeValue(v)
+	return newCloneState().normalize(reflect.ValueOf(src)).Interface().(map[string]any)
+}
+
+type cloneKey struct {
+	typ  reflect.Type
+	ptr  uintptr
+	len  int
+	cap  int
+	kind reflect.Kind
+}
+
+type cloneState struct {
+	objects map[cloneKey]reflect.Value
+}
+
+func newCloneState() *cloneState {
+	return &cloneState{objects: make(map[cloneKey]reflect.Value)}
+}
+
+func (s *cloneState) normalize(value reflect.Value) reflect.Value {
+	if !value.IsValid() {
+		return value
 	}
-	return out
+
+	switch value.Kind() {
+	case reflect.Interface:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		cloned := s.normalize(value.Elem())
+		out := reflect.New(value.Type()).Elem()
+		out.Set(cloned)
+		return out
+	case reflect.Pointer:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		key := objectKey(value)
+		if cloned, ok := s.objects[key]; ok {
+			return cloned
+		}
+		out := reflect.New(value.Type().Elem())
+		s.objects[key] = out
+		out.Elem().Set(s.normalize(value.Elem()))
+		return out
+	case reflect.Map:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		key := objectKey(value)
+		if cloned, ok := s.objects[key]; ok {
+			return cloned
+		}
+		outType := value.Type()
+		if value.Type() == reflect.TypeOf(map[any]any{}) {
+			outType = reflect.TypeOf(map[string]any{})
+		}
+		out := reflect.MakeMapWithSize(outType, value.Len())
+		s.objects[key] = out
+		iter := value.MapRange()
+		for iter.Next() {
+			if value.Type() == reflect.TypeOf(map[any]any{}) {
+				out.SetMapIndex(
+					reflect.ValueOf(fmt.Sprintf("%v", iter.Key().Interface())),
+					s.normalize(iter.Value()),
+				)
+				continue
+			}
+			out.SetMapIndex(
+				s.normalize(iter.Key()),
+				s.normalize(iter.Value()),
+			)
+		}
+		return out
+	case reflect.Slice:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		key := objectKey(value)
+		if cloned, ok := s.objects[key]; ok {
+			return cloned
+		}
+		out := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
+		s.objects[key] = out
+		for index := 0; index < value.Len(); index++ {
+			out.Index(index).Set(s.normalize(value.Index(index)))
+		}
+		return out
+	case reflect.Array:
+		out := reflect.New(value.Type()).Elem()
+		for index := 0; index < value.Len(); index++ {
+			out.Index(index).Set(s.normalize(value.Index(index)))
+		}
+		return out
+	case reflect.Struct:
+		out := reflect.New(value.Type()).Elem()
+		source := reflect.New(value.Type()).Elem()
+		source.Set(value)
+		out.Set(source)
+		for index := 0; index < value.NumField(); index++ {
+			sourceField := writableField(source.Field(index))
+			writableField(out.Field(index)).Set(s.normalize(sourceField))
+		}
+		return out
+	default:
+		return value
+	}
+}
+
+func objectKey(value reflect.Value) cloneKey {
+	key := cloneKey{typ: value.Type(), kind: value.Kind()}
+	switch value.Kind() {
+	case reflect.Pointer:
+		key.ptr = value.Pointer()
+	case reflect.Map, reflect.Slice:
+		key.ptr = uintptr(value.UnsafePointer())
+		if value.Kind() == reflect.Slice {
+			key.len = value.Len()
+			key.cap = value.Cap()
+		}
+	}
+	return key
+}
+
+func writableField(value reflect.Value) reflect.Value {
+	if value.CanInterface() && value.CanSet() {
+		return value
+	}
+	//nolint:gosec // Reopens an addressable cloned config field for deep copying.
+	address := unsafe.Pointer(value.UnsafeAddr())
+	return reflect.NewAt(value.Type(), address).Elem()
 }
 
 // MergeMaps recursively overlays src onto dst. Source values replace destination

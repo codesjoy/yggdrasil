@@ -19,6 +19,7 @@ import (
 
 	internalruntime "github.com/codesjoy/yggdrasil/v3/app/internal/runtime"
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
+	internalsettings "github.com/codesjoy/yggdrasil/v3/internal/settings"
 	"github.com/codesjoy/yggdrasil/v3/module"
 )
 
@@ -40,20 +41,43 @@ func (a *App) Reload(ctx context.Context) error {
 	}
 	opts := a.opts
 	hub := a.hub
-	prevPlan := a.lastPlanResult
-	prevSpec := a.assemblySpec
-	prevBindings := selectedCapabilityBindings(prevPlan, opts.resolvedSettings)
 	businessInstalled := a.explicitBundleInstalled
 	a.mu.Unlock()
 
-	if err := refreshResolvedSettings(opts); err != nil {
-		return a.recordReloadError(wrapAssemblyStageError("reload", err))
+	prevPlan := a.stablePlan()
+	if prevPlan == nil {
+		a.mu.Lock()
+		prevPlan = a.lastPlanResult
+		a.mu.Unlock()
 	}
-	nextPlan, err := a.buildAssemblyResult(ctx)
+	if prevPlan == nil || prevPlan.Spec == nil {
+		return a.recordReloadError(yassembly.NewError(
+			yassembly.ErrRuntimeNotReady,
+			"reload",
+			"stable assembly plan is not available",
+			nil,
+			nil,
+		))
+	}
+	prevBindings := selectedCapabilityBindings(prevPlan, opts.resolvedSettings)
+	alreadyRestartRequired := hub.ReloadState().RestartRequired
+	if alreadyRestartRequired {
+		target := "module.hub"
+		if businessInstalled {
+			target = "business.bundle"
+		}
+		return a.recordReloadError(reloadRequiresRestartError(target))
+	}
+
+	nextResolved, err := resolveResolvedSettings(opts)
 	if err != nil {
 		return a.recordReloadError(wrapAssemblyStageError("reload", err))
 	}
-	diff, err := yassembly.Diff(prevSpec, nextPlan.Spec)
+	nextPlan, err := a.buildAssemblyResultWithResolved(ctx, nextResolved)
+	if err != nil {
+		return a.recordReloadError(wrapAssemblyStageError("reload", err))
+	}
+	diff, err := yassembly.Diff(prevPlan.Spec, nextPlan.Spec)
 	if err != nil {
 		return a.recordReloadError(wrapAssemblyStageError("reload", err))
 	}
@@ -71,33 +95,55 @@ func (a *App) Reload(ctx context.Context) error {
 			target = "business.bundle"
 		}
 		hub.MarkRestartRequired(target)
-		restartErr := yassembly.NewError(
-			yassembly.ErrReloadRequiresRestart,
-			"reload",
-			"reload requires restart for the current assembly or business graph diff",
-			nil,
-			map[string]string{"target": target},
-		)
-		a.storeReloadPlan(nextPlan, diff, false, restartErr)
+		restartErr := reloadRequiresRestartError(target)
+		a.recordReloadAttempt(nextPlan, diff, restartErr)
 		return restartErr
 	}
 
-	if !internalruntime.CapabilityBindingsEqual(prevBindings, nextPlan.CapabilityBindings) {
+	bindingsChanged := !internalruntime.CapabilityBindingsEqual(
+		prevBindings,
+		nextPlan.CapabilityBindings,
+	)
+	a.stageReloadCandidate(nextPlan)
+	defer a.clearReloadCandidate()
+	if bindingsChanged {
 		hub.MarkCapabilityBindingsChanged()
+		hub.SetCapabilityBindings(nextPlan.CapabilityBindings)
 	}
-	hub.SetCapabilityBindings(nextPlan.CapabilityBindings)
 	if err := hub.Reload(ctx, opts.configManager.Snapshot()); err != nil {
-		return a.recordReloadError(yassembly.NewError(
+		if bindingsChanged {
+			hub.SetCapabilityBindings(prevBindings)
+			hub.MarkCapabilityBindingsChanged()
+		}
+		reloadErr := yassembly.NewError(
 			yassembly.ErrRuntimeReconcileFailed,
 			"reload",
 			"module hub reload reconcile failed",
 			err,
 			nil,
-		))
+		)
+		a.recordReloadAttempt(nextPlan, diff, reloadErr)
+		return reloadErr
 	}
 
-	a.storeReloadPlan(nextPlan, diff, true, nil)
+	if hub.ReloadState().RestartRequired {
+		restartErr := reloadRequiresRestartError("module.hub")
+		a.recordReloadAttempt(nextPlan, diff, restartErr)
+		return restartErr
+	}
+
+	a.commitReloadPlan(nextPlan, nextResolved, diff)
 	return nil
+}
+
+func reloadRequiresRestartError(target string) error {
+	return yassembly.NewError(
+		yassembly.ErrReloadRequiresRestart,
+		"reload",
+		"reload requires restart for the current assembly or business graph diff",
+		nil,
+		map[string]string{"target": target},
+	)
 }
 
 func (a *App) recordReloadError(err error) error {
@@ -107,10 +153,9 @@ func (a *App) recordReloadError(err error) error {
 	return err
 }
 
-func (a *App) storeReloadPlan(
+func (a *App) recordReloadAttempt(
 	result *yassembly.Result,
 	diff *yassembly.SpecDiff,
-	stable bool,
 	reloadErr error,
 ) {
 	a.mu.Lock()
@@ -120,18 +165,37 @@ func (a *App) storeReloadPlan(
 	a.lastSpecDiff = diff
 	if result != nil {
 		a.lastPlanHash = result.Hash
-		a.assemblySpec = result.Spec
-		if stable {
-			a.lastStablePlanHash = result.Hash
-		}
-	}
-	if a.runtimeAssembly != nil && result != nil {
-		a.runtimeAssembly.Spec = result.Spec
-		a.runtimeAssembly.Modules = append([]module.Module(nil), result.Modules...)
 	}
 	if reloadErr != nil {
 		a.recordAssemblyErrorLocked(assemblyStageReload, reloadErr)
 		return
 	}
+	a.clearAssemblyErrorLocked(assemblyStageReload)
+}
+
+func (a *App) commitReloadPlan(
+	result *yassembly.Result,
+	resolved internalsettings.Resolved,
+	diff *yassembly.SpecDiff,
+) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.lastPlanResult = result
+	a.lastSpecDiff = diff
+	if result == nil {
+		return
+	}
+	a.lastPlanHash = result.Hash
+	a.lastStablePlanHash = result.Hash
+	a.assemblySpec = result.Spec
+	a.opts.resolvedSettings = resolved
+	if a.runtimeAssembly != nil {
+		a.runtimeAssembly.Spec = result.Spec
+		a.runtimeAssembly.Modules = append([]module.Module(nil), result.Modules...)
+	}
+	a.planMu.Lock()
+	a.stablePlanResult = result
+	a.planMu.Unlock()
 	a.clearAssemblyErrorLocked(assemblyStageReload)
 }

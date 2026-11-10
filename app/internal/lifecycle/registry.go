@@ -16,7 +16,6 @@ package lifecycle
 
 import (
 	"context"
-	"log/slog"
 	"maps"
 	"time"
 
@@ -44,7 +43,7 @@ func (runner *Runner) registerWithContext(ctx context.Context) error {
 	defer cancel()
 	if err := runner.registry.Register(registerCtx, runner); err != nil {
 		runner.resetRegistering()
-		slog.Error("fault to register application", slog.Any("error", err))
+		runner.loggerOrDefault().Error("fault to register application", "error", err)
 		return err
 	}
 
@@ -55,16 +54,17 @@ func (runner *Runner) registerWithContext(ctx context.Context) error {
 		)
 		defer deregisterCancel()
 		if err := runner.registry.Deregister(deregisterCtx, runner); err != nil {
-			slog.Error(
+			runner.loggerOrDefault().Error(
 				"fault to deregister application after concurrent stop",
-				slog.Any("error", err),
+				"error",
+				err,
 			)
 			return err
 		}
 		return nil
 	}
 
-	slog.Info("application has been registered")
+	runner.loggerOrDefault().Info("application has been registered")
 	return nil
 }
 
@@ -78,7 +78,7 @@ func (runner *Runner) deregister(ctx context.Context) error {
 	}
 
 	if err := runner.registry.Deregister(ctx, runner); err != nil {
-		slog.Error("fault to deregister application", slog.Any("error", err))
+		runner.loggerOrDefault().Error("fault to deregister application", "error", err)
 		return err
 	}
 	return nil

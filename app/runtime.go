@@ -22,6 +22,7 @@ import (
 	"log/slog"
 
 	internalruntime "github.com/codesjoy/yggdrasil/v3/app/internal/runtime"
+	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 	"github.com/codesjoy/yggdrasil/v3/internal/remotelog"
@@ -46,6 +47,39 @@ import (
 
 // --- snapshot state management ---
 
+func (a *App) runtimePlan() *yassembly.Result {
+	if a == nil {
+		return nil
+	}
+	a.planMu.RLock()
+	defer a.planMu.RUnlock()
+	if a.reloadCandidate != nil {
+		return a.reloadCandidate
+	}
+	return a.stablePlanResult
+}
+
+func (a *App) stablePlan() *yassembly.Result {
+	if a == nil {
+		return nil
+	}
+	a.planMu.RLock()
+	defer a.planMu.RUnlock()
+	return a.stablePlanResult
+}
+
+func (a *App) stageReloadCandidate(result *yassembly.Result) {
+	a.planMu.Lock()
+	a.reloadCandidate = result
+	a.planMu.Unlock()
+}
+
+func (a *App) clearReloadCandidate() {
+	a.planMu.Lock()
+	a.reloadCandidate = nil
+	a.planMu.Unlock()
+}
+
 func (a *App) currentRuntimeSnapshot() *Snapshot {
 	a.runtimeMu.RLock()
 	defer a.runtimeMu.RUnlock()
@@ -65,20 +99,39 @@ func (a *App) stageFoundationSnapshot(snapshot *Snapshot) {
 }
 
 func (a *App) commitFoundationSnapshot(snapshot *Snapshot) {
+	_ = a.commitFoundationSnapshotTransaction(snapshot)
+}
+
+func (a *App) commitFoundationSnapshotTransaction(snapshot *Snapshot) *Snapshot {
 	a.runtimeMu.Lock()
 	defer a.runtimeMu.Unlock()
+	previous := a.foundationSnapshot
 	a.foundationSnapshot = snapshot
 	if a.preparedFoundationSnapshot == snapshot {
 		a.preparedFoundationSnapshot = nil
 	}
+	return previous
 }
 
 func (a *App) rollbackFoundationSnapshot(snapshot *Snapshot) {
+	_ = a.rollbackFoundationSnapshotTransaction(snapshot, nil, false)
+}
+
+func (a *App) rollbackFoundationSnapshotTransaction(
+	snapshot *Snapshot,
+	previous *Snapshot,
+	committed bool,
+) bool {
 	a.runtimeMu.Lock()
 	defer a.runtimeMu.Unlock()
 	if a.preparedFoundationSnapshot == snapshot {
 		a.preparedFoundationSnapshot = nil
 	}
+	if !committed || a.foundationSnapshot != snapshot {
+		return false
+	}
+	a.foundationSnapshot = previous
+	return true
 }
 
 func (a *App) foundationSnapshotForRuntime() *Snapshot {
@@ -139,17 +192,20 @@ func (a *App) prepareRuntimeAdapters(snapshot *Snapshot) (*preparedRuntimeAdapte
 	}
 
 	snapshot.Identity = publicIdentity(a.identity)
-	handler, err := snapshot.BuildDefaultLoggerHandler()
-	if err != nil {
-		return nil, err
+	if snapshot.Logger == nil {
+		handler, err := snapshot.BuildDefaultLoggerHandler()
+		if err != nil {
+			return nil, err
+		}
+		snapshot.Logger = slog.New(handler)
 	}
-	snapshot.Logger = slog.New(handler)
+	handler := snapshot.Logger.Handler()
 	remoteLoggerLvStr := snapshot.Resolved.Logging.RemoteLevel
 	if remoteLoggerLvStr == "" {
 		remoteLoggerLvStr = "error"
 	}
 	var remoteLoggerLv slog.Level
-	if err = remoteLoggerLv.UnmarshalText([]byte(remoteLoggerLvStr)); err != nil {
+	if err := remoteLoggerLv.UnmarshalText([]byte(remoteLoggerLvStr)); err != nil {
 		return nil, err
 	}
 	snapshot.RemoteLogger = remotelog.New(remoteLoggerLv, handler)
@@ -230,6 +286,7 @@ func (a *App) rollbackRuntimeAdapters(prepared *preparedRuntimeAdapters) error {
 	}
 	return shutdownPreparedAdapters(
 		context.Background(),
+		a.runtimeLogger(),
 		prepared.tracerShutdown,
 		prepared.meterShutdown,
 	)
@@ -242,6 +299,7 @@ func (a *App) finalizeRuntimeAdapters(prepared *preparedRuntimeAdapters) error {
 	prepared.finalized = true
 	return shutdownPreparedAdapters(
 		context.Background(),
+		a.runtimeLogger(),
 		prepared.oldTracer,
 		prepared.oldMeter,
 	)
@@ -275,6 +333,7 @@ func (a *App) finalizePendingRuntimeAdapters() error {
 
 func shutdownPreparedAdapters(
 	ctx context.Context,
+	logger *slog.Logger,
 	tracerShutdown func(context.Context) error,
 	meterShutdown func(context.Context) error,
 ) error {
@@ -282,13 +341,19 @@ func shutdownPreparedAdapters(
 	if tracerShutdown != nil {
 		if shutdownErr := tracerShutdown(ctx); shutdownErr != nil {
 			err = errors.Join(err, shutdownErr)
-			slog.Warn("shutdown previous tracer provider failed", slog.Any("error", shutdownErr))
+			logger.Warn(
+				"shutdown previous tracer provider failed",
+				slog.Any("error", shutdownErr),
+			)
 		}
 	}
 	if meterShutdown != nil {
 		if shutdownErr := meterShutdown(ctx); shutdownErr != nil {
 			err = errors.Join(err, shutdownErr)
-			slog.Warn("shutdown previous meter provider failed", slog.Any("error", shutdownErr))
+			logger.Warn(
+				"shutdown previous meter provider failed",
+				slog.Any("error", shutdownErr),
+			)
 		}
 	}
 	return err
@@ -398,8 +463,9 @@ func (a *App) buildFoundationRuntimeSnapshot() (*Snapshot, error) {
 	if a == nil || a.hub == nil || a.opts == nil {
 		return nil, fmt.Errorf("runtime app is not initialized")
 	}
-	resolved := effectiveResolved(a.lastPlanResult, a.opts.resolvedSettings)
-	bindings := selectedCapabilityBindings(a.lastPlanResult, a.opts.resolvedSettings)
+	planResult := a.runtimePlan()
+	resolved := effectiveResolved(planResult, a.opts.resolvedSettings)
+	bindings := selectedCapabilityBindings(planResult, a.opts.resolvedSettings)
 
 	writerBuilders, err := internalruntime.ResolveNamedRuntimeCapabilities[logger.WriterBuilder](
 		a.hub,
@@ -517,10 +583,19 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	if base == nil {
 		return nil, false, fmt.Errorf("foundation runtime snapshot is not available")
 	}
-	resolved := effectiveResolved(a.lastPlanResult, a.opts.resolvedSettings)
-	bindings := selectedCapabilityBindings(a.lastPlanResult, a.opts.resolvedSettings)
+	planResult := a.runtimePlan()
+	resolved := effectiveResolved(planResult, a.opts.resolvedSettings)
+	bindings := selectedCapabilityBindings(planResult, a.opts.resolvedSettings)
 	next := base.Copy()
+	next.Identity = publicIdentity(a.identity)
 	next.Resolved = resolved
+	if next.Logger == nil {
+		handler, err := next.BuildDefaultLoggerHandler()
+		if err != nil {
+			return nil, false, err
+		}
+		next.Logger = slog.New(handler)
+	}
 	profiles, err := internalruntime.CompileSecurityProfiles(resolved, next.SecurityProviders)
 	if err != nil {
 		return nil, false, err
@@ -586,6 +661,7 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	loggingCfg := internalruntime.LoggingInterceptorSource(resolved)
 	unaryServerProvidersBuiltin, err := intlogging.BuiltinUnaryServerProvidersWithConfigE(
 		loggingCfg,
+		intlogging.WithProviderLogger(next.Logger),
 	)
 	if err != nil {
 		return nil, false, err
@@ -593,6 +669,7 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	unaryServerBuiltins := internalruntime.MapUnaryServerProviders(unaryServerProvidersBuiltin)
 	streamServerProvidersBuiltin, err := intlogging.BuiltinStreamServerProvidersWithConfigE(
 		loggingCfg,
+		intlogging.WithProviderLogger(next.Logger),
 	)
 	if err != nil {
 		return nil, false, err
@@ -600,6 +677,7 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	streamServerBuiltins := internalruntime.MapStreamServerProviders(streamServerProvidersBuiltin)
 	unaryClientProvidersBuiltin, err := intlogging.BuiltinUnaryClientProvidersWithConfigE(
 		loggingCfg,
+		intlogging.WithProviderLogger(next.Logger),
 	)
 	if err != nil {
 		return nil, false, err
@@ -607,6 +685,7 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	unaryClientBuiltins := internalruntime.MapUnaryClientProviders(unaryClientProvidersBuiltin)
 	streamClientProvidersBuiltin, err := intlogging.BuiltinStreamClientProvidersWithConfigE(
 		loggingCfg,
+		intlogging.WithProviderLogger(next.Logger),
 	)
 	if err != nil {
 		return nil, false, err
@@ -685,7 +764,9 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	for name, provider := range restProviders {
 		switch name {
 		case "logger":
-			next.RESTMiddlewareProviderMap[name] = rest.BuiltinLoggingProvider()
+			next.RESTMiddlewareProviderMap[name] = rest.BuiltinLoggingProviderWithLogger(
+				next.Logger,
+			)
 		case "marshaler":
 			next.RESTMiddlewareProviderMap[name] = newRuntimeMarshalerProvider(next)
 		default:

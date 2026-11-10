@@ -15,6 +15,7 @@
 package logging
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
@@ -839,4 +840,26 @@ func TestBuiltinProvidersWithConfigEReportsConfigErrors(t *testing.T) {
 	require.Error(t, err)
 	_, err = BuiltinStreamServerProvidersWithConfigE(invalid)
 	require.Error(t, err)
+}
+
+func TestLoggingProviderUsesExplicitLogger(t *testing.T) {
+	var explicit bytes.Buffer
+	var global bytes.Buffer
+	oldDefault := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(oldDefault) })
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&global, nil)))
+
+	logger := slog.New(slog.NewJSONHandler(&explicit, nil))
+	l := newLogging(&Config{SlowThreshold: time.Second}, WithProviderLogger(logger))
+	_, err := l.UnaryServerInterceptor(
+		context.Background(),
+		"request",
+		&interceptor.UnaryServerInfo{FullMethod: "/test.Service/Method"},
+		func(context.Context, interface{}) (interface{}, error) {
+			return "response", nil
+		},
+	)
+	require.NoError(t, err)
+	require.Contains(t, explicit.String(), `"msg":"access"`)
+	require.Empty(t, global.String())
 }

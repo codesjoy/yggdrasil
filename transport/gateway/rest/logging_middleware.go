@@ -28,8 +28,17 @@ func BuiltinLoggingProvider() Provider {
 	return NewProvider("logger", requestLogger)
 }
 
+// BuiltinLoggingProviderWithLogger returns the built-in logger middleware
+// provider bound to an explicit logger.
+func BuiltinLoggingProviderWithLogger(logger *slog.Logger) Provider {
+	return NewProvider("logger", func() func(next http.Handler) http.Handler {
+		return requestLoggerWithLogger(logger)
+	})
+}
+
 type logEntry struct {
-	r *http.Request
+	r      *http.Request
+	logger *slog.Logger
 }
 
 func (l *logEntry) Write(status, _ int, _ http.Header, elapsed time.Duration, _ interface{}) {
@@ -48,24 +57,39 @@ func (l *logEntry) Write(status, _ int, _ http.Header, elapsed time.Duration, _ 
 	default:
 		lv = slog.LevelError
 	}
+	if l.logger != nil {
+		l.logger.LogAttrs(l.r.Context(), lv, "http access", fields...)
+		return
+	}
 	slog.LogAttrs(l.r.Context(), lv, "http access", fields...)
 }
 
 func (l *logEntry) Panic(v interface{}, stack []byte) {
-	slog.ErrorContext(l.r.Context(), "http access panic",
+	fields := []slog.Attr{
 		slog.String("method", l.r.Method),
 		slog.String("path", l.r.RequestURI),
 		slog.String("panic", fmt.Sprintf("%v", v)),
 		slog.String("stack", string(stack)),
-	)
+	}
+	if l.logger != nil {
+		l.logger.LogAttrs(l.r.Context(), slog.LevelError, "http access panic", fields...)
+		return
+	}
+	slog.LogAttrs(l.r.Context(), slog.LevelError, "http access panic", fields...)
 }
 
-type logFormatter struct{}
+type logFormatter struct {
+	logger *slog.Logger
+}
 
 func (l *logFormatter) NewLogEntry(r *http.Request) middleware.LogEntry {
-	return &logEntry{r: r}
+	return &logEntry{r: r, logger: l.logger}
 }
 
 func requestLogger() func(next http.Handler) http.Handler {
 	return middleware.RequestLogger(&logFormatter{})
+}
+
+func requestLoggerWithLogger(logger *slog.Logger) func(next http.Handler) http.Handler {
+	return middleware.RequestLogger(&logFormatter{logger: logger})
 }

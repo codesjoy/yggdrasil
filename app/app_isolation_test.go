@@ -15,10 +15,13 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 
@@ -36,6 +39,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/internal/remotelog"
 	"github.com/codesjoy/yggdrasil/v3/module"
 	xotel "github.com/codesjoy/yggdrasil/v3/observability/otel"
+	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
 )
 
 func isolationConfig(namespace string) map[string]any {
@@ -152,6 +156,61 @@ func TestAppLocalRuntimeDoesNotMutateProcessGlobals(t *testing.T) {
 	assert.Equal(t, tracerB, rtB.TracerProvider())
 	assert.Equal(t, meterB, rtB.MeterProvider())
 	assert.NotSame(t, rtA.Logger(), rtB.Logger())
+}
+
+func TestAppRuntimeLoggingProvidersIgnoreGlobalDefault(t *testing.T) {
+	var global bytes.Buffer
+	oldDefault := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(oldDefault) })
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&global, nil)))
+
+	configData := minimalV3Config("grpc")
+	yggdrasilConfig := configData["yggdrasil"].(map[string]any)
+	yggdrasilConfig["extensions"] = map[string]any{
+		"interceptors": map[string]any{
+			"unary_server": []any{"logging"},
+		},
+	}
+	httpConfig := yggdrasilConfig["transports"].(map[string]any)["http"].(map[string]any)
+	httpConfig["rest"] = map[string]any{
+		"enabled": true,
+		"middleware": map[string]any{
+			"all": []any{"logger"},
+		},
+	}
+	app, _ := newTestAppWithConfig(t, "logging-isolation", configData)
+	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+	require.NoError(t, app.Prepare(context.Background()))
+	snapshot := app.currentRuntimeSnapshot()
+	require.NotNil(t, snapshot)
+	global.Reset()
+
+	unaryProvider := snapshot.UnaryServerInterceptorProviders["logging"]
+	require.NotNil(t, unaryProvider)
+	_, err := unaryProvider.New()(
+		context.Background(),
+		"request",
+		&interceptor.UnaryServerInfo{FullMethod: "/test.Service/Method"},
+		func(context.Context, interface{}) (interface{}, error) {
+			return "response", nil
+		},
+	)
+	require.NoError(t, err)
+
+	restProvider := snapshot.RESTMiddlewareProviders()["logger"]
+	require.NotNil(t, restProvider)
+	handler := restProvider.Build()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	handler.ServeHTTP(
+		httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodGet, "/", nil),
+	)
+
+	require.Empty(t, global.String())
+	assert.NotSame(t, oldDefault, app.Runtime().Logger())
+	require.NoError(t, app.Stop(context.Background()))
+	require.Empty(t, global.String())
 }
 
 func TestAppIdentityAvailableAfterPrepare(t *testing.T) {

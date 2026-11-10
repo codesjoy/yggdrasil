@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	yapp "github.com/codesjoy/yggdrasil/v3/app"
+	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/config"
 	configchain "github.com/codesjoy/yggdrasil/v3/config/chain"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
@@ -84,6 +85,9 @@ type BusinessBundle = yapp.BusinessBundle
 // CapabilityRegistration declares one provider-only capability extension.
 type CapabilityRegistration = yapp.CapabilityRegistration
 
+// PlanOverride customizes declarative module and binding selection.
+type PlanOverride = yassembly.Override
+
 type configLayerSource struct {
 	name     string
 	priority config.Priority
@@ -99,6 +103,7 @@ type options struct {
 	configSources           []configLayerSource
 	configBuilders          map[string]configchain.ContextBuilder
 	modules                 []module.Module
+	planOverrides           []yassembly.Override
 	capabilityRegistrations []yapp.CapabilityRegistration
 }
 
@@ -180,7 +185,9 @@ func WithProcessDefaults(enabled bool) Option {
 	}
 }
 
-// WithModules registers additional full lifecycle modules.
+// WithModules registers additional full lifecycle module candidates. Modules
+// without an AutoSpec must be enabled with WithPlanOverrides and
+// assembly.EnableModule.
 func WithModules(mods ...module.Module) Option {
 	return func(opts *options) error {
 		for _, mod := range mods {
@@ -188,6 +195,18 @@ func WithModules(mods ...module.Module) Option {
 				continue
 			}
 			opts.modules = append(opts.modules, mod)
+		}
+		return nil
+	}
+}
+
+// WithPlanOverrides registers declarative planning overrides.
+func WithPlanOverrides(overrides ...yassembly.Override) Option {
+	return func(opts *options) error {
+		for _, override := range overrides {
+			if override != nil {
+				opts.planOverrides = append(opts.planOverrides, override)
+			}
 		}
 		return nil
 	}
@@ -361,6 +380,9 @@ func (rootOpts options) appOptions() []yapp.Option {
 	}
 	if len(rootOpts.modules) > 0 {
 		appOpts = append(appOpts, yapp.WithModules(rootOpts.modules...))
+	}
+	if len(rootOpts.planOverrides) > 0 {
+		appOpts = append(appOpts, yapp.WithPlanOverrides(rootOpts.planOverrides...))
 	}
 	if len(rootOpts.capabilityRegistrations) > 0 {
 		appOpts = append(

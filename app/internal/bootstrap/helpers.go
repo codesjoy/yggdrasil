@@ -90,6 +90,20 @@ func LoadConfigFile(
 	explicit bool,
 	registry *configchain.Registry,
 ) ([]source.Source, bool, error) {
+	return LoadConfigFileWithLogger(manager, path, explicit, registry, slog.Default())
+}
+
+// LoadConfigFileWithLogger loads the file-backed config chain with an explicit logger.
+func LoadConfigFileWithLogger(
+	manager *config.Manager,
+	path string,
+	explicit bool,
+	registry *configchain.Registry,
+	logger *slog.Logger,
+) ([]source.Source, bool, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	path = strings.TrimSpace(path)
 	if path == "" {
 		if explicit {
@@ -113,7 +127,7 @@ func LoadConfigFile(
 					ConfigFlagName,
 				)
 			}
-			slog.Warn(
+			logger.Warn(
 				"config file not found, fallback to default startup; use --yggdrasil-config to set config path",
 				slog.String("path", path),
 			)
@@ -220,6 +234,7 @@ func NeedsDefaultStartupSettings(resolved settings.Resolved) bool {
 
 type startupValidator struct {
 	strict bool
+	logger *slog.Logger
 	err    error
 }
 
@@ -236,11 +251,23 @@ func (v *startupValidator) add(msg string, err error, attrs ...slog.Attr) {
 	for _, attr := range attrs {
 		args = append(args, attr)
 	}
+	if v.logger != nil {
+		v.logger.Warn(msg, args...)
+		return
+	}
 	slog.Warn(msg, args...)
 }
 
 // ValidateStartupResolved validates already resolved startup settings.
 func ValidateStartupResolved(resolved settings.Resolved) error {
+	return ValidateStartupResolvedWithLogger(resolved, slog.Default())
+}
+
+// ValidateStartupResolvedWithLogger validates startup settings with an explicit logger.
+func ValidateStartupResolvedWithLogger(
+	resolved settings.Resolved,
+	logger *slog.Logger,
+) error {
 	strict := resolved.Admin.Validation.Strict
 	enable := strict || resolved.Admin.Validation.Enable
 	if err := settings.Validate(resolved); err != nil {
@@ -250,6 +277,6 @@ func ValidateStartupResolved(resolved settings.Resolved) error {
 		return nil
 	}
 
-	validator := startupValidator{strict: strict}
+	validator := startupValidator{strict: strict, logger: logger}
 	return validator.err
 }

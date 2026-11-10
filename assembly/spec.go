@@ -155,6 +155,13 @@ type ModuleDiffEntry struct {
 	Reasons []string `json:"reasons,omitempty" yaml:"reasons,omitempty"`
 }
 
+// ModuleReasonDiffEntry describes diagnostic reason changes for one module.
+type ModuleReasonDiffEntry struct {
+	Name string   `json:"name"          yaml:"name"`
+	Old  []string `json:"old,omitempty" yaml:"old,omitempty"`
+	New  []string `json:"new,omitempty" yaml:"new,omitempty"`
+}
+
 // ValueDiffEntry describes one scalar change.
 type ValueDiffEntry struct {
 	Target string `json:"target"        yaml:"target"`
@@ -173,16 +180,17 @@ type ChainDiffEntry struct {
 type SpecDiff struct {
 	HasChanges bool `json:"has_changes" yaml:"has_changes"`
 
-	AffectedDomains []string          `json:"affected_domains,omitempty" yaml:"affected_domains,omitempty"`
-	Mode            *ValueDiffEntry   `json:"mode,omitempty"             yaml:"mode,omitempty"`
-	Modules         []ModuleDiffEntry `json:"modules,omitempty"          yaml:"modules,omitempty"`
-	Identity        []ValueDiffEntry  `json:"identity,omitempty"         yaml:"identity,omitempty"`
-	Defaults        []ValueDiffEntry  `json:"defaults,omitempty"         yaml:"defaults,omitempty"`
-	Chains          []ChainDiffEntry  `json:"chains,omitempty"           yaml:"chains,omitempty"`
-	Overrides       []ValueDiffEntry  `json:"overrides,omitempty"        yaml:"overrides,omitempty"`
-	Decisions       []ValueDiffEntry  `json:"decisions,omitempty"        yaml:"decisions,omitempty"`
-	Warnings        []ValueDiffEntry  `json:"warnings,omitempty"         yaml:"warnings,omitempty"`
-	Conflicts       []ValueDiffEntry  `json:"conflicts,omitempty"        yaml:"conflicts,omitempty"`
+	AffectedDomains []string                `json:"affected_domains,omitempty" yaml:"affected_domains,omitempty"`
+	Mode            *ValueDiffEntry         `json:"mode,omitempty"             yaml:"mode,omitempty"`
+	Modules         []ModuleDiffEntry       `json:"modules,omitempty"          yaml:"modules,omitempty"`
+	ModuleReasons   []ModuleReasonDiffEntry `json:"module_reasons,omitempty"   yaml:"module_reasons,omitempty"`
+	Identity        []ValueDiffEntry        `json:"identity,omitempty"         yaml:"identity,omitempty"`
+	Defaults        []ValueDiffEntry        `json:"defaults,omitempty"         yaml:"defaults,omitempty"`
+	Chains          []ChainDiffEntry        `json:"chains,omitempty"           yaml:"chains,omitempty"`
+	Overrides       []ValueDiffEntry        `json:"overrides,omitempty"        yaml:"overrides,omitempty"`
+	Decisions       []ValueDiffEntry        `json:"decisions,omitempty"        yaml:"decisions,omitempty"`
+	Warnings        []ValueDiffEntry        `json:"warnings,omitempty"         yaml:"warnings,omitempty"`
+	Conflicts       []ValueDiffEntry        `json:"conflicts,omitempty"        yaml:"conflicts,omitempty"`
 }
 
 type canonicalKV struct {
@@ -277,12 +285,30 @@ func Diff(oldSpec, newSpec *Spec) (*SpecDiff, error) {
 			})
 		}
 	}
+	for name, oldItem := range oldModules {
+		newItem, ok := newModules[name]
+		if !ok || stringSlicesEqual(oldItem.Reasons, newItem.Reasons) {
+			continue
+		}
+		diff.ModuleReasons = append(diff.ModuleReasons, ModuleReasonDiffEntry{
+			Name: name,
+			Old:  append([]string(nil), oldItem.Reasons...),
+			New:  append([]string(nil), newItem.Reasons...),
+		})
+	}
 	if len(diff.Modules) > 0 {
 		domains["modules"] = struct{}{}
+	}
+	if len(diff.ModuleReasons) > 0 {
+		domains["module_reasons"] = struct{}{}
 	}
 	sort.Slice(
 		diff.Modules,
 		func(i, j int) bool { return diff.Modules[i].Name < diff.Modules[j].Name },
+	)
+	sort.Slice(
+		diff.ModuleReasons,
+		func(i, j int) bool { return diff.ModuleReasons[i].Name < diff.ModuleReasons[j].Name },
 	)
 
 	oldDefaults := canonicalKVMap(oldCanonical.Defaults)
@@ -367,6 +393,7 @@ func Diff(oldSpec, newSpec *Spec) (*SpecDiff, error) {
 
 	diff.HasChanges = diff.Mode != nil ||
 		len(diff.Modules) > 0 ||
+		len(diff.ModuleReasons) > 0 ||
 		len(diff.Identity) > 0 ||
 		len(diff.Defaults) > 0 ||
 		len(diff.Chains) > 0 ||
@@ -403,6 +430,18 @@ func Diff(oldSpec, newSpec *Spec) (*SpecDiff, error) {
 		)
 	}
 	return diff, nil
+}
+
+func stringSlicesEqual(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func identityDiffMap(identity IdentitySpec) map[string]string {

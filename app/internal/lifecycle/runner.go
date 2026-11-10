@@ -128,6 +128,14 @@ func WithRegistry(reg registry.Registry) Option {
 	}
 }
 
+// WithLogger configures the lifecycle logger.
+func WithLogger(logger *slog.Logger) Option {
+	return func(runner *Runner) error {
+		runner.logger = logger
+		return nil
+	}
+}
+
 // WithIdentity configures the App-local identity used by registration and
 // lifecycle diagnostics.
 func WithIdentity(identity internalidentity.Identity) Option {
@@ -213,6 +221,7 @@ type Runner struct {
 	identity      internalidentity.Identity
 
 	shutdownTimeout time.Duration
+	logger          *slog.Logger
 
 	hooks map[Stage]*defers.Defer
 }
@@ -246,7 +255,9 @@ func (runner *Runner) Init(opts ...Option) error {
 	runner.optionsMu.Lock()
 	defer runner.optionsMu.Unlock()
 	if runner.running {
-		slog.Warn("the application has been started, and the settings are no longer applied")
+		runner.loggerOrDefault().Warn(
+			"the application has been started, and the settings are no longer applied",
+		)
 		return nil
 	}
 	for _, opt := range opts {
@@ -255,6 +266,13 @@ func (runner *Runner) Init(opts ...Option) error {
 		}
 	}
 	return nil
+}
+
+func (runner *Runner) loggerOrDefault() *slog.Logger {
+	if runner != nil && runner.logger != nil {
+		return runner.logger
+	}
+	return slog.Default()
 }
 
 func (runner *Runner) withStopTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -342,7 +360,10 @@ func (runner *Runner) Start(ctx context.Context) error {
 		go func() {
 			<-runner.serveDone
 			if stopErr := runner.Stop(shutdownCtx); stopErr != nil {
-				slog.Error("failed to stop after server exit", slog.Any("error", stopErr))
+				runner.loggerOrDefault().Error(
+					"failed to stop after server exit",
+					slog.Any("error", stopErr),
+				)
 			}
 		}()
 		return nil
@@ -373,6 +394,7 @@ func (runner *Runner) Wait() error {
 	if runner.state == runnerStateIdle {
 		runner.mu.Unlock()
 		_ = runner.Stop(context.Background())
+		runner.mu.Lock()
 	}
 	stopDone := runner.stopDone
 	runner.mu.Unlock()
@@ -566,26 +588,26 @@ func attrsToAny(attrs ...slog.Attr) []any {
 	return args
 }
 
-func stopManagedComponent(
+func (runner *Runner) stopManagedComponent(
 	ctx context.Context,
 	name string,
 	stop func(context.Context) error,
 	attrs ...slog.Attr,
 ) error {
-	slog.Info("stopping "+name, attrsToAny(attrs...)...)
+	runner.loggerOrDefault().Info("stopping "+name, attrsToAny(attrs...)...)
 	if err := stop(ctx); err != nil {
 		errAttrs := make([]slog.Attr, len(attrs), len(attrs)+1)
 		copy(errAttrs, attrs)
 		errAttrs = append(errAttrs, slog.Any("error", err))
-		slog.Error("failed to stop "+name, attrsToAny(errAttrs...)...)
+		runner.loggerOrDefault().Error("failed to stop "+name, attrsToAny(errAttrs...)...)
 		return err
 	}
-	slog.Info(name+" stopped", attrsToAny(attrs...)...)
+	runner.loggerOrDefault().Info(name+" stopped", attrsToAny(attrs...)...)
 	return nil
 }
 
 func (runner *Runner) stopServers(ctx context.Context) error {
-	slog.Info("stopping servers")
+	runner.loggerOrDefault().Info("stopping servers")
 
 	type stopTarget struct {
 		name  string
@@ -623,7 +645,7 @@ func (runner *Runner) stopServers(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errs[index] = stopManagedComponent(
+			errs[index] = runner.stopManagedComponent(
 				ctx,
 				target.name,
 				target.stop,
@@ -640,7 +662,7 @@ func (runner *Runner) stopServers(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("error stopping servers: %w", err)
 	}
-	slog.Info("all servers stopped successfully")
+	runner.loggerOrDefault().Info("all servers stopped successfully")
 	return nil
 }
 

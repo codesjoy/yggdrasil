@@ -15,7 +15,9 @@
 package module
 
 import (
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -114,4 +116,40 @@ func TestDiagnostics_BindingsWithRequestedButNoCapabilityProviders(t *testing.T)
 	require.Equal(t, []string{"provider-x"}, diag.Bindings[0].Requested)
 	require.Empty(t, diag.Bindings[0].Resolved)
 	require.Equal(t, []string{"provider-x"}, diag.Bindings[0].Missing)
+}
+
+type reentrantReloadReporter struct {
+	hub   *Hub
+	calls atomic.Int32
+}
+
+func (m *reentrantReloadReporter) Name() string { return "reentrant-reporter" }
+
+func (m *reentrantReloadReporter) ReloadState() ReloadState {
+	m.calls.Add(1)
+	m.hub.MarkRestartRequired(m.Name())
+	return ReloadState{Phase: ReloadPhaseIdle}
+}
+
+func TestDiagnostics_DoesNotCallModulesWhileHubIsLocked(t *testing.T) {
+	reporter := &reentrantReloadReporter{}
+	h := NewHub()
+	reporter.hub = h
+	require.NoError(t, h.Use(reporter))
+	require.NoError(t, h.Seal())
+
+	done := make(chan Diagnostics, 1)
+	go func() {
+		done <- h.Diagnostics()
+	}()
+
+	select {
+	case diag := <-done:
+		require.Len(t, diag.Modules, 1)
+		require.Equal(t, "idle", diag.Modules[0].ReloadPhase)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Diagnostics deadlocked while invoking a module callback")
+	}
+	require.Equal(t, int32(1), reporter.calls.Load())
+	require.True(t, h.ReloadState().RestartRequired)
 }

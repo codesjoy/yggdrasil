@@ -279,6 +279,7 @@ func secureEqual(a, b string) bool {
 const redactedValue = "[REDACTED]"
 
 var sensitiveConfigKeys = map[string]struct{}{
+	"api_key":           {},
 	"authorization":     {},
 	"connection_string": {},
 	"credential":        {},
@@ -368,6 +369,7 @@ func isSensitiveConfigKey(key string) bool {
 		"_credential",
 		"_credentials",
 		"_dsn",
+		"_api_key",
 		"_password",
 		"_passwd",
 		"_private_key",
@@ -379,6 +381,7 @@ func isSensitiveConfigKey(key string) bool {
 		}
 	}
 	for _, prefix := range []string{
+		"api_key_",
 		"authorization_",
 		"connection_string_",
 		"credential_",
@@ -398,23 +401,31 @@ func isSensitiveConfigKey(key string) bool {
 }
 
 func normalizeSensitiveKey(key string) string {
-	raw := strings.TrimSpace(key)
+	raw := []rune(strings.TrimSpace(key))
 	var normalized strings.Builder
 	var previous rune
 	for index, current := range raw {
 		switch {
+		case current == '-', current == '.', current == ' ', current == '_':
+			if normalized.Len() > 0 && previous != '_' {
+				normalized.WriteByte('_')
+			}
 		case unicode.IsUpper(current):
-			if index > 0 && previous != '_' && previous != '-' && previous != '.' &&
-				previous != ' ' {
+			if index > 0 && previous != '_' && (unicode.IsLower(previous) ||
+				unicode.IsDigit(previous) ||
+				(unicode.IsUpper(previous) && index+1 < len(raw) &&
+					unicode.IsLower(raw[index+1]))) {
 				normalized.WriteByte('_')
 			}
 			normalized.WriteRune(unicode.ToLower(current))
-		case current == '-', current == '.', current == ' ':
-			normalized.WriteByte('_')
 		default:
 			normalized.WriteRune(unicode.ToLower(current))
 		}
-		previous = current
+		if current == '-' || current == '.' || current == ' ' || current == '_' {
+			previous = '_'
+		} else {
+			previous = current
+		}
 	}
 	return strings.Trim(normalized.String(), "_")
 }

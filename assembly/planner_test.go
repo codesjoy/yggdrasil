@@ -118,30 +118,35 @@ func compileTestInput(t *testing.T, payload map[string]any, overrides ...Overrid
 	require.NoError(t, config.NewSnapshot(payload).Decode(&root))
 	resolved, err := settings.Compile(root)
 	require.NoError(t, err)
+	planOverrides := []Override{EnableModule("test.foundation")}
+	planOverrides = append(planOverrides, overrides...)
 	return Input{
 		Identity:  IdentitySpec{AppName: "assembly-test"},
 		Resolved:  resolved,
 		Snapshot:  config.NewSnapshot(payload),
 		Modules:   testPlannerModules(),
-		Overrides: overrides,
+		Overrides: planOverrides,
 	}
 }
 
-func TestPlanWarnsForProcessDefaultDependentModuleInAppLocalMode(t *testing.T) {
+func TestPlanFailsForProcessDefaultDependentModuleInAppLocalMode(t *testing.T) {
 	input := compileTestInput(t, map[string]any{"yggdrasil": map[string]any{}})
 	input.Modules = append(input.Modules, testIsolationModule{
 		testCapabilityModule: testCapabilityModule{name: "test.process-default-module"},
 		mode:                 module.IsolationModeRequiresProcessDefaults,
 	})
+	input.Overrides = append(
+		input.Overrides,
+		EnableModule("test.process-default-module"),
+	)
 
-	result, err := Plan(context.Background(), input)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Len(t, result.Spec.Warnings, 1)
-	require.Equal(t, "ModuleRequiresProcessDefaults", result.Spec.Warnings[0].Code)
+	_, err := Plan(context.Background(), input)
+	var assemblyErr *Error
+	require.ErrorAs(t, err, &assemblyErr)
+	require.Equal(t, ErrIsolationRequiresProcessDefaults, assemblyErr.Code)
 }
 
-func TestPlanFailsForProcessDefaultDependentModuleInStrictAppLocalMode(t *testing.T) {
+func TestPlanAllowsProcessDefaultDependentModuleWhenEnabled(t *testing.T) {
 	input := compileTestInput(
 		t,
 		map[string]any{
@@ -156,12 +161,22 @@ func TestPlanFailsForProcessDefaultDependentModuleInStrictAppLocalMode(t *testin
 		testCapabilityModule: testCapabilityModule{name: "test.process-default-module"},
 		mode:                 module.IsolationModeRequiresProcessDefaults,
 	})
+	input.Overrides = append(
+		input.Overrides,
+		EnableModule("test.process-default-module"),
+	)
+	input.ProcessDefaults = true
 
-	_, err := Plan(context.Background(), input)
-	require.Error(t, err)
-	var assemblyErr *Error
-	require.ErrorAs(t, err, &assemblyErr)
-	require.Equal(t, ErrIsolationRequiresProcessDefaults, assemblyErr.Code)
+	result, err := Plan(context.Background(), input)
+	require.NoError(t, err)
+	found := false
+	for _, item := range result.Spec.Modules {
+		if item.Name == "test.process-default-module" {
+			found = true
+			break
+		}
+	}
+	require.True(t, found)
 }
 
 func TestDryRunAppliesModeDefaultsAndTemplates(t *testing.T) {
@@ -286,6 +301,7 @@ func TestDryRunRejectsAmbiguousDefault(t *testing.T) {
 			},
 		},
 	})
+	input.Overrides = append(input.Overrides, EnableModule("tracer.providers"))
 
 	_, err := Plan(context.Background(), input)
 	var assemblyErr *Error

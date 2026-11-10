@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/module"
 
 	"github.com/codesjoy/yggdrasil/v3/config"
@@ -327,6 +328,14 @@ func TestWithOptions(t *testing.T) {
 		assert.Equal(t, mod, opts.modules[0])
 	})
 
+	t.Run("WithPlanOverrides", func(t *testing.T) {
+		opts := options{}
+		override := yassembly.EnableModule("root.test.module")
+		err := WithPlanOverrides(override)(&opts)
+		require.NoError(t, err)
+		require.Len(t, opts.planOverrides, 1)
+	})
+
 	t.Run("WithCapabilityRegistrations", func(t *testing.T) {
 		opts := options{}
 		reg := CapabilityRegistration{
@@ -366,6 +375,7 @@ func TestRootWithModulesPassThrough(t *testing.T) {
 				return nil
 			},
 		}),
+		WithPlanOverrides(yassembly.EnableModule("root.test.module")),
 	)
 	require.NoError(t, err)
 

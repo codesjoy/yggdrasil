@@ -17,6 +17,7 @@ package app
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -213,6 +214,17 @@ type runtimeSurface struct {
 	lookups map[reflect.Type]any
 }
 
+var bootstrapRuntimeLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+func (a *App) runtimeLogger() *slog.Logger {
+	if a != nil {
+		if snapshot := a.currentRuntimeSnapshot(); snapshot != nil && snapshot.Logger != nil {
+			return snapshot.Logger
+		}
+	}
+	return bootstrapRuntimeLogger
+}
+
 func newRuntimeSurface(app *App) Runtime {
 	rt := &runtimeSurface{
 		app:     app,
@@ -240,10 +252,10 @@ func (r *runtimeSurface) Config() *config.Manager {
 }
 
 func (r *runtimeSurface) Logger() *slog.Logger {
-	if snapshot := r.snapshot(); snapshot != nil && snapshot.Logger != nil {
-		return snapshot.Logger
+	if r != nil && r.app != nil {
+		return r.app.runtimeLogger()
 	}
-	return slog.Default()
+	return bootstrapRuntimeLogger
 }
 
 func (r *runtimeSurface) TracerProvider() trace.TracerProvider {

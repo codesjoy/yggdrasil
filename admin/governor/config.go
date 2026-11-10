@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -99,7 +100,11 @@ type Config struct {
 
 // Address returns address.
 func (c *Config) Address() string {
-	return fmt.Sprintf("%s:%d", c.Bind, c.Port)
+	bind := strings.TrimSpace(c.Bind)
+	if strings.HasPrefix(bind, "[") && strings.HasSuffix(bind, "]") {
+		bind = strings.TrimSuffix(strings.TrimPrefix(bind, "["), "]")
+	}
+	return net.JoinHostPort(bind, strconv.FormatUint(c.Port, 10))
 }
 
 // IsEnabled reports whether governor should serve.

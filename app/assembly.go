@@ -58,11 +58,19 @@ func (a *App) plannedModules() []module.Module {
 	return mods
 }
 
-func (a *App) assemblyInputLocked() yassembly.Input {
-	resolved := a.opts.resolvedSettings
+func (a *App) assemblyInputWithResolvedLocked(resolved settings.Resolved) yassembly.Input {
 	if a.opts.mode != "" {
 		resolved.Mode = a.opts.mode
 	}
+	overrides := make(
+		[]yassembly.Override,
+		0,
+		len(a.opts.capabilityRegistrations)+len(a.opts.planOverrides),
+	)
+	for _, registration := range a.opts.capabilityRegistrations {
+		overrides = append(overrides, yassembly.EnableModule(registration.Name))
+	}
+	overrides = append(overrides, a.opts.planOverrides...)
 	return yassembly.Input{
 		Identity: yassembly.IdentitySpec{
 			AppName:   a.identity.AppName,
@@ -76,7 +84,7 @@ func (a *App) assemblyInputLocked() yassembly.Input {
 		Resolved:        resolved,
 		Snapshot:        a.opts.configManager.Snapshot(),
 		Modules:         a.plannedModules(),
-		Overrides:       append([]yassembly.Override(nil), a.opts.planOverrides...),
+		Overrides:       overrides,
 		ProcessDefaults: a.opts.processDefaults,
 	}
 }
@@ -85,7 +93,17 @@ func (a *App) buildAssemblyResult(ctx context.Context) (*yassembly.Result, error
 	if a == nil || a.opts == nil {
 		return nil, nil
 	}
-	result, err := yassembly.Plan(ctx, a.assemblyInputLocked())
+	return a.buildAssemblyResultWithResolved(ctx, a.opts.resolvedSettings)
+}
+
+func (a *App) buildAssemblyResultWithResolved(
+	ctx context.Context,
+	resolved settings.Resolved,
+) (*yassembly.Result, error) {
+	if a == nil || a.opts == nil {
+		return nil, nil
+	}
+	result, err := yassembly.Plan(ctx, a.assemblyInputWithResolvedLocked(resolved))
 	if err != nil {
 		return nil, err
 	}
@@ -178,6 +196,7 @@ type defaultSelectionDiag struct {
 
 type assemblyDiagnostics struct {
 	Spec                  *yassembly.Spec                         `json:"spec,omitempty"`
+	LastStableSpec        *yassembly.Spec                         `json:"last_stable_spec,omitempty"`
 	Mode                  yassembly.Mode                          `json:"mode"`
 	EnabledModules        []string                                `json:"enabled_modules,omitempty"`
 	SelectedDefaults      map[string]defaultSelectionDiag         `json:"selected_defaults,omitempty"`
@@ -200,9 +219,14 @@ func (a *App) assemblyDiagnostics() assemblyDiagnostics {
 	defer a.mu.Unlock()
 
 	errorDiag := a.assemblyErrorDiagnosticsLocked()
+	expectedPlan := a.lastPlanResult
+	if expectedPlan == nil {
+		expectedPlan = &yassembly.Result{Spec: a.assemblySpec}
+	}
 
 	diag := assemblyDiagnostics{
-		Spec:                  a.assemblySpec,
+		Spec:                  expectedPlan.Spec,
+		LastStableSpec:        a.assemblySpec,
 		CurrentSpecHash:       a.lastPlanHash,
 		LastStableSpecHash:    a.lastStablePlanHash,
 		LastSpecDiff:          a.lastSpecDiff,
@@ -213,44 +237,37 @@ func (a *App) assemblyDiagnostics() assemblyDiagnostics {
 		DefaultCandidates:     map[string][]yassembly.DefaultCandidate{},
 		Templates:             map[string]yassembly.Chain{},
 		AffectedPathsByDomain: map[string][]string{},
-		BusinessInputPaths:    append([]string(nil), a.bundleDiagnosticsBusinessInputsLocked()...),
+		BusinessInputPaths:    append([]string(nil), expectedPlan.BusinessInputPaths...),
 		BundleDiagnostics:     append([]BundleDiag(nil), a.bundleDiagnostics...),
 	}
-	if a.assemblySpec != nil {
-		diag.Mode = a.assemblySpec.Mode
-		for _, mod := range a.assemblySpec.Modules {
+	if expectedPlan.Spec != nil {
+		diag.Mode = expectedPlan.Spec.Mode
+		for _, mod := range expectedPlan.Spec.Modules {
 			diag.EnabledModules = append(diag.EnabledModules, mod.Name)
 		}
-		for key, value := range a.assemblySpec.Chains {
+		for key, value := range expectedPlan.Spec.Chains {
 			diag.Templates[key] = value
 		}
 	}
-	if a.lastPlanResult != nil {
-		for key, value := range a.lastPlanResult.Spec.Defaults {
+	if expectedPlan.Spec != nil {
+		for key, value := range expectedPlan.Spec.Defaults {
 			diag.SelectedDefaults[key] = defaultSelectionDiag{
 				Value:  value,
-				Source: a.lastPlanResult.DefaultSources[key],
+				Source: expectedPlan.DefaultSources[key],
 			}
 		}
-		for key, items := range a.lastPlanResult.DefaultCandidates {
+		for key, items := range expectedPlan.DefaultCandidates {
 			diag.DefaultCandidates[key] = append([]yassembly.DefaultCandidate(nil), items...)
 		}
 		diag.MatchedAutoRules = append(
 			[]yassembly.MatchedAutoRule(nil),
-			a.lastPlanResult.MatchedAutoRules...)
-		diag.BusinessInputPaths = append([]string(nil), a.lastPlanResult.BusinessInputPaths...)
-		for key, value := range a.lastPlanResult.AffectedPathsByDomain {
+			expectedPlan.MatchedAutoRules...)
+		diag.BusinessInputPaths = append([]string(nil), expectedPlan.BusinessInputPaths...)
+		for key, value := range expectedPlan.AffectedPathsByDomain {
 			diag.AffectedPathsByDomain[key] = append([]string(nil), value...)
 		}
 	}
 	return diag
-}
-
-func (a *App) bundleDiagnosticsBusinessInputsLocked() []string {
-	if a == nil || a.lastPlanResult == nil {
-		return nil
-	}
-	return a.lastPlanResult.BusinessInputPaths
 }
 
 func (a *App) installDiagnosticsRoutes() {

@@ -205,7 +205,9 @@ func WithConfigSourceBuilder(kind string, builder configchain.ContextBuilder) Op
 	}
 }
 
-// WithModules registers additional modules into the app module hub.
+// WithModules registers additional module candidates. A candidate that does
+// not implement module.AutoDescribed must be enabled explicitly with
+// WithPlanOverrides(assembly.EnableModule(name)).
 func WithModules(mods ...module.Module) Option {
 	return func(opts *options) error {
 		for _, mod := range mods {

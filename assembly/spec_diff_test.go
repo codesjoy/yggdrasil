@@ -66,6 +66,35 @@ func TestDiff_ModuleChanges(t *testing.T) {
 	require.Contains(t, diff.AffectedDomains, "modules")
 }
 
+func TestDiff_ModuleReasonChanges(t *testing.T) {
+	old := &Spec{
+		Modules: []ModuleRef{{
+			Name:    "mod.a",
+			Kind:    "module",
+			Source:  "user",
+			Reasons: []string{"registered by WithModules"},
+		}},
+	}
+	next := &Spec{
+		Modules: []ModuleRef{{
+			Name:    "mod.a",
+			Kind:    "module",
+			Source:  "user",
+			Reasons: []string{"registered by WithModules", "enabled by WithPlanOverrides"},
+		}},
+	}
+
+	diff, err := Diff(old, next)
+	require.NoError(t, err)
+	require.True(t, diff.HasChanges)
+	require.Empty(t, diff.Modules)
+	require.Len(t, diff.ModuleReasons, 1)
+	require.Equal(t, "mod.a", diff.ModuleReasons[0].Name)
+	require.Equal(t, old.Modules[0].Reasons, diff.ModuleReasons[0].Old)
+	require.Equal(t, next.Modules[0].Reasons, diff.ModuleReasons[0].New)
+	require.Contains(t, diff.AffectedDomains, "module_reasons")
+}
+
 func TestDiff_ModeChange(t *testing.T) {
 	old := &Spec{
 		Identity: IdentitySpec{AppName: "test"},

@@ -15,10 +15,13 @@
 package rest
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -376,6 +379,23 @@ func TestServeMux_Info(t *testing.T) {
 	assert.Equal(t, si, got)
 	assert.Equal(t, "0.0.0.0:9090", got.GetAddress())
 	assert.Equal(t, "test", got.GetAttributes()["env"])
+	got.GetAttributes()["env"] = "changed"
+	assert.Equal(t, "test", mux.Info().GetAttributes()["env"])
+}
+
+func TestServeMux_InfoConcurrentWithStart(t *testing.T) {
+	s, err := NewServer(&Config{Host: "127.0.0.1", Port: 0})
+	require.NoError(t, err)
+
+	startDone := make(chan error, 1)
+	go func() {
+		startDone <- s.Start()
+	}()
+	for range 100 {
+		_ = s.Info().GetAddress()
+	}
+	require.NoError(t, <-startDone)
+	t.Cleanup(func() { require.NoError(t, s.Stop(context.Background())) })
 }
 
 func TestServeMux_ExtractInMetadata(t *testing.T) {
@@ -417,7 +437,9 @@ func TestServeMux_GetPeer_XForwardedFor(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = lis.Close() }()
 
-	mux := &ServeMux{listener: lis}
+	trusted, err := parseTrustedProxyCIDRs([]string{"192.168.1.1"})
+	require.NoError(t, err)
+	mux := &ServeMux{listener: lis, trustedProxies: trusted}
 
 	r := httptest.NewRequest("GET", "/", nil)
 	r.RemoteAddr = "192.168.1.1:12345"
@@ -425,14 +447,16 @@ func TestServeMux_GetPeer_XForwardedFor(t *testing.T) {
 
 	p := mux.getPeer(r)
 	require.NotNil(t, p)
-	assert.Equal(t, "10.0.0.1", p.Addr.(*net.TCPAddr).IP.String())
-	assert.Equal(t, 12345, p.Addr.(*net.TCPAddr).Port)
+	assert.Equal(t, "10.0.0.2", p.Addr.(*net.TCPAddr).IP.String())
+	assert.Equal(t, 0, p.Addr.(*net.TCPAddr).Port)
 	assert.Equal(t, "http", p.Protocol)
 	assert.Equal(t, lis.Addr(), p.LocalAddr)
 }
 
 func TestServeMux_GetPeer_XRealIP(t *testing.T) {
-	mux := &ServeMux{}
+	trusted, err := parseTrustedProxyCIDRs([]string{"192.168.1.1/32"})
+	require.NoError(t, err)
+	mux := &ServeMux{trustedProxies: trusted}
 
 	r := httptest.NewRequest("GET", "/", nil)
 	r.RemoteAddr = "192.168.1.1:12345"
@@ -441,7 +465,56 @@ func TestServeMux_GetPeer_XRealIP(t *testing.T) {
 	p := mux.getPeer(r)
 	require.NotNil(t, p)
 	assert.Equal(t, "10.0.0.5", p.Addr.(*net.TCPAddr).IP.String())
+	assert.Equal(t, 0, p.Addr.(*net.TCPAddr).Port)
+}
+
+func TestServeMux_GetPeer_IgnoresForwardedHeadersByDefault(t *testing.T) {
+	mux := &ServeMux{}
+	r := httptest.NewRequest("GET", "/", nil)
+	r.RemoteAddr = "192.168.1.1:12345"
+	r.Header.Set("X-Forwarded-For", "10.0.0.1")
+	r.Header.Set("X-Real-Ip", "10.0.0.2")
+
+	p := mux.getPeer(r)
+	assert.Equal(t, "192.168.1.1", p.Addr.(*net.TCPAddr).IP.String())
 	assert.Equal(t, 12345, p.Addr.(*net.TCPAddr).Port)
+}
+
+func TestServeMux_GetPeer_SkipsTrustedForwardedHops(t *testing.T) {
+	trusted, err := parseTrustedProxyCIDRs([]string{
+		"192.168.1.1/32",
+		"10.0.0.2/32",
+	})
+	require.NoError(t, err)
+	mux := &ServeMux{trustedProxies: trusted}
+	r := httptest.NewRequest("GET", "/", nil)
+	r.RemoteAddr = "192.168.1.1:12345"
+	r.Header.Set("X-Forwarded-For", "203.0.113.8, 10.0.0.2")
+
+	p := mux.getPeer(r)
+	assert.Equal(t, "203.0.113.8", p.Addr.(*net.TCPAddr).IP.String())
+	assert.Equal(t, 0, p.Addr.(*net.TCPAddr).Port)
+}
+
+func TestServeMux_GetPeer_SupportsIPv6ProxyChains(t *testing.T) {
+	trusted, err := parseTrustedProxyCIDRs([]string{
+		"::1/128",
+		"2001:db8::2/128",
+	})
+	require.NoError(t, err)
+	mux := &ServeMux{trustedProxies: trusted}
+	r := httptest.NewRequest("GET", "/", nil)
+	r.RemoteAddr = "[::1]:12345"
+	r.Header.Set("X-Forwarded-For", "2001:db8::8, 2001:db8::2")
+
+	p := mux.getPeer(r)
+	assert.Equal(t, "2001:db8::8", p.Addr.(*net.TCPAddr).IP.String())
+	assert.Equal(t, 0, p.Addr.(*net.TCPAddr).Port)
+}
+
+func TestNewServerRejectsInvalidTrustedProxyCIDR(t *testing.T) {
+	_, err := NewServer(&Config{TrustedProxyCIDRs: []string{"not-an-ip"}})
+	require.ErrorContains(t, err, "invalid trusted proxy")
 }
 
 func TestServeMux_GetPeer_RemoteAddr(t *testing.T) {
@@ -681,6 +754,26 @@ func TestBuiltinLoggingProvider(t *testing.T) {
 	assert.NotNil(t, p.Build())
 }
 
+func TestBuiltinLoggingProviderWithLoggerUsesExplicitLogger(t *testing.T) {
+	var explicit bytes.Buffer
+	var global bytes.Buffer
+	oldDefault := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(oldDefault) })
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&global, nil)))
+
+	provider := BuiltinLoggingProviderWithLogger(
+		slog.New(slog.NewJSONHandler(&explicit, nil)),
+	)
+	handler := provider.Build()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	require.Contains(t, explicit.String(), `"msg":"http access"`)
+	require.Empty(t, global.String())
+}
+
 func TestNewServer_WithConfig(t *testing.T) {
 	cfg := &Config{
 		Host:       "127.0.0.1",
@@ -736,6 +829,31 @@ func TestServeMux_Start_Success(t *testing.T) {
 	assert.NotNil(t, mux.listener)
 	assert.NotEqual(t, "0.0.0.0:0", mux.info.address)
 	_ = mux.Stop(context.Background())
+}
+
+func TestServeMux_StartFailurePreservesConfiguredAddressForRetry(t *testing.T) {
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := probe.Addr().(*net.TCPAddr).Port
+	require.NoError(t, probe.Close())
+
+	cfg := &Config{
+		Host:             "127.0.0.1",
+		Port:             port,
+		AdvertiseAddress: "missing-port",
+	}
+	s, err := NewServer(cfg)
+	require.NoError(t, err)
+	configuredAddress := s.Info().GetAddress()
+	require.Error(t, s.Start())
+	require.Equal(t, configuredAddress, s.Info().GetAddress())
+
+	cfg.AdvertiseAddress = ""
+	require.NoError(t, s.Start())
+	t.Cleanup(func() { require.NoError(t, s.Stop(context.Background())) })
+	_, actualPort, err := net.SplitHostPort(s.Info().GetAddress())
+	require.NoError(t, err)
+	require.Equal(t, fmt.Sprintf("%d", port), actualPort)
 }
 
 func TestServeMux_Start_DoubleStart(t *testing.T) {

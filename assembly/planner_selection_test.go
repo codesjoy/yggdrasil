@@ -40,7 +40,10 @@ func TestRequireProvider_NotAvailable(t *testing.T) {
 func TestRequireProvider_AmbiguousMultiple(t *testing.T) {
 	input := compileTestInput(t, map[string]any{
 		"yggdrasil": map[string]any{},
-	}, ForceDefault(capTracer, "nonexistent_provider"))
+	}, ForceDefault(capTracer, "nonexistent_provider"),
+		EnableModule("tracer.a"),
+		EnableModule("tracer.b"),
+	)
 	// Add two providers for capTracer so requireProvider takes the ambiguous path
 	input.Modules = append(input.Modules, testCapabilityModule{
 		name: "tracer.a",
@@ -206,6 +209,32 @@ func TestPlan_EnableModuleOverride(t *testing.T) {
 		}
 	}
 	require.True(t, found2, "EnableModule should force-include the auto module")
+}
+
+func TestPlan_NonAutoModuleRequiresExplicitEnable(t *testing.T) {
+	input := compileTestInput(t, map[string]any{"yggdrasil": map[string]any{}})
+	input.Modules = append(input.Modules, testCapabilityModule{name: "plain.module"})
+
+	result, err := Plan(context.Background(), input)
+	require.NoError(t, err)
+	require.False(t, specHasModule(result.Spec, "plain.module"))
+
+	input.Overrides = append(input.Overrides, EnableModule("plain.module"))
+	result, err = Plan(context.Background(), input)
+	require.NoError(t, err)
+	require.True(t, specHasModule(result.Spec, "plain.module"))
+}
+
+func specHasModule(spec *Spec, name string) bool {
+	if spec == nil {
+		return false
+	}
+	for _, item := range spec.Modules {
+		if item.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func TestPlan_ProdGRPCMode(t *testing.T) {

@@ -487,6 +487,125 @@ func TestInstallBusinessCommitsStagedExtensionsAtomically(t *testing.T) {
 	require.True(t, app.explicitBundleInstalled)
 }
 
+func TestInstallBusinessExtensionCanUseRuntimeWithoutAppLock(t *testing.T) {
+	app, err := New(
+		"staged-install-runtime",
+		WithConfigManager(newTestManager(t, assemblyTestConfig(false))),
+		WithModules(testTransportModule{recorder: newTransportRecorder()}),
+	)
+	require.NoError(t, err)
+	require.NoError(t, app.Prepare(context.Background()))
+	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+
+	done := make(chan error, 1)
+	go func() {
+		done <- app.InstallBusiness(&BusinessBundle{
+			Extensions: []BusinessInstallable{
+				stagedInstallExtension{
+					kind: "runtime-client",
+					install: func(ctx *InstallContext) error {
+						_, _ = ctx.Runtime.NewClient(context.Background(), "missing-service")
+						return nil
+					},
+				},
+			},
+		})
+	}()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("InstallBusiness deadlocked while an extension used Runtime")
+	}
+}
+
+func TestInstallBusinessRejectsConcurrentInstallation(t *testing.T) {
+	app, err := New(
+		"staged-install-concurrent",
+		WithConfigManager(newTestManager(t, assemblyTestConfig(false))),
+		WithModules(testTransportModule{recorder: newTransportRecorder()}),
+	)
+	require.NoError(t, err)
+	require.NoError(t, app.Prepare(context.Background()))
+	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	firstDone := make(chan error, 1)
+	go func() {
+		firstDone <- app.InstallBusiness(&BusinessBundle{
+			Extensions: []BusinessInstallable{
+				stagedInstallExtension{
+					kind: "blocking",
+					install: func(*InstallContext) error {
+						close(entered)
+						<-release
+						return nil
+					},
+				},
+			},
+		})
+	}()
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first installation did not enter the extension callback")
+	}
+
+	err = app.InstallBusiness(&BusinessBundle{})
+	requireAssemblyErrorCode(t, err, yassembly.ErrInstallRegistrationConflict)
+	close(release)
+	require.NoError(t, <-firstDone)
+}
+
+func TestStopWaitsForInFlightBusinessInstallation(t *testing.T) {
+	app, err := New(
+		"staged-install-stop",
+		WithConfigManager(newTestManager(t, assemblyTestConfig(false))),
+		WithModules(testTransportModule{recorder: newTransportRecorder()}),
+	)
+	require.NoError(t, err)
+	require.NoError(t, app.Prepare(context.Background()))
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	installDone := make(chan error, 1)
+	go func() {
+		installDone <- app.InstallBusiness(&BusinessBundle{
+			Extensions: []BusinessInstallable{
+				stagedInstallExtension{
+					kind: "blocking-stop",
+					install: func(*InstallContext) error {
+						close(entered)
+						<-release
+						return nil
+					},
+				},
+			},
+		})
+	}()
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("installation did not enter the extension callback")
+	}
+
+	stopDone := make(chan error, 1)
+	go func() {
+		stopDone <- app.Stop(context.Background())
+	}()
+	select {
+	case err := <-stopDone:
+		t.Fatalf("Stop returned before installation completed: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(release)
+	require.NoError(t, <-installDone)
+	require.NoError(t, <-stopDone)
+}
+
 // --- effectiveResolved ---
 
 func TestEffectiveResolved(t *testing.T) {
@@ -673,8 +792,19 @@ func TestDiagnosticsEndpointIncludesAssemblyState(t *testing.T) {
 
 	var doc struct {
 		Assembly struct {
-			CurrentSpecHash string `json:"current_spec_hash"`
-			Mode            struct {
+			Spec struct {
+				Mode struct {
+					Name string `json:"name"`
+				} `json:"mode"`
+			} `json:"spec"`
+			LastStableSpec struct {
+				Mode struct {
+					Name string `json:"name"`
+				} `json:"mode"`
+			} `json:"last_stable_spec"`
+			CurrentSpecHash    string `json:"current_spec_hash"`
+			LastStableSpecHash string `json:"last_stable_spec_hash"`
+			Mode               struct {
 				Name string `json:"name"`
 			} `json:"mode"`
 			SelectedDefaults map[string]struct {
@@ -693,6 +823,8 @@ func TestDiagnosticsEndpointIncludesAssemblyState(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&doc))
 	require.Equal(t, "prod-http-gateway", doc.Assembly.Mode.Name)
 	require.NotEmpty(t, doc.Assembly.CurrentSpecHash)
+	require.Equal(t, doc.Assembly.CurrentSpecHash, doc.Assembly.LastStableSpecHash)
+	require.Equal(t, doc.Assembly.Spec.Mode.Name, doc.Assembly.LastStableSpec.Mode.Name)
 	require.Equal(t, "text", doc.Assembly.SelectedDefaults["observability.logger.handler"].Value)
 	require.Equal(
 		t,
@@ -757,6 +889,31 @@ func TestReloadWithInstalledBusinessMarksRestartRequired(t *testing.T) {
 	err = app.Reload(context.Background())
 	requireAssemblyErrorCode(t, err, yassembly.ErrReloadRequiresRestart)
 	require.True(t, app.hub.ReloadState().RestartRequired)
+
+	manager = app.opts.configManager
+	app.opts.configManager = nil
+	err = app.Reload(context.Background())
+	requireAssemblyErrorCode(t, err, yassembly.ErrReloadRequiresRestart)
+	app.opts.configManager = manager
+
+	require.NoError(
+		t,
+		manager.LoadLayer(
+			"override",
+			config.PriorityOverride,
+			memory.NewSource("override", map[string]any{
+				"yggdrasil": map[string]any{
+					"observability": map[string]any{
+						"logging": map[string]any{
+							"remote_level": "error",
+						},
+					},
+				},
+			}),
+		),
+	)
+	err = app.Reload(context.Background())
+	requireAssemblyErrorCode(t, err, yassembly.ErrReloadRequiresRestart)
 }
 
 func TestReloadRuntimeOnlyChangeHotReloadsWithoutBusinessBundle(t *testing.T) {
@@ -790,6 +947,197 @@ func TestReloadRuntimeOnlyChangeHotReloadsWithoutBusinessBundle(t *testing.T) {
 	require.NoError(t, app.Reload(context.Background()))
 	require.Nil(t, app.assemblyErrors.Reload.Err)
 	require.Equal(t, module.ReloadPhaseIdle, app.hub.ReloadState().Phase)
+	require.Equal(
+		t,
+		"warn",
+		app.currentRuntimeSnapshot().Resolved.Logging.RemoteLevel,
+	)
+	diag := app.assemblyDiagnostics()
+	require.Same(t, app.lastPlanResult.Spec, diag.Spec)
+	require.Equal(t, app.lastPlanResult.Hash, diag.CurrentSpecHash)
+	require.Same(t, app.assemblySpec, diag.LastStableSpec)
+	require.Equal(t, app.lastStablePlanHash, diag.LastStableSpecHash)
+}
+
+type failingAfterFoundationModule struct{}
+
+func (failingAfterFoundationModule) Name() string {
+	return "test.fail.after-foundation"
+}
+
+func (failingAfterFoundationModule) DependsOn() []string {
+	return []string{"connectivity.runtime"}
+}
+
+func (failingAfterFoundationModule) ConfigPath() string {
+	return "test.failure"
+}
+
+func (failingAfterFoundationModule) PrepareReload(
+	context.Context,
+	config.View,
+) (module.ReloadCommitter, error) {
+	return failingAfterFoundationCommitter{failingAfterFoundationModule{}}, nil
+}
+
+type failingAfterFoundationCommitter struct {
+	failingAfterFoundationModule
+}
+
+func (failingAfterFoundationCommitter) Commit(context.Context) error {
+	return errors.New("later module commit failed")
+}
+
+func (failingAfterFoundationCommitter) Rollback(context.Context) error {
+	return nil
+}
+
+func TestReloadRestoresFoundationSnapshotWhenLaterModuleCommitFails(t *testing.T) {
+	configData := assemblyTestConfig(false)
+	configData["test"] = map[string]any{
+		"failure": map[string]any{"value": "initial"},
+	}
+	mod := failingAfterFoundationModule{}
+	manager := newTestManager(t, configData)
+	app, err := New(
+		"foundation-rollback",
+		WithConfigManager(manager),
+		WithModules(testTransportModule{recorder: newTransportRecorder()}, mod),
+		WithPlanOverrides(yassembly.EnableModule(mod.Name())),
+	)
+	require.NoError(t, err)
+	require.NoError(t, app.Prepare(context.Background()))
+	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+
+	app.mu.Lock()
+	app.state = lifecycleStateRunning
+	previousFoundation := app.foundationSnapshot
+	app.mu.Unlock()
+	require.NotNil(t, previousFoundation)
+
+	require.NoError(t, manager.LoadLayer(
+		"rollback",
+		config.PriorityOverride,
+		memory.NewSource("rollback", map[string]any{
+			"yggdrasil": map[string]any{
+				"observability": map[string]any{
+					"logging": map[string]any{"remote_level": "warn"},
+				},
+			},
+			"test": map[string]any{
+				"failure": map[string]any{"value": "next"},
+			},
+		}),
+	))
+	err = app.Reload(context.Background())
+	var assemblyErr *yassembly.Error
+	require.ErrorAs(t, err, &assemblyErr)
+	require.Equal(t, yassembly.ErrRuntimeReconcileFailed, assemblyErr.Code)
+	require.ErrorContains(t, assemblyErr.Cause, "later module commit failed")
+	require.Same(t, previousFoundation, app.foundationSnapshot)
+	require.True(t, app.hub.ReloadState().RestartRequired)
+	diag := app.assemblyDiagnostics()
+	require.Same(t, app.lastPlanResult.Spec, diag.Spec)
+	require.Equal(t, app.lastPlanResult.Hash, diag.CurrentSpecHash)
+	require.Same(t, app.assemblySpec, diag.LastStableSpec)
+	require.Equal(t, app.lastStablePlanHash, diag.LastStableSpecHash)
+}
+
+type nonReloadableAppTestModule struct{}
+
+func (nonReloadableAppTestModule) Name() string { return "test.nonreloadable" }
+
+func (nonReloadableAppTestModule) ConfigPath() string { return "test.nonreloadable" }
+
+func TestReloadWithNonReloadableModuleDoesNotApplyRuntimeConfig(t *testing.T) {
+	configData := minimalV3Config("grpc")
+	configData["yggdrasil"].(map[string]any)["observability"] = map[string]any{
+		"logging": map[string]any{"remote_level": "info"},
+	}
+	configData["test"] = map[string]any{
+		"nonreloadable": map[string]any{"value": "initial"},
+	}
+	mod := nonReloadableAppTestModule{}
+	manager := newTestManager(t, configData)
+	app, err := New(
+		"nonreloadable-atomic-reload",
+		WithConfigManager(manager),
+		WithModules(mod),
+		WithPlanOverrides(yassembly.EnableModule(mod.Name())),
+	)
+	require.NoError(t, err)
+	require.NoError(t, app.Prepare(context.Background()))
+	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+	app.mu.Lock()
+	app.state = lifecycleStateRunning
+	app.mu.Unlock()
+
+	previousSnapshot := app.currentRuntimeSnapshot()
+	previousPlan := app.runtimePlan()
+	require.Equal(t, "info", previousSnapshot.Resolved.Logging.RemoteLevel)
+
+	override := map[string]any{
+		"yggdrasil": map[string]any{
+			"observability": map[string]any{
+				"logging": map[string]any{"remote_level": "debug"},
+			},
+		},
+		"test": map[string]any{
+			"nonreloadable": map[string]any{"value": "changed"},
+		},
+	}
+	require.NoError(t, manager.LoadLayer(
+		"nonreloadable",
+		config.PriorityOverride,
+		memory.NewSource("nonreloadable", override),
+	))
+	requireAssemblyErrorCode(
+		t,
+		app.Reload(context.Background()),
+		yassembly.ErrReloadRequiresRestart,
+	)
+
+	require.Same(t, previousSnapshot, app.currentRuntimeSnapshot())
+	require.Equal(t, "info", app.currentRuntimeSnapshot().Resolved.Logging.RemoteLevel)
+	require.Same(t, previousPlan, app.runtimePlan())
+	require.True(t, app.hub.ReloadState().RestartRequired)
+}
+
+func TestReloadRestoresCapabilityBindingsWhenHubCommitFails(t *testing.T) {
+	configData := minimalV3Config("grpc")
+	configData["test"] = map[string]any{
+		"failure": map[string]any{"value": "initial"},
+	}
+	mod := failingAfterFoundationModule{}
+	manager := newTestManager(t, configData)
+	app, err := New(
+		"binding-rollback",
+		WithConfigManager(manager),
+		WithModules(mod),
+		WithPlanOverrides(yassembly.EnableModule(mod.Name())),
+	)
+	require.NoError(t, err)
+	require.NoError(t, app.Prepare(context.Background()))
+	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+
+	app.mu.Lock()
+	app.state = lifecycleStateRunning
+	app.mu.Unlock()
+
+	override := minimalV3Config("http")
+	override["test"] = map[string]any{
+		"failure": map[string]any{"value": "next"},
+	}
+	require.NoError(t, manager.LoadLayer(
+		"binding-rollback",
+		config.PriorityOverride,
+		memory.NewSource("binding-rollback", override),
+	))
+	require.Error(t, app.Reload(context.Background()))
+
+	binding := findBindingDiag(t, app.hub.Diagnostics(), "transport.server.provider")
+	require.Equal(t, []string{"grpc"}, binding.Requested)
+	require.Equal(t, []string{"grpc"}, binding.Resolved)
 }
 
 func TestReloadUpdatesPlanHashesAndDiffDiagnostics(t *testing.T) {
@@ -831,4 +1179,9 @@ func TestReloadUpdatesPlanHashesAndDiffDiagnostics(t *testing.T) {
 	require.Contains(t, app.lastSpecDiff.AffectedDomains, "mode")
 	require.NotEqual(t, initialHash, app.lastPlanHash)
 	require.Equal(t, initialHash, app.lastStablePlanHash)
+	diag := app.assemblyDiagnostics()
+	require.Same(t, app.lastPlanResult.Spec, diag.Spec)
+	require.Equal(t, app.lastPlanResult.Hash, diag.CurrentSpecHash)
+	require.Same(t, app.assemblySpec, diag.LastStableSpec)
+	require.Equal(t, initialHash, diag.LastStableSpecHash)
 }

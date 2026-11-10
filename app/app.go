@@ -89,6 +89,10 @@ func withLifecycleRegistry(reg registry.Registry) lifecycleOption {
 	return internallifecycle.WithRegistry(reg)
 }
 
+func withLifecycleLogger(logger *slog.Logger) lifecycleOption {
+	return internallifecycle.WithLogger(logger)
+}
+
 func withLifecycleIdentity(identity internalidentity.Identity) lifecycleOption {
 	return internallifecycle.WithIdentity(identity)
 }
@@ -130,7 +134,9 @@ type App struct {
 	lifecycle *lifecycleRunner
 	hub       *module.Hub
 
-	reloadMu sync.Mutex
+	reloadMu   sync.Mutex
+	installMu  sync.Mutex
+	installing atomic.Bool
 
 	watchMu      sync.Mutex
 	stopWatch    func()
@@ -152,6 +158,7 @@ type App struct {
 	waitErr  error
 
 	runtimeMu                  sync.RWMutex
+	planMu                     sync.RWMutex
 	runtimeSnapshot            *Snapshot
 	foundationSnapshot         *Snapshot
 	preparedFoundationSnapshot *Snapshot
@@ -161,7 +168,9 @@ type App struct {
 	pendingRuntimeAdapters     *preparedRuntimeAdapters
 
 	runtime            Runtime
+	reloadCandidate    *yassembly.Result
 	lastPlanResult     *yassembly.Result
+	stablePlanResult   *yassembly.Result
 	lastSpecDiff       *yassembly.SpecDiff
 	lastPlanHash       string
 	lastStablePlanHash string
@@ -213,6 +222,7 @@ func (a *App) buildLifecycleOptions() []lifecycleOption {
 	}
 	out = append(
 		out,
+		withLifecycleLogger(a.runtimeLogger()),
 		withLifecycleCleanup("runtime_adapters", a.shutdownRuntimeAdapters),
 		withLifecycleCleanup("config_watch", func(context.Context) error {
 			a.stopConfigWatch()
@@ -325,19 +335,22 @@ func (a *App) stopResources(ctx context.Context) error {
 func (a *App) reloadAsync() {
 	go func() {
 		if err := a.Reload(context.Background()); err != nil {
-			slog.Error("auto reload failed", slog.Any("error", err))
+			a.runtimeLogger().Error("auto reload failed", slog.Any("error", err))
 		}
 	}()
 }
 
 // Start initializes and runs the application.
 func (a *App) Start(ctx context.Context) (err error) {
+	a.installMu.Lock()
 	a.mu.Lock()
 	if err = a.prepareStartLocked(ctx); err != nil {
 		a.mu.Unlock()
+		a.installMu.Unlock()
 		return err
 	}
 	a.mu.Unlock()
+	a.installMu.Unlock()
 
 	if err = a.lifecycle.Start(ctx); err != nil {
 		if a.stopping.Load() && errors.Is(err, context.Canceled) {
@@ -387,12 +400,14 @@ func (a *App) Wait() error {
 
 // Stop stops the application.
 func (a *App) Stop(ctx context.Context) error {
+	a.installMu.Lock()
 	a.mu.Lock()
 	a.stopping.Store(true)
 	if a.state != lifecycleStateNew {
 		a.state = lifecycleStateStopping
 	}
 	a.mu.Unlock()
+	a.installMu.Unlock()
 
 	err := errors.Join(a.beginStop(ctx), a.stopResources(ctx))
 	a.mu.Lock()
@@ -460,11 +475,14 @@ func (a *App) initializeLocked(ctx context.Context) (err error) {
 				nil,
 			)
 			a.recordAssemblyErrorLocked(assemblyStagePrepare, wrapped)
-			slog.Error("failed to cleanup prepare failure", slog.Any("error", wrapped))
+			a.runtimeLogger().Error(
+				"failed to cleanup prepare failure",
+				slog.Any("error", wrapped),
+			)
 			err = errors.Join(err, wrapped)
 		}
 	}()
-	if err = initConfigChain(a.opts); err != nil {
+	if err = initConfigChainWithLogger(a.opts, a.runtimeLogger()); err != nil {
 		err = wrapAssemblyStageError("prepare", err)
 		return err
 	}
@@ -478,6 +496,9 @@ func (a *App) initializeLocked(ctx context.Context) (err error) {
 		return err
 	}
 	a.lastPlanResult = planResult
+	a.planMu.Lock()
+	a.stablePlanResult = planResult
+	a.planMu.Unlock()
 	a.lastSpecDiff = nil
 	a.lastPlanHash = planResult.Hash
 	a.lastStablePlanHash = planResult.Hash
@@ -488,7 +509,7 @@ func (a *App) initializeLocked(ctx context.Context) (err error) {
 		return err
 	}
 	a.state = lifecycleStateInfraInitialized
-	if err = validateStartup(a.opts); err != nil {
+	if err = validateStartupWithLogger(a.opts, a.runtimeLogger()); err != nil {
 		err = wrapAssemblyStageError("prepare", err)
 		return err
 	}

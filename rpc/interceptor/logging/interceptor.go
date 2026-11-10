@@ -40,6 +40,16 @@ type Config struct {
 	PrintReqAndRes bool
 }
 
+// ProviderOption configures a built-in logging interceptor provider.
+type ProviderOption func(*logging)
+
+// WithProviderLogger binds the built-in providers to an explicit logger.
+func WithProviderLogger(logger *slog.Logger) ProviderOption {
+	return func(interceptor *logging) {
+		interceptor.logger = logger
+	}
+}
+
 func providerNames() []string {
 	return []string{typeLogging, typeLogger}
 }
@@ -71,6 +81,7 @@ func BuiltinUnaryClientProvidersWithConfig(
 // interceptor providers and reports invalid config.
 func BuiltinUnaryClientProvidersWithConfigE(
 	source any,
+	opts ...ProviderOption,
 ) ([]interceptor.UnaryClientInterceptorProvider, error) {
 	loggingCfg, err := loadConfig(source)
 	if err != nil {
@@ -79,7 +90,7 @@ func BuiltinUnaryClientProvidersWithConfigE(
 	names := providerNames()
 	out := make([]interceptor.UnaryClientInterceptorProvider, 0, len(names))
 	for _, name := range names {
-		l := &logging{cfg: loggingCfg}
+		l := newLogging(loggingCfg, opts...)
 		out = append(
 			out,
 			interceptor.NewUnaryClientInterceptorProvider(
@@ -120,6 +131,7 @@ func BuiltinStreamClientProvidersWithConfig(
 // interceptor providers and reports invalid config.
 func BuiltinStreamClientProvidersWithConfigE(
 	source any,
+	opts ...ProviderOption,
 ) ([]interceptor.StreamClientInterceptorProvider, error) {
 	loggingCfg, err := loadConfig(source)
 	if err != nil {
@@ -128,7 +140,7 @@ func BuiltinStreamClientProvidersWithConfigE(
 	names := providerNames()
 	out := make([]interceptor.StreamClientInterceptorProvider, 0, len(names))
 	for _, name := range names {
-		l := &logging{cfg: loggingCfg}
+		l := newLogging(loggingCfg, opts...)
 		out = append(
 			out,
 			interceptor.NewStreamClientInterceptorProvider(
@@ -169,6 +181,7 @@ func BuiltinUnaryServerProvidersWithConfig(
 // interceptor providers and reports invalid config.
 func BuiltinUnaryServerProvidersWithConfigE(
 	source any,
+	opts ...ProviderOption,
 ) ([]interceptor.UnaryServerInterceptorProvider, error) {
 	loggingCfg, err := loadConfig(source)
 	if err != nil {
@@ -177,7 +190,7 @@ func BuiltinUnaryServerProvidersWithConfigE(
 	names := providerNames()
 	out := make([]interceptor.UnaryServerInterceptorProvider, 0, len(names))
 	for _, name := range names {
-		l := &logging{cfg: loggingCfg}
+		l := newLogging(loggingCfg, opts...)
 		out = append(
 			out,
 			interceptor.NewUnaryServerInterceptorProvider(
@@ -218,6 +231,7 @@ func BuiltinStreamServerProvidersWithConfig(
 // interceptor providers and reports invalid config.
 func BuiltinStreamServerProvidersWithConfigE(
 	source any,
+	opts ...ProviderOption,
 ) ([]interceptor.StreamServerInterceptorProvider, error) {
 	loggingCfg, err := loadConfig(source)
 	if err != nil {
@@ -226,7 +240,7 @@ func BuiltinStreamServerProvidersWithConfigE(
 	names := providerNames()
 	out := make([]interceptor.StreamServerInterceptorProvider, 0, len(names))
 	for _, name := range names {
-		l := &logging{cfg: loggingCfg}
+		l := newLogging(loggingCfg, opts...)
 		out = append(
 			out,
 			interceptor.NewStreamServerInterceptorProvider(
@@ -249,7 +263,31 @@ func loadConfig(source any) (*Config, error) {
 }
 
 type logging struct {
-	cfg *Config
+	cfg    *Config
+	logger *slog.Logger
+}
+
+func newLogging(cfg *Config, opts ...ProviderOption) *logging {
+	out := &logging{cfg: cfg}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(out)
+		}
+	}
+	return out
+}
+
+func (l *logging) logAttrs(
+	ctx context.Context,
+	level slog.Level,
+	message string,
+	fields ...slog.Attr,
+) {
+	if l != nil && l.logger != nil {
+		l.logger.LogAttrs(ctx, level, message, fields...)
+		return
+	}
+	slog.LogAttrs(ctx, level, message, fields...)
 }
 
 // UnaryServerInterceptor is a unary server interceptor.
@@ -306,7 +344,7 @@ func (l *logging) UnaryServerInterceptor(
 			}
 			lv = slog.LevelInfo
 		}
-		slog.LogAttrs(ctx, lv, "access", fields...)
+		l.logAttrs(ctx, lv, "access", fields...)
 	}()
 	return handler(ctx, req)
 }
@@ -356,7 +394,7 @@ func (l *logging) StreamServerInterceptor(
 		} else {
 			lv = slog.LevelInfo
 		}
-		slog.LogAttrs(ss.Context(), lv, "access", fields...)
+		l.logAttrs(ss.Context(), lv, "access", fields...)
 	}()
 	return handler(srv, ss)
 }
@@ -420,7 +458,7 @@ func (l *logging) UnaryClientInterceptor(
 				lv = slog.LevelInfo
 			}
 		}
-		slog.LogAttrs(ctx, lv, "access", fields...)
+		l.logAttrs(ctx, lv, "access", fields...)
 	}()
 	err = invoker(ctx, method, req, reply)
 	return
@@ -472,7 +510,7 @@ func (l *logging) StreamClientInterceptor(
 		} else {
 			lv = slog.LevelInfo
 		}
-		slog.LogAttrs(ctx, lv, "access", fields...)
+		l.logAttrs(ctx, lv, "access", fields...)
 	}()
 	return streamer(ctx, desc, method)
 }

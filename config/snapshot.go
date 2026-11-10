@@ -85,6 +85,7 @@ func decodeInto(src, target any) error {
 		}
 		return nil
 	}
+	src = tree.NormalizeValue(src)
 
 	switch src.(type) {
 	case map[string]any, []any:

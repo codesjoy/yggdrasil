@@ -41,6 +41,13 @@ const (
 )
 
 func initConfigChain(opts *options) error {
+	return initConfigChainWithLogger(opts, bootstrapRuntimeLogger)
+}
+
+func initConfigChainWithLogger(opts *options, logger *slog.Logger) error {
+	if logger == nil {
+		logger = bootstrapRuntimeLogger
+	}
 	if opts.configManager == nil {
 		if opts.processDefaults {
 			opts.configManager = config.Default()
@@ -52,14 +59,14 @@ func initConfigChain(opts *options) error {
 	if err := loadBootstrapConfigSources(opts); err != nil {
 		return err
 	}
-	if err := loadConfigFileChain(opts); err != nil {
+	if err := loadConfigFileChainWithLogger(opts, logger); err != nil {
 		return err
 	}
 	if err := loadConfigSources(opts); err != nil {
 		return err
 	}
 	if !opts.configFileLoaded && len(opts.managedConfigSources) == 0 {
-		if err := loadDefaultConfigSources(opts); err != nil {
+		if err := loadDefaultConfigSources(opts, logger); err != nil {
 			return err
 		}
 	}
@@ -70,12 +77,12 @@ func initConfigChain(opts *options) error {
 	return nil
 }
 
-func loadConfigFileChain(opts *options) error {
+func loadConfigFileChainWithLogger(opts *options, logger *slog.Logger) error {
 	if opts.configFileLoaded {
 		return nil
 	}
 	path, explicit := internalbootstrap.ResolveConfigPath(opts.configPath)
-	loaded, err := loadConfigFile(opts, path, explicit)
+	loaded, err := loadConfigFileWithLogger(opts, path, explicit, logger)
 	if err != nil {
 		return err
 	}
@@ -85,13 +92,19 @@ func loadConfigFileChain(opts *options) error {
 	return nil
 }
 
-func loadConfigFile(opts *options, path string, explicit bool) (bool, error) {
+func loadConfigFileWithLogger(
+	opts *options,
+	path string,
+	explicit bool,
+	logger *slog.Logger,
+) (bool, error) {
 	registry := configSourceRegistry(opts)
-	sources, loaded, err := internalbootstrap.LoadConfigFile(
+	sources, loaded, err := internalbootstrap.LoadConfigFileWithLogger(
 		opts.configManager,
 		path,
 		explicit,
 		registry,
+		logger,
 	)
 	if err != nil {
 		return false, err
@@ -180,8 +193,8 @@ func loadConfigSources(opts *options) error {
 	return loadLayersAndTrack(opts, opts.configSources, "option")
 }
 
-func loadDefaultConfigSources(opts *options) error {
-	slog.Info(
+func loadDefaultConfigSources(opts *options, logger *slog.Logger) error {
+	logger.Info(
 		"loading default config sources",
 		slog.String("env_prefix", "YGGDRASIL"),
 	)
@@ -313,10 +326,7 @@ func closeManagedConfigManager(opts *options) error {
 }
 
 func refreshResolvedSettings(opts *options) error {
-	if opts == nil {
-		return errors.New("options is nil")
-	}
-	resolved, err := internalbootstrap.RefreshResolvedSettings(opts.configManager)
+	resolved, err := resolveResolvedSettings(opts)
 	if err != nil {
 		return err
 	}
@@ -324,7 +334,25 @@ func refreshResolvedSettings(opts *options) error {
 	return nil
 }
 
+func resolveResolvedSettings(opts *options) (settings.Resolved, error) {
+	if opts == nil {
+		return settings.Resolved{}, errors.New("options is nil")
+	}
+	resolved, err := internalbootstrap.RefreshResolvedSettings(opts.configManager)
+	if err != nil {
+		return settings.Resolved{}, err
+	}
+	return resolved, nil
+}
+
 func validateStartup(opts *options) error {
+	return validateStartupWithLogger(opts, bootstrapRuntimeLogger)
+}
+
+func validateStartupWithLogger(opts *options, logger *slog.Logger) error {
+	if logger == nil {
+		logger = bootstrapRuntimeLogger
+	}
 	resolved := settings.Resolved{}
 	var mgr *config.Manager
 	if opts != nil {
@@ -338,7 +366,7 @@ func validateStartup(opts *options) error {
 	if opts != nil {
 		opts.resolvedSettings = resolved
 	}
-	return internalbootstrap.ValidateStartupResolved(resolved)
+	return internalbootstrap.ValidateStartupResolvedWithLogger(resolved, logger)
 }
 
 func (a *App) resolveIdentityLocked() error {

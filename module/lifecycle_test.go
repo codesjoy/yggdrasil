@@ -211,6 +211,55 @@ func TestStop_MultipleStopErrors(t *testing.T) {
 	require.Contains(t, err.Error(), "stop-b")
 }
 
+func TestStop_ClearsSuccessfullyStartedModules(t *testing.T) {
+	stoppable := &testModule{name: "stoppable"}
+	passive := &nonReloadableModule{name: "passive"}
+	h := NewHub()
+	require.NoError(t, h.Use(stoppable, passive))
+	require.NoError(t, h.Seal())
+	require.NoError(t, h.Init(context.Background(), config.NewSnapshot(map[string]any{})))
+	require.NoError(t, h.Start(context.Background()))
+	require.Len(t, h.Diagnostics().StartedModules, 2)
+
+	require.NoError(t, h.Stop(context.Background()))
+	require.Empty(t, h.Diagnostics().StartedModules)
+	for _, item := range h.Modules() {
+		require.False(t, item.Started)
+	}
+}
+
+func TestStop_FailureKeepsStartedState(t *testing.T) {
+	stopErr := errors.New("stop failed")
+	module := &stopErrModule{name: "failing", err: stopErr}
+	h := NewHub()
+	require.NoError(t, h.Use(module))
+	require.NoError(t, h.Seal())
+	require.NoError(t, h.Init(context.Background(), config.NewSnapshot(map[string]any{})))
+	require.NoError(t, h.Start(context.Background()))
+
+	err := h.Stop(context.Background())
+	require.ErrorIs(t, err, stopErr)
+	require.Equal(t, []string{"failing"}, h.Diagnostics().StartedModules)
+}
+
+func TestStartCompensationClearsSuccessfullyStartedModules(t *testing.T) {
+	first := &testModule{name: "first"}
+	failing := &testModule{
+		name:     "failing",
+		deps:     []string{"first"},
+		startErr: errors.New("start failed"),
+	}
+	h := NewHub()
+	require.NoError(t, h.Use(first, failing))
+	require.NoError(t, h.Seal())
+	require.NoError(t, h.Init(context.Background(), config.NewSnapshot(map[string]any{})))
+
+	err := h.Start(context.Background())
+	require.Error(t, err)
+	require.Empty(t, h.Diagnostics().StartedModules)
+	require.Equal(t, int32(1), first.stopped.Load())
+}
+
 // ---------------------------------------------------------------------------
 // Reload no-op (no affected modules)
 // ---------------------------------------------------------------------------

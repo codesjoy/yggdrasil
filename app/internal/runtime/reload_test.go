@@ -340,4 +340,12 @@ func TestReloadRequiresRestart(t *testing.T) {
 		}
 		assert.True(t, ReloadRequiresRestart(diff, nil, nil, false))
 	})
+
+	t.Run("module reason changes do not require restart", func(t *testing.T) {
+		diff := &yassembly.SpecDiff{
+			HasChanges:      true,
+			AffectedDomains: []string{"module_reasons"},
+		}
+		assert.False(t, ReloadRequiresRestart(diff, nil, nil, false))
+	})
 }

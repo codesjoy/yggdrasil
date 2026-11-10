@@ -19,6 +19,7 @@ import (
 	"flag"
 	"net/http"
 	"os"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -338,6 +339,15 @@ type testTransportModule struct {
 
 func (m testTransportModule) Name() string { return "test.transport.server" }
 
+func (m testTransportModule) AutoSpec() module.AutoSpec {
+	return module.AutoSpec{
+		Provides: []module.CapabilitySpec{transportServerProviderCapabilitySpec},
+		AutoRules: []module.AutoRule{
+			testTransportAutoRule{},
+		},
+	}
+}
+
 func (m testTransportModule) Capabilities() []module.Capability {
 	return []module.Capability{
 		{
@@ -351,6 +361,26 @@ func (m testTransportModule) Capabilities() []module.Capability {
 			),
 		},
 	}
+}
+
+type testTransportAutoRule struct{}
+
+func (testTransportAutoRule) Match(ctx module.AutoRuleContext) bool {
+	var server struct {
+		Transports []string `mapstructure:"transports"`
+	}
+	if err := ctx.Snapshot.Section("yggdrasil", "server").Decode(&server); err != nil {
+		return false
+	}
+	return slices.Contains(server.Transports, "test")
+}
+
+func (testTransportAutoRule) Describe() string {
+	return "test transport configured"
+}
+
+func (testTransportAutoRule) AffectedPaths() []string {
+	return []string{"yggdrasil.server.transports"}
 }
 
 func assemblyTestConfig(enableREST bool) map[string]any {

@@ -93,6 +93,20 @@ func TestConfig_SetDefault_LoopbackWithoutAuth(t *testing.T) {
 	}
 }
 
+func TestConfig_AddressSupportsIPv6(t *testing.T) {
+	testCases := map[string]string{
+		"127.0.0.1": "127.0.0.1:8080",
+		"::1":       "[::1]:8080",
+		"[::1]":     "[::1]:8080",
+	}
+	for bind, expected := range testCases {
+		t.Run(bind, func(t *testing.T) {
+			cfg := Config{Bind: bind, Port: 8080}
+			assert.Equal(t, expected, cfg.Address())
+		})
+	}
+}
+
 func TestConfig_SetDefault_DeprecatedHostWarns(t *testing.T) {
 	t.Run("host used as bind", func(t *testing.T) {
 		logOutput := captureWarnLogs(t)
@@ -149,6 +163,20 @@ func TestNewServerDoesNotListenUntilServe(t *testing.T) {
 	probe, err := net.Listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 	require.NoError(t, err)
 	_ = probe.Close()
+}
+
+func TestServerServesOnIPv6Loopback(t *testing.T) {
+	probe, err := net.Listen("tcp6", "[::1]:0")
+	if err != nil {
+		t.Skipf("IPv6 loopback is unavailable: %v", err)
+	}
+	require.NoError(t, probe.Close())
+
+	server := startGovernor(t, Config{Bind: "::1", Port: 0}, config.NewManager())
+	response, err := http.Get("http://" + server.Info().Address + "/routes")
+	require.NoError(t, err)
+	defer func() { _ = response.Body.Close() }()
+	require.Equal(t, http.StatusOK, response.StatusCode)
 }
 
 func TestNewServerUsesDefaultManager(t *testing.T) {
@@ -271,12 +299,15 @@ func TestConfigGetRedactsSensitiveValues(t *testing.T) {
 		"test",
 		config.PriorityOverride,
 		memory.NewSource("test", map[string]any{ //nolint:gosec // synthetic redaction fixture
-			"auth": map[string]any{
+			"auth": map[string]any{ //nolint:gosec // synthetic redaction fixture
 				"token":            "token-value",
 				"password":         "password-value",
 				"privateKey":       "private-key-value",
 				"connectionString": "connection-string-value",
 				"passwordHash":     "hash-value",
+				"TOKEN":            "upper-token-value",
+				"PRIVATE_KEY":      "upper-private-key-value",
+				"APIKey":           "mixed-api-key-value",
 			},
 			"database": map[string]any{ //nolint:gosec // synthetic redaction fixture
 				"dsn":       "postgres://user:password@example.com/db",
@@ -302,6 +333,9 @@ func TestConfigGetRedactsSensitiveValues(t *testing.T) {
 	assert.Equal(t, redactedValue, payload["auth"].(map[string]any)["privateKey"])
 	assert.Equal(t, redactedValue, payload["auth"].(map[string]any)["connectionString"])
 	assert.Equal(t, redactedValue, payload["auth"].(map[string]any)["passwordHash"])
+	assert.Equal(t, redactedValue, payload["auth"].(map[string]any)["TOKEN"])
+	assert.Equal(t, redactedValue, payload["auth"].(map[string]any)["PRIVATE_KEY"])
+	assert.Equal(t, redactedValue, payload["auth"].(map[string]any)["APIKey"])
 	assert.Equal(t, redactedValue, payload["database"].(map[string]any)["dsn"])
 	assert.Equal(t, "keep-me", payload["database"].(map[string]any)["secondary"])
 	assert.Equal(t, redactedValue, payload["custom"].(map[string]any)["value"])
@@ -313,6 +347,21 @@ func TestConfigGetRedactsSensitiveValues(t *testing.T) {
 	require.True(t, hasPassword)
 	assert.NotContains(t, payload["endpoint"], "password")
 	assert.Equal(t, "postgres://user:"+redactedValue+"@example.com/db", payload["malformed"])
+}
+
+func TestNormalizeSensitiveKeyHandlesAcronyms(t *testing.T) {
+	testCases := map[string]string{
+		"TOKEN":            "token",
+		"PRIVATE_KEY":      "private_key",
+		"APIKey":           "api_key",
+		"connectionString": "connection_string",
+		"Client--Secret":   "client_secret",
+	}
+	for input, expected := range testCases {
+		t.Run(input, func(t *testing.T) {
+			assert.Equal(t, expected, normalizeSensitiveKey(input))
+		})
+	}
 }
 
 func TestAuthToken(t *testing.T) {

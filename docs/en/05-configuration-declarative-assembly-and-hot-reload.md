@@ -266,6 +266,12 @@ The system should mark restart-required when:
 - staged reload enters degraded state;
 - the first reload implementation would need to re-run `Compose`.
 
+Restart-required is sticky until the process restarts. Diagnostics expose the
+latest desired plan as `spec` with `current_spec_hash`, and expose the applied
+plan separately as `last_stable_spec` with `last_stable_spec_hash`. The stable
+applied plan remains the next diff baseline. Repeated reloads, including
+reverting the configuration, continue to return `ErrReloadRequiresRestart`.
+
 ## 10. Configuration Example
 
 ```yaml
