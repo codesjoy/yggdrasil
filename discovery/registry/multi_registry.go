@@ -17,6 +17,10 @@ package registry
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"strings"
 
 	"github.com/codesjoy/yggdrasil/v3/config"
 )
@@ -37,7 +41,8 @@ func BuiltinProviderWithFactory(factory func(string, map[string]any) (Registry, 
 
 type multiRegistryConfig struct {
 	Registries []multiRegistryItem `mapstructure:"registries"`
-	FailFast   bool                `mapstructure:"failFast"`
+	FailFast   *bool               `mapstructure:"fail_fast"`
+	LegacyFast *bool               `mapstructure:"failFast"`
 }
 
 type multiRegistryItem struct {
@@ -53,26 +58,59 @@ type multiRegistry struct {
 func (m *multiRegistry) Type() string { return multiRegistryType }
 
 func (m *multiRegistry) Register(ctx context.Context, inst Instance) error {
-	var multiErr error
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	registered := make([]Registry, 0, len(m.registries))
 	for _, r := range m.registries {
 		if err := r.Register(ctx, inst); err != nil {
 			if m.failFast {
-				return err
+				rollbackErr := deregisterRegistries(
+					context.WithoutCancel(ctx),
+					registered,
+					inst,
+				)
+				if rollbackErr != nil {
+					return errors.Join(
+						fmt.Errorf("register child %q: %w", r.Type(), err),
+						fmt.Errorf("register rollback failed: %w", rollbackErr),
+					)
+				}
+				return fmt.Errorf("register child %q: %w", r.Type(), err)
 			}
-			multiErr = errors.Join(multiErr, err)
+			slog.Warn(
+				"best-effort registry child registration failed",
+				slog.String("type", r.Type()),
+				slog.Any("error", err),
+			)
+			continue
 		}
+		registered = append(registered, r)
 	}
-	return multiErr
+	return nil
 }
 
 func (m *multiRegistry) Deregister(ctx context.Context, inst Instance) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return deregisterRegistries(ctx, m.registries, inst)
+}
+
+func deregisterRegistries(
+	ctx context.Context,
+	registries []Registry,
+	inst Instance,
+) error {
 	var multiErr error
-	for _, r := range m.registries {
+	for index := len(registries) - 1; index >= 0; index-- {
+		r := registries[index]
 		if err := r.Deregister(ctx, inst); err != nil {
-			if m.failFast {
-				return err
-			}
-			multiErr = errors.Join(multiErr, err)
+			multiErr = errors.Join(multiErr, fmt.Errorf(
+				"deregister child %q: %w",
+				r.Type(),
+				err,
+			))
 		}
 	}
 	return multiErr
@@ -90,17 +128,40 @@ func newMultiRegistryWithFactory(
 	if err := config.NewSnapshot(cfgVal).Decode(&cfg); err != nil {
 		return nil, err
 	}
+	failFast := false
+	if cfg.LegacyFast != nil {
+		failFast = *cfg.LegacyFast
+	}
+	if cfg.FailFast != nil {
+		failFast = *cfg.FailFast
+	}
 
 	registries := make([]Registry, 0, len(cfg.Registries))
 	for _, item := range cfg.Registries {
+		item.Type = strings.TrimSpace(item.Type)
 		if item.Type == "" {
 			return nil, errors.New("multi_registry: empty child type")
 		}
 		r, err := factory(item.Type, item.Config)
 		if err != nil {
-			return nil, err
+			return nil, errors.Join(
+				fmt.Errorf("multi_registry child %q: %w", item.Type, err),
+				closeRegistries(registries),
+			)
 		}
 		registries = append(registries, r)
 	}
-	return &multiRegistry{failFast: cfg.FailFast, registries: registries}, nil
+	return &multiRegistry{failFast: failFast, registries: registries}, nil
+}
+
+func closeRegistries(registries []Registry) error {
+	var err error
+	for index := len(registries) - 1; index >= 0; index-- {
+		closer, ok := registries[index].(io.Closer)
+		if !ok {
+			continue
+		}
+		err = errors.Join(err, closer.Close())
+	}
+	return err
 }

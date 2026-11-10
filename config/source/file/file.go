@@ -127,9 +127,14 @@ func (f *file) Watch() (<-chan source.Data, error) {
 	f.watched = true
 	fw, err := fsnotify.NewWatcher()
 	if err != nil {
+		f.watched = false
 		return nil, err
 	}
-	_ = fw.Add(f.path)
+	if err = fw.Add(f.path); err != nil {
+		_ = fw.Close()
+		f.watched = false
+		return nil, err
+	}
 	f.fw = fw
 	change := make(chan source.Data, 1)
 	xgo.Go(func() {
@@ -146,24 +151,41 @@ func (f *file) Watch() (<-chan source.Data, error) {
 			if chg == nil {
 				return
 			}
-			change <- chg
+			select {
+			case change <- chg:
+			case <-f.exit:
+				return
+			}
 		}
 	})
 	return change, nil
 }
 
 func (f *file) watch() (source.Data, error) {
+	f.mu.Lock()
+	if f.stopped {
+		f.mu.Unlock()
+		return nil, errSourceClosed
+	}
+	fw := f.fw
+	f.mu.Unlock()
+	if fw == nil {
+		return nil, errSourceClosed
+	}
 	select {
 	case <-f.exit:
 		return nil, errSourceClosed
 	default:
 	}
 	select {
-	case event := <-f.fw.Events:
+	case event, ok := <-fw.Events:
+		if !ok {
+			return nil, errSourceClosed
+		}
 		if event.Op == fsnotify.Rename {
 			_, err := os.Stat(event.Name)
 			if err == nil || !errors.Is(err, os.ErrNotExist) {
-				if err = f.fw.Add(f.path); err != nil {
+				if err = fw.Add(f.path); err != nil {
 					return nil, err
 				}
 			}
@@ -184,7 +206,7 @@ func (f *file) watch() (source.Data, error) {
 					case <-t.C:
 						_, err := os.Stat(f.path)
 						if err == nil || !errors.Is(err, os.ErrNotExist) {
-							if err = f.fw.Add(f.path); err == nil {
+							if err = fw.Add(f.path); err == nil {
 								return
 							}
 						}
@@ -200,7 +222,10 @@ func (f *file) watch() (source.Data, error) {
 			return nil, err
 		}
 		return f.Read()
-	case err := <-f.fw.Errors:
+	case err, ok := <-fw.Errors:
+		if !ok {
+			return nil, errSourceClosed
+		}
 		return nil, err
 	case <-f.exit:
 		return nil, errSourceClosed
@@ -215,6 +240,11 @@ func (f *file) Close() error {
 	}
 	f.stopped = true
 	close(f.exit)
+	if f.fw != nil {
+		err := f.fw.Close()
+		f.fw = nil
+		return err
+	}
 	return nil
 }
 

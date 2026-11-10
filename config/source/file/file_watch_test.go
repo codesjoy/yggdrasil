@@ -43,6 +43,10 @@ func TestWatchGuardBranches(t *testing.T) {
 	_, err = watched.Watch()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "already enabled")
+
+	missing := NewSource(filepath.Join(t.TempDir(), "missing.yaml"), true).(*file)
+	_, err = missing.Watch()
+	require.Error(t, err)
 }
 
 func TestWatchMethodErrorExitAndEvent(t *testing.T) {

@@ -53,6 +53,47 @@ func TestNewMultiRegistry(t *testing.T) {
 	require.Equal(t, multiRegistryType, reg.Type())
 }
 
+func TestNewMultiRegistryFailFastPrecedence(t *testing.T) {
+	RegisterBuilder("child", func(cfg map[string]any) (Registry, error) {
+		return &testRegistry{kind: cfg["name"].(string)}, nil
+	})
+
+	tests := []struct {
+		name     string
+		config   map[string]any
+		failFast bool
+	}{
+		{
+			name: "legacy key",
+			config: map[string]any{
+				"failFast": true,
+				"registries": []any{
+					map[string]any{"type": "child", "config": map[string]any{"name": "a"}},
+				},
+			},
+			failFast: true,
+		},
+		{
+			name: "canonical key wins",
+			config: map[string]any{
+				"fail_fast": false,
+				"failFast":  true,
+				"registries": []any{
+					map[string]any{"type": "child", "config": map[string]any{"name": "a"}},
+				},
+			},
+			failFast: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reg, err := newMultiRegistry(tt.config)
+			require.NoError(t, err)
+			require.Equal(t, tt.failFast, reg.(*multiRegistry).failFast)
+		})
+	}
+}
+
 func RegisterBuilder(typeName string, constructor Builder) {
 	mu.Lock()
 	defer mu.Unlock()

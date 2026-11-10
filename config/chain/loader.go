@@ -65,19 +65,22 @@ func (l *Loader) LoadFile(
 
 	loaded := make([]source.Source, 0, 4)
 	configFileSource := filesource.NewSource(path, false)
+	fail := func(err error) error {
+		return errors.Join(err, closeSources(loaded))
+	}
 	if err := manager.LoadLayer(
 		"config:file:"+path,
 		config.PriorityFile,
 		configFileSource,
 	); err != nil {
-		return nil, false, err
+		return nil, false, errors.Join(err, configFileSource.Close())
 	}
 	loaded = append(loaded, configFileSource)
 	buildCtx := BuildContext{Snapshot: manager.Snapshot()}
 
 	specs := make([]SourceSpec, 0)
 	if err := manager.Section("yggdrasil", "config", "sources").Decode(&specs); err != nil {
-		return nil, false, err
+		return nil, false, fail(err)
 	}
 	for i, spec := range specs {
 		if spec.Enabled != nil && !*spec.Enabled {
@@ -85,16 +88,30 @@ func (l *Loader) LoadFile(
 		}
 		src, priority, err := l.registry.BuildWithContext(buildCtx, spec)
 		if err != nil {
-			return nil, false, fmt.Errorf("config source[%d]: %w", i, err)
+			return nil, false, fail(fmt.Errorf("config source[%d]: %w", i, err))
 		}
 		name := spec.Name
 		if name == "" {
 			name = fmt.Sprintf("config:%s:%d", strings.ToLower(spec.Kind), i)
 		}
 		if err := manager.LoadLayer(name, priority, src); err != nil {
-			return nil, false, fmt.Errorf("config source[%d]: %w", i, err)
+			return nil, false, errors.Join(
+				fmt.Errorf("config source[%d]: %w", i, err),
+				src.Close(),
+				fail(nil),
+			)
 		}
 		loaded = append(loaded, src)
 	}
 	return loaded, true, nil
+}
+
+func closeSources(sources []source.Source) error {
+	var err error
+	for index := len(sources) - 1; index >= 0; index-- {
+		if sources[index] != nil {
+			err = errors.Join(err, sources[index].Close())
+		}
+	}
+	return err
 }

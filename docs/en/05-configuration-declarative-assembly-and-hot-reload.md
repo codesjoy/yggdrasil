@@ -198,7 +198,8 @@ Config Watch
   -> Hub.Reload
   -> PrepareReload for affected modules
   -> Commit all prepared modules
-  -> publish new snapshot only when fully committed
+  -> ReloadFinalizer after every commit succeeds
+  -> publish stable snapshot after finalization
 ```
 
 ### 7.1 Prepare failure
@@ -210,9 +211,9 @@ Config Watch
 ### 7.2 Commit failure
 
 - stop later commits;
-- roll back prepared but uncommitted modules;
+- roll back the failing module and every previously committed module in reverse order;
 - mark diverged / restart-required;
-- do not promise automatic restoration of the old world.
+- restore the previous runtime adapter snapshot and close only unadopted adapters.
 
 ### 7.3 Rollback failure
 
@@ -241,6 +242,17 @@ type ReloadState struct {
 | `committing` | Committing new state |
 | `rollback` | Rolling back after failure |
 | `degraded` | Cannot automatically recover; restart required |
+
+Configuration watch uses one worker. The callback records the latest pending
+snapshot and never invokes reload directly. Pending changes received while the
+App is still `Serving` are applied when it enters `Running`. If another config
+change arrives while a reload is building its plan, the worker reads the
+manager's latest snapshot and keeps the newer generation pending.
+
+`Manager.WatchWithError` reports source decode failures without changing the
+last successful snapshot. The App converts those errors into reload
+diagnostics. An App-created manager is closed by the App; an injected manager
+remains caller-owned, while the App still closes sources and watchers it loaded.
 
 ## 9. Restart-Required Classification
 

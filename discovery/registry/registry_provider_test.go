@@ -152,14 +152,14 @@ func TestMultiRegistry_RegisterDeregister(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("join errors", func(t *testing.T) {
+	t.Run("best effort ignores child errors", func(t *testing.T) {
 		failReg := &errorRegistry{}
 		mr := &multiRegistry{
 			failFast:   false,
 			registries: []Registry{failReg, failReg},
 		}
 		err := mr.Register(context.Background(), nil)
-		assert.Error(t, err)
+		assert.NoError(t, err)
 	})
 }
 
@@ -168,3 +168,51 @@ type errorRegistry struct{}
 func (e *errorRegistry) Register(context.Context, Instance) error   { return assert.AnError }
 func (e *errorRegistry) Deregister(context.Context, Instance) error { return assert.AnError }
 func (e *errorRegistry) Type() string                               { return "error" }
+
+type trackingRegistry struct {
+	kind        string
+	registerErr error
+	register    int
+	deregister  int
+}
+
+func (r *trackingRegistry) Register(context.Context, Instance) error {
+	r.register++
+	return r.registerErr
+}
+
+func (r *trackingRegistry) Deregister(context.Context, Instance) error {
+	r.deregister++
+	return nil
+}
+
+func (r *trackingRegistry) Type() string { return r.kind }
+
+func TestMultiRegistryFailFastRollsBackSuccessfulChildren(t *testing.T) {
+	first := &trackingRegistry{kind: "first"}
+	second := &trackingRegistry{kind: "second", registerErr: assert.AnError}
+	third := &trackingRegistry{kind: "third"}
+	mr := &multiRegistry{
+		failFast:   true,
+		registries: []Registry{first, second, third},
+	}
+
+	err := mr.Register(context.Background(), nil)
+	require.ErrorIs(t, err, assert.AnError)
+	require.Equal(t, 1, first.register)
+	require.Equal(t, 1, first.deregister)
+	require.Equal(t, 1, second.register)
+	require.Zero(t, third.register)
+}
+
+func TestMultiRegistryDeregistersEveryChild(t *testing.T) {
+	first := &trackingRegistry{kind: "first"}
+	second := &trackingRegistry{kind: "second"}
+	mr := &multiRegistry{
+		failFast:   true,
+		registries: []Registry{first, second},
+	}
+	require.NoError(t, mr.Deregister(context.Background(), nil))
+	require.Equal(t, 1, first.deregister)
+	require.Equal(t, 1, second.deregister)
+}
