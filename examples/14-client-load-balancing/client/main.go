@@ -180,13 +180,12 @@ func testStreamLoadBalancing(
 		slog.Info("Received message", "message", resp.Message)
 	}
 
-	if trailer, ok := metadata.FromTrailerCtx(ctx); ok {
-		if instanceIDs, ok := trailer["server"]; ok && len(instanceIDs) > 0 {
-			instanceID := instanceIDs[0]
-			stats.RecordRequest(instanceID)
-			stats.RecordResponse(instanceID)
-			slog.Info("stream served by instance", "instance", instanceID)
-		}
+	trailer := stream.Trailer()
+	if instanceIDs, ok := trailer["server"]; ok && len(instanceIDs) > 0 {
+		instanceID := instanceIDs[0]
+		stats.RecordRequest(instanceID)
+		stats.RecordResponse(instanceID)
+		slog.Info("stream served by instance", "instance", instanceID)
 	}
 	return <-errChan
 }

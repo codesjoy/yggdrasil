@@ -44,6 +44,7 @@ func TestClientConfig_SetDefault(t *testing.T) {
 	cfg := &ClientConfig{}
 	cfg.setDefault("test-service")
 
+	assert.Equal(t, "tcp", cfg.Network)
 	assert.Equal(t, math.MaxInt32, cfg.MaxSendMsgSize)
 	assert.Equal(t, 4*1024*1024, cfg.MaxRecvMsgSize)
 	assert.Equal(t, 32*1024, cfg.Transport.WriteBufferSize)

@@ -37,6 +37,7 @@ go run .
 - `client/config.yaml` configures three endpoints under one service target. This is the key client runtime behavior demonstrated by the example.
 - `server/config.yaml` describes the base server shape; `server/main.go` passes the dynamic server app name directly to `yggdrasil.Run` and uses the `--port` config override to set the actual gRPC listen address.
 - `client/main.go` uses standalone `app.New(appName, ...)->NewClient(...)` bootstrap and observes the selected backend through the `server` trailer field.
+- Unary calls capture the trailer through `metadata.WithStreamContext`; the bidirectional stream reads `Trailer()` after receiving `io.EOF`.
 
 ## Key source entry points
 

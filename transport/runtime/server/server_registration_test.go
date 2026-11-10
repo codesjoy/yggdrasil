@@ -16,6 +16,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 
@@ -24,6 +25,7 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
 	"github.com/codesjoy/yggdrasil/v3/rpc/stream"
+	remote "github.com/codesjoy/yggdrasil/v3/transport"
 )
 
 func TestRegisterServiceInfo(t *testing.T) {
@@ -107,6 +109,49 @@ func TestRegisterAddsServiceAndRejectsDuplicates(t *testing.T) {
 	s.register(desc, impl)
 	require.Error(t, s.registerErr)
 	require.Contains(t, s.registerErr.Error(), "duplicate service registration")
+}
+
+type serviceInfoRecordingServer struct {
+	testRemoteServer
+	names []string
+	err   error
+}
+
+func (s *serviceInfoRecordingServer) RegisterServiceInfo(name string) error {
+	if s.err != nil {
+		return s.err
+	}
+	s.names = append(s.names, name)
+	return nil
+}
+
+func TestRegisterPropagatesServiceInfo(t *testing.T) {
+	s := newTestServer()
+	recorder := &serviceInfoRecordingServer{}
+	s.servers = []remote.Server{recorder}
+
+	desc := &ServiceDesc{
+		ServiceName: "test.service",
+		HandlerType: (*TestService)(nil),
+	}
+	s.RegisterService(desc, &TestServiceImpl{})
+
+	require.NoError(t, s.registerErr)
+	assert.Equal(t, []string{"test.service"}, recorder.names)
+}
+
+func TestRegisterServiceInfoFailureFailsServe(t *testing.T) {
+	s := newTestServer()
+	recorder := &serviceInfoRecordingServer{err: errors.New("service info rejected")}
+	s.servers = []remote.Server{recorder}
+
+	s.RegisterService(&ServiceDesc{
+		ServiceName: "test.service",
+		HandlerType: (*TestService)(nil),
+	}, &TestServiceImpl{})
+
+	require.Error(t, s.registerErr)
+	assert.Contains(t, s.registerErr.Error(), "service info rejected")
 }
 
 func TestRegisterRestAndRawHandlers(t *testing.T) {

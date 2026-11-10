@@ -26,6 +26,7 @@ go run .
 
 - 服务端默认走 root `yggdrasil.Run(ctx, appName, ...)`；metadata 行为的正式安装边界仍然是 `server/business/compose.go`。
 - 客户端使用独立 `app.New(appName, ...)->NewClient(...)` bootstrap，然后在每次调用里显式读写 metadata context。
+- unary 调用在发起请求前创建 `metadata.WithStreamContext`；streaming 调用在终止接收后通过生成代码的 `Header()` 与 `Trailer()` 读取响应 metadata。
 - 这个例子最适合和 [11-rpc-streaming](../11-rpc-streaming/README_zh_CN.md) 对照着看：两者共用同一套流式装配模型，只是关注点不同。
 
 ## 关键源码入口

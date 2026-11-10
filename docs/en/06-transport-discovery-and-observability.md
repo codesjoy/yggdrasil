@@ -65,6 +65,102 @@ type Client interface {
 
 Connection state: `Idle -> Connecting -> Ready -> TransientFailure -> Shutdown`.
 
+### 2.3 gRPC Wire Compatibility
+
+The built-in `grpc` transport uses grpc-go for HTTP/2 and the gRPC wire
+protocol. Compatibility means that a standard grpc-go client can call a
+Yggdrasil RPC service, and a Yggdrasil client can call a standard grpc-go
+server. It does not mean that grpc-go generated clients, `ServiceDesc` values,
+`CallOption` values, or interceptors can be substituted for Yggdrasil APIs.
+
+| Behavior | grpc-go client to Yggdrasil server | Yggdrasil client to grpc-go server |
+| --- | --- | --- |
+| Unary, client-streaming, server-streaming, bidi | Supported | Supported |
+| Protobuf payload and gzip compression | Supported | Supported |
+| Ordinary, multi-value, and `-bin` metadata | Supported | Supported |
+| Response header and trailer | Supported | Supported |
+| gRPC status code, message, and `ErrorInfo` details | Supported | Supported |
+| Trailers-only errors | Supported | Supported |
+| TLS and mTLS | Supported | Supported |
+| Deadline, cancellation, and peer information | Supported | Supported |
+| Standard health and reflection services | Supported by the Yggdrasil server | Not promised |
+
+Authority, user-agent, reserved gRPC headers, and binary metadata are left to
+grpc-go. Yggdrasil only converts metadata values without changing their
+cardinality or bytes. `raw` and `jsonraw` remain Yggdrasil-specific codecs and
+are not part of the cross-language compatibility promise.
+
+Health is enabled by default. Reflection is disabled by default and must be
+enabled explicitly:
+
+```yaml
+yggdrasil:
+  transports:
+    grpc:
+      server:
+        address: ":9090"
+        health_enabled: true
+        reflection_enabled: true
+```
+
+`health_enabled: false` disables the health service. A `nil` value means the
+default, `true`. Health starts as `NOT_SERVING`; once the server enters
+`Serve`, the overall service, registered Yggdrasil RPC services, health, and
+enabled reflection services report `SERVING`. Shutdown changes them back to
+`NOT_SERVING`. Health and reflection are transport settings and therefore
+require a restart when changed.
+
+When health or reflection is enabled, `code_proto` must be `proto`. A forced
+non-proto server codec would make standard health and reflection requests
+undecodable, so startup fails with a configuration error. Disable both
+standard services before selecting a custom server codec.
+
+With reflection enabled, standard tools can discover and probe the server:
+
+```sh
+grpcurl -plaintext localhost:9090 list
+grpcurl -plaintext localhost:9090 describe grpc.testing.TestService
+grpcurl -plaintext -d '{"service":""}' localhost:9090 grpc.health.v1.Health/Check
+grpcurl -plaintext -d '{"service":""}' localhost:9090 grpc.health.v1.Health/Watch
+grpc_health_probe -addr=localhost:9090
+```
+
+For a Yggdrasil unary call, create the response metadata capture context before
+invoking the client:
+
+```go
+ctx := metadata.WithStreamContext(
+    metadata.WithOutContext(context.Background(), metadata.Pairs("trace-id", "abc")),
+)
+resp, err := client.SayHello(ctx, request)
+
+header, _ := metadata.FromHeaderCtx(ctx)
+trailer, _ := metadata.FromTrailerCtx(ctx)
+```
+
+For Yggdrasil streaming calls, use the generated stream methods. `Header`
+returns the response header, and `Trailer` is read after the terminal `Recv`
+or `CloseAndRecv`:
+
+```go
+stream, err := client.SayHelloServerStream(ctx, request)
+header, err := stream.Header()
+for {
+    resp, err := stream.Recv()
+    if err == io.EOF {
+        break
+    }
+    // handle resp
+}
+trailer := stream.Trailer()
+```
+
+Yggdrasil does not expose grpc-go's native resolver, balancer, xDS, service
+config retry/hedging, call-credential, or source-level interceptor APIs. Use
+Yggdrasil's resolver, balancer, security profile, and interceptor configuration
+instead. Health-aware client-side balancing is likewise not part of this
+compatibility contract.
+
 ## 3. REST Gateway and Raw HTTP
 
 Business code may register:

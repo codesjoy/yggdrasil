@@ -342,6 +342,32 @@ func TestCompile_AppliesDefaultsAndMergesOverrides(t *testing.T) {
 	require.Equal(t, "insecure", root.Yggdrasil.Transports.Security.Profiles["base-creds"].Type)
 }
 
+func TestCompileGRPCStandardServiceSettings(t *testing.T) {
+	root := decodeRoot(t, map[string]any{
+		"yggdrasil": map[string]any{
+			"server": map[string]any{
+				"transports": []any{"grpc"},
+			},
+			"transports": map[string]any{
+				"grpc": map[string]any{
+					"server": map[string]any{
+						"health_enabled":     false,
+						"reflection_enabled": true,
+					},
+				},
+			},
+		},
+	})
+
+	resolved, err := Compile(root)
+	require.NoError(t, err)
+
+	serverConfig := resolved.Transports.GRPC.Server
+	require.NotNil(t, serverConfig.HealthEnabled)
+	require.False(t, *serverConfig.HealthEnabled)
+	require.True(t, serverConfig.ReflectionEnabled)
+}
+
 func TestCompile_InitializesNilMaps(t *testing.T) {
 	resolved, err := Compile(Root{})
 	require.NoError(t, err)

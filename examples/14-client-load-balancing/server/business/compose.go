@@ -78,9 +78,11 @@ func (s *GreeterService) SayHello(
 func (s *GreeterService) SayHelloStream(
 	stream helloworldpb.GreeterServiceSayHelloStreamServer,
 ) error {
+	_ = metadata.SetHeader(stream.Context(), metadata.Pairs("server", s.instanceID))
 	for {
 		req, err := stream.Recv()
 		if err == io.EOF {
+			_ = metadata.SetTrailer(stream.Context(), metadata.Pairs("server", s.instanceID))
 			return nil
 		}
 		if err != nil {

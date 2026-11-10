@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/codesjoy/yggdrasil/v3/rpc/stream"
+	remote "github.com/codesjoy/yggdrasil/v3/transport"
 )
 
 // RegisterService registers a service and its implementation to the gRPC
@@ -84,6 +85,22 @@ func (s *server) register(sd *ServiceDesc, ss interface{}) {
 	}
 	s.servicesDesc[sd.ServiceName] = buildMethodInfoSet(sd)
 	s.services[sd.ServiceName] = newServiceInfo(sd, ss)
+	for _, svr := range s.servers {
+		registrar, ok := svr.(remote.ServiceInfoRegistrar)
+		if !ok {
+			continue
+		}
+		if err := registrar.RegisterServiceInfo(sd.ServiceName); err != nil {
+			err = fmt.Errorf(
+				"server register service %q info for protocol %s: %w",
+				sd.ServiceName,
+				svr.Info().Protocol,
+				err,
+			)
+			slog.Error("fault to register service info", slog.Any("error", err))
+			s.appendRegisterErrorLocked(err)
+		}
+	}
 }
 
 func (s *server) registerServiceInfo(sd *ServiceDesc, ss interface{}) {

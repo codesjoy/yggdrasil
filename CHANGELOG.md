@@ -4,6 +4,8 @@
 - **app:** synchronize startup and stop, add transactional business installation
 - **config:** add `WatchWithError` and single-worker hot reload application
 - **governor:** add configurable redaction paths and safe loopback default
+- **transport:** add bidirectional grpc-go wire interoperability across unary and streaming RPCs
+- **transport:** add standard gRPC health and optional reflection services
 - **transport:** separate bind and advertised addresses
 - **module:** add staged reload finalization and full reverse rollback
 - **transport:** add explicit trusted proxy CIDRs for REST peer metadata
@@ -20,6 +22,8 @@
 - **security:** harden governor IPv6 binds, forwarding-header trust, and key redaction
 
 ### Behavior Changes
+- gRPC health is enabled by default. Reflection remains disabled unless
+  `reflection_enabled` is set, and both services require the `proto` codec.
 - Governor binds to `127.0.0.1` by default. Non-loopback or wildcard binds now
   require token or basic authentication.
 - Capabilities without an explicit `Type` now fail `Hub.Seal`.

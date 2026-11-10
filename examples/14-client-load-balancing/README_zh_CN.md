@@ -37,6 +37,7 @@ go run .
 - [client/config.yaml](client/config.yaml) 在一个 service target 下配置了三个 endpoint，这是这个例子真正要证明的 client runtime 行为。
 - [server/config.yaml](server/config.yaml) 只描述基础 server 形态；`server/main.go` 把动态 server app name 直接传给 `yggdrasil.Run`，再通过 `--port` 驱动的 config override 覆盖实际 grpc listen address。
 - `client/main.go` 使用独立 `app.New(appName, ...)->NewClient(...)` bootstrap，并通过 trailer 中的 `server` 字段观察请求最终落到哪个后端实例。
+- unary 调用通过 `metadata.WithStreamContext` 捕获 trailer；双向流在收到 `io.EOF` 后通过 `Trailer()` 读取。
 
 ## 关键源码入口
 

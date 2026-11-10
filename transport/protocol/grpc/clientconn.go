@@ -118,6 +118,9 @@ type ClientConfig struct {
 }
 
 func (cfg *ClientConfig) setDefault(serviceName string) {
+	if cfg.Network == "" {
+		cfg.Network = "tcp"
+	}
 	if cfg.MaxSendMsgSize == 0 {
 		cfg.MaxSendMsgSize = defaultClientMaxSendMessageSize
 	}

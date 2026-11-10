@@ -26,6 +26,7 @@ go run .
 
 - The server defaults to root `yggdrasil.Run(ctx, appName, ...)`; metadata behavior is installed through `server/business/compose.go`.
 - The client uses standalone `app.New(appName, ...)->NewClient(...)` bootstrap, then explicitly reads and writes metadata context in calls.
+- Unary calls create `metadata.WithStreamContext` before invoking the client. Streaming calls read the generated `Header()` and `Trailer()` methods after the terminal receive.
 - This example is best read alongside [11 RPC Streaming](../11-rpc-streaming/README.md).
 
 ## Key source entry points

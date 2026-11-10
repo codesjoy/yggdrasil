@@ -21,10 +21,12 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/codesjoy/pkg/utils/xsync"
 	"github.com/stretchr/testify/require"
 
 	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	"github.com/codesjoy/yggdrasil/v3/rpc/stream"
+	remote "github.com/codesjoy/yggdrasil/v3/transport"
 )
 
 func TestClientStreamReportAndRecvPaths(t *testing.T) {
@@ -104,4 +106,47 @@ func TestClientStreamReportAndRecvPaths(t *testing.T) {
 		require.Equal(t, int32(1), atomic.LoadInt32(&calls))
 		require.ErrorIs(t, gotErr, want)
 	})
+}
+
+func TestClientInvokeCapturesResponseMetadata(t *testing.T) {
+	ctx := metadata.WithStreamContext(metadata.WithOutContext(
+		context.Background(),
+		metadata.Pairs("x-request", "value"),
+	))
+	remoteClient := newMockRemoteClient("metadata", remote.Ready)
+	remoteClient.newStreamFunc = func(
+		ctx context.Context,
+		_ *stream.Desc,
+		_ string,
+	) (stream.ClientStream, error) {
+		st := newMockClientStream(ctx)
+		st.header = metadata.Pairs("x-header", "value")
+		st.trailer = metadata.Pairs("x-trailer", "done")
+		return st, nil
+	}
+	picker := newMockPicker()
+	picker.AddResult(newMockPickResult(remoteClient), nil)
+
+	cli := &client{
+		ctx:           context.Background(),
+		fastFail:      true,
+		resolvedEvent: xsync.NewEvent(),
+		pickerSnap:    atomic.Pointer[pickerSnap]{},
+	}
+	cli.resolvedEvent.Fire()
+	cli.pickerSnap.Store(&pickerSnap{picker: nil, blockingCh: make(chan struct{})})
+	cli.updatePicker(picker)
+
+	require.NoError(t, cli.Invoke(
+		ctx,
+		"/test.Service/Method",
+		"request",
+		new(string),
+	))
+	header, ok := metadata.FromHeaderCtx(ctx)
+	require.True(t, ok)
+	require.Equal(t, []string{"value"}, header.Get("x-header"))
+	trailer, ok := metadata.FromTrailerCtx(ctx)
+	require.True(t, ok)
+	require.Equal(t, []string{"done"}, trailer.Get("x-trailer"))
 }

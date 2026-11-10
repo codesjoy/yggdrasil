@@ -17,20 +17,25 @@ package grpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"net"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	ggrpc "google.golang.org/grpc"
 	gcredentials "google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/health"
 	gkeepalive "google.golang.org/grpc/keepalive"
 
 	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	remote "github.com/codesjoy/yggdrasil/v3/transport"
 	"github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc/encoding"
+	"github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc/encoding/proto"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/listenaddr"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
 )
@@ -66,6 +71,7 @@ func ServerProviderWithSettings(
 			}
 			s.ctx, s.cancel = context.WithCancel(context.Background())
 			s.grpcServer = ggrpc.NewServer(s.serverOptions()...)
+			s.registerStandardServices()
 			return s, nil
 		},
 	)
@@ -95,6 +101,8 @@ type ServerConfig struct {
 	ConnectionTimeout     time.Duration                `mapstructure:"connection_timeout"`
 	MaxHeaderListSize     *uint32                      `mapstructure:"max_header_list_size"`
 	HeaderTableSize       *uint32                      `mapstructure:"header_table_size"`
+	HealthEnabled         *bool                        `mapstructure:"health_enabled"`
+	ReflectionEnabled     bool                         `mapstructure:"reflection_enabled"`
 
 	Attr map[string]string `mapstructure:"attr"`
 
@@ -154,7 +162,20 @@ func (opts *ServerConfig) SetDefaultWithProfiles(profiles map[string]security.Pr
 			return errors.New("grpc: configured codec is not registered")
 		}
 	}
+	if (opts.healthEnabled() || opts.ReflectionEnabled) &&
+		opts.CodeProto != "" &&
+		!strings.EqualFold(opts.CodeProto, proto.Name) {
+		return fmt.Errorf(
+			"grpc: health and reflection require the proto codec; "+
+				"disable health_enabled and reflection_enabled when code_proto is %q",
+			opts.CodeProto,
+		)
+	}
 	return nil
+}
+
+func (opts ServerConfig) healthEnabled() bool {
+	return opts.HealthEnabled == nil || *opts.HealthEnabled
 }
 
 type server struct {
@@ -172,6 +193,10 @@ type server struct {
 	handle       remote.MethodHandle
 	statsHandler stats.Handler
 	grpcServer   *ggrpc.Server
+	health       *health.Server
+	serviceInfo  *dynamicServiceInfo
+	reserved     map[string]struct{}
+	serving      atomic.Bool
 }
 
 func (s *server) serverOptions() []ggrpc.ServerOption {
@@ -275,6 +300,10 @@ func (s *server) Stop(ctx context.Context) error {
 	stoppedCh := s.stoppedCh
 	s.mu.Unlock()
 
+	if s.health != nil {
+		s.health.Shutdown()
+	}
+
 	done := make(chan struct{})
 	go func() {
 		s.grpcServer.GracefulStop()
@@ -348,7 +377,13 @@ func (s *server) Start() error {
 }
 
 func (s *server) Handle() error {
+	s.serving.Store(true)
+	s.setHealthServing()
 	err := s.grpcServer.Serve(s.lis)
+	s.serving.Store(false)
+	if s.health != nil {
+		s.health.Shutdown()
+	}
 	if errors.Is(err, ggrpc.ErrServerStopped) {
 		return nil
 	}
@@ -377,7 +412,11 @@ func (ss *serverStream) SendHeader(md metadata.MD) error {
 	if err := ss.applyPendingHeader(); err != nil {
 		return err
 	}
-	return toRPCErr(ss.stream.SendHeader(toGRPCMetadata(md)))
+	if err := ss.stream.SendHeader(toGRPCMetadata(md)); err != nil {
+		return toRPCErr(err)
+	}
+	ss.headerApplied = true
+	return nil
 }
 
 func (ss *serverStream) SetTrailer(md metadata.MD) {
@@ -385,13 +424,18 @@ func (ss *serverStream) SetTrailer(md metadata.MD) {
 		return
 	}
 	ss.stream.SetTrailer(toGRPCMetadata(md))
+	ss.trailerApplied = true
 }
 
 func (ss *serverStream) SetHeader(md metadata.MD) error {
 	if md.Len() == 0 {
 		return nil
 	}
-	return toRPCErr(ss.stream.SetHeader(toGRPCMetadata(md)))
+	if err := ss.stream.SetHeader(toGRPCMetadata(md)); err != nil {
+		return toRPCErr(err)
+	}
+	ss.headerApplied = true
+	return nil
 }
 
 func (ss *serverStream) SendMsg(m interface{}) error {
@@ -443,7 +487,6 @@ func (ss *serverStream) applyPendingHeader() error {
 	if !ok || md.Len() == 0 {
 		return nil
 	}
-	ss.headerApplied = true
 	return ss.SetHeader(md)
 }
 
@@ -455,7 +498,6 @@ func (ss *serverStream) applyPendingTrailer() error {
 	if !ok || md.Len() == 0 {
 		return nil
 	}
-	ss.trailerApplied = true
 	ss.SetTrailer(md)
 	return nil
 }

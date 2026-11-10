@@ -111,6 +111,13 @@ func TestResolvedRequiresRestart(t *testing.T) {
 		next.Discovery.Registry.Type = "multi_registry"
 		assert.True(t, ResolvedRequiresRestart(current, next))
 	})
+
+	t.Run("different grpc standard service settings return true", func(t *testing.T) {
+		current := settings.Resolved{}
+		next := settings.Resolved{}
+		next.Transports.GRPC.Server.ReflectionEnabled = true
+		assert.True(t, ResolvedRequiresRestart(current, next))
+	})
 }
 
 func TestLoggingInterceptorSource(t *testing.T) {

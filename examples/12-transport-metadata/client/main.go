@@ -17,6 +17,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"time"
@@ -84,6 +85,7 @@ func testRequestMetadata(client helloworldpb.GreeterServiceClient) error {
 			"client-version", "1.0.0",
 		),
 	)
+	ctx = metadata.WithStreamContext(ctx)
 
 	resp, err := client.SayHello(ctx, &helloworldpb.SayHelloRequest{Name: "World"})
 	if err != nil {
@@ -107,6 +109,7 @@ func testResponseHeader(client helloworldpb.GreeterServiceClient) error {
 	ctx := metadata.WithOutContext(context.Background(),
 		metadata.Pairs("user-id", "67890", "trace-id", "trace-xyz-789"),
 	)
+	ctx = metadata.WithStreamContext(ctx)
 
 	resp, err := client.SayHello(ctx, &helloworldpb.SayHelloRequest{Name: "HeaderTest"})
 	if err != nil {
@@ -148,19 +151,19 @@ func testResponseTrailer(client helloworldpb.GreeterServiceClient) error {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	if err := stream.CloseSend(); err != nil {
+	resp, err := stream.CloseAndRecv()
+	if err != nil {
 		return err
 	}
+	slog.Info("SayHelloClientStream response", "message", resp.Message)
 
-	if trailer, ok := metadata.FromTrailerCtx(ctx); ok {
-		slog.Info("Response trailer", "trailer", trailer)
-
-		if processedCount, ok := trailer["processed-count"]; ok {
-			slog.Info("Processed count from trailer", "processed-count", processedCount)
-		}
-		if serverName, ok := trailer["server"]; ok {
-			slog.Info("Server name from trailer", "server", serverName)
-		}
+	trailer := stream.Trailer()
+	slog.Info("Response trailer", "trailer", trailer)
+	if processedCount, ok := trailer["processed-count"]; ok {
+		slog.Info("Processed count from trailer", "processed-count", processedCount)
+	}
+	if serverName, ok := trailer["server"]; ok {
+		slog.Info("Server name from trailer", "server", serverName)
 	}
 	return nil
 }
@@ -184,6 +187,9 @@ func testStreamMetadata(client helloworldpb.GreeterServiceClient) error {
 	if err != nil {
 		return err
 	}
+	if header, headerErr := stream.Header(); headerErr == nil {
+		slog.Info("Stream header", "header", header)
+	}
 
 	for i := 0; i < 3; i++ {
 		if err := stream.Send(&helloworldpb.SayHelloStreamRequest{
@@ -204,8 +210,13 @@ func testStreamMetadata(client helloworldpb.GreeterServiceClient) error {
 		return err
 	}
 
-	if trailer, ok := metadata.FromTrailerCtx(ctx); ok {
-		slog.Info("Stream trailer", "trailer", trailer)
+	for {
+		if _, err := stream.Recv(); err == io.EOF {
+			break
+		} else if err != nil {
+			return err
+		}
 	}
+	slog.Info("Stream trailer", "trailer", stream.Trailer())
 	return nil
 }

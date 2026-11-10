@@ -38,7 +38,7 @@ Yggdrasil is useful when service runtime correctness matters as much as develope
 | Auto assembly | mode resolution, module selection, default provider selection, chain template expansion |
 | Configuration | layered snapshots, priority merge, scoped views, watch-based reload |
 | Business composition | `Runtime`, `BusinessBundle`, RPC / REST / Raw HTTP, tasks, hooks |
-| Transport | protocol-agnostic server/client providers |
+| Transport | protocol-agnostic providers, grpc-go wire interoperability, health, reflection |
 | Discovery | registry, resolver, balancer abstractions |
 | Observability | logger, tracer, meter, stats handler integration |
 | Diagnostics | explain, dry-run, spec diff, plan hash, module and reload state |
@@ -191,6 +191,20 @@ func Compose(rt yggdrasil.Runtime) (*yggdrasil.BusinessBundle, error) {
     }, nil
 }
 ```
+
+---
+
+## gRPC Interoperability
+
+The built-in `grpc` transport supports standard grpc-go clients calling
+Yggdrasil RPC services and Yggdrasil clients calling grpc-go servers. Unary and
+all three streaming shapes support Protobuf, gzip, metadata, binary metadata,
+headers, trailers, status details, deadlines, cancellation, peer information,
+TLS, and mTLS. Health is enabled by default; reflection is opt-in. This is wire
+and behavior compatibility, not a source-level replacement for grpc-go's
+resolver, balancer, xDS, retry/hedging, call-credential, or interceptor APIs.
+
+See [gRPC wire compatibility](docs/en/06-transport-discovery-and-observability.md#23-grpc-wire-compatibility).
 
 ---
 

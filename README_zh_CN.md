@@ -38,7 +38,7 @@ Yggdrasil 适合那些既需要框架内核严格可诊断，又希望业务开�
 | 自动装配 | mode 解析、模块选择、默认 provider 选择、链模板展开 |
 | 配置系统 | 分层快照、优先级合并、Scoped View、watch 热更新 |
 | 业务组合 | `Runtime`、`BusinessBundle`、RPC / REST / Raw HTTP、tasks、hooks |
-| 传输层 | 协议无关的 server/client provider |
+| 传输层 | 协议无关 provider、gRPC 线协议互通、health 与 reflection |
 | 服务发现 | registry、resolver、balancer 抽象 |
 | 可观测性 | logger、tracer、meter、stats handler 集成 |
 | 诊断能力 | explain、dry-run、spec diff、plan hash、模块与 reload 状态 |
@@ -191,6 +191,19 @@ func Compose(rt yggdrasil.Runtime) (*yggdrasil.BusinessBundle, error) {
     }, nil
 }
 ```
+
+---
+
+## gRPC 线协议互通
+
+内置 `grpc` transport 支持标准 grpc-go client 调用 Yggdrasil RPC service，也支持
+Yggdrasil client 调用 grpc-go server。Unary 以及三种 streaming 形态均支持
+Protobuf、gzip、metadata、二进制 metadata、header、trailer、status details、
+deadline、取消、peer、TLS 与 mTLS。health 默认开启，reflection 需要显式启用。
+这里承诺的是线协议与行为兼容，不提供 grpc-go 原生 resolver、balancer、xDS、
+retry/hedging、call credentials 或源码级 interceptor API 的直接替换。
+
+详见 [gRPC 线协议兼容](docs/zh_CN/06-传输服务发现与可观测性.md#23-grpc-线协议兼容)。
 
 ---
 

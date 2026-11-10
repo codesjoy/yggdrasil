@@ -136,6 +136,11 @@ tasks:
       - for: {var: MODULES}
         cmd: 'cd "{{.ITEM}}" && GOWORK=off "{{.GO}}" test -count=1 -race -timeout={{.TEST_TIMEOUT}} ./...'
 
+  compat:grpc:
+    desc: Verify gRPC interoperability with grpc-go v1.85.0 on Go 1.26
+    cmds:
+      - 'GOWORK=off GOTOOLCHAIN=auto GO="{{.GO}}" sh scripts/grpc-compat.sh'
+
   coverage:
     desc: 'Coverage gate over the non-example modules (COVERAGE=<percent>)'
     cmds:

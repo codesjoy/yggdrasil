@@ -58,6 +58,12 @@ type ServerInfo struct {
 // ServerBuilder is the interface that wraps the Build method.
 type ServerBuilder func(handle MethodHandle) (Server, error)
 
+// ServiceInfoRegistrar exposes service names to transports that publish
+// protocol-level service metadata.
+type ServiceInfoRegistrar interface {
+	RegisterServiceInfo(serviceName string) error
+}
+
 // TransportServerProvider provides server transport construction for one protocol.
 type TransportServerProvider interface { //nolint:revive // stutter is acceptable for clarity
 	Protocol() string

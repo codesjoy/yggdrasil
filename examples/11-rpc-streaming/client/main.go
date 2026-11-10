@@ -49,25 +49,24 @@ func run() error {
 	defer func() { _ = cli.Close() }()
 
 	client := helloworldpb.NewGreeterServiceClient(cli)
-	ctx := metadata.WithStreamContext(context.Background())
 
 	slog.Info("=== Testing Unary RPC ===")
-	if err := testUnaryRPC(ctx, client); err != nil {
+	if err := testUnaryRPC(context.Background(), client); err != nil {
 		slog.Error("unary rpc failed", slog.Any("error", err))
 	}
 
 	slog.Info("=== Testing Bidirectional Streaming ===")
-	if err := testBidirectionalStreaming(ctx, client); err != nil {
+	if err := testBidirectionalStreaming(context.Background(), client); err != nil {
 		slog.Error("bidirectional streaming failed", slog.Any("error", err))
 	}
 
 	slog.Info("=== Testing Client Streaming ===")
-	if err := testClientStreaming(ctx, client); err != nil {
+	if err := testClientStreaming(context.Background(), client); err != nil {
 		slog.Error("client streaming failed", slog.Any("error", err))
 	}
 
 	slog.Info("=== Testing Server Streaming ===")
-	if err := testServerStreaming(ctx, client); err != nil {
+	if err := testServerStreaming(context.Background(), client); err != nil {
 		slog.Error("server streaming failed", slog.Any("error", err))
 	}
 
@@ -78,6 +77,7 @@ func run() error {
 func testUnaryRPC(ctx context.Context, client helloworldpb.GreeterServiceClient) error {
 	slog.Info("Calling SayHello...")
 
+	ctx = metadata.WithStreamContext(ctx)
 	resp, err := client.SayHello(ctx, &helloworldpb.SayHelloRequest{Name: "World"})
 	if err != nil {
 		return err
@@ -135,6 +135,7 @@ func testBidirectionalStreaming(
 		slog.Info("Received message", "message", resp.Message)
 	}
 
+	slog.Info("Stream trailer", "trailer", stream.Trailer())
 	return <-errChan
 }
 
@@ -155,11 +156,13 @@ func testClientStreaming(ctx context.Context, client helloworldpb.GreeterService
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	if err := stream.CloseSend(); err != nil {
+	resp, err := stream.CloseAndRecv()
+	if err != nil {
 		return err
 	}
 
-	slog.Info("SayHelloClientStream completed successfully")
+	slog.Info("SayHelloClientStream completed successfully", "message", resp.Message)
+	slog.Info("Stream trailer", "trailer", stream.Trailer())
 	return nil
 }
 
@@ -184,5 +187,6 @@ func testServerStreaming(ctx context.Context, client helloworldpb.GreeterService
 
 		slog.Info("Received message", "message", resp.Message)
 	}
+	slog.Info("Stream trailer", "trailer", stream.Trailer())
 	return nil
 }
