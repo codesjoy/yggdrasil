@@ -46,6 +46,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/transport/support/listenaddr"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/peer"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
+	ytls "github.com/codesjoy/yggdrasil/v3/transport/support/security/tls"
 )
 
 func toGRPCMetadata(md ymetadata.MD) gmetadata.MD {
@@ -312,10 +313,46 @@ func fromGRPCPeer(p *gpeer.Peer, protocol string) *peer.Peer {
 	if tcp, ok := p.Addr.(*net.TCPAddr); ok {
 		out.RemoteIP = tcp.IP.String()
 	}
-	if auth, ok := p.AuthInfo.(grpcAuthInfo); ok {
-		out.AuthInfo = auth.base
-	}
+	out.AuthInfo = fromGRPCAuthInfo(p.AuthInfo)
 	return out
+}
+
+func fromGRPCAuthInfo(authInfo gcredentials.AuthInfo) security.AuthInfo {
+	switch auth := authInfo.(type) {
+	case grpcAuthInfo:
+		return auth.base
+	case gcredentials.TLSInfo:
+		return fromGRPCTLSInfo(auth)
+	case *gcredentials.TLSInfo:
+		if auth == nil {
+			return nil
+		}
+		return fromGRPCTLSInfo(*auth)
+	default:
+		return nil
+	}
+}
+
+func fromGRPCTLSInfo(info gcredentials.TLSInfo) ytls.AuthInfo {
+	return ytls.AuthInfo{
+		CommonAuthInfo: security.CommonAuthInfo{
+			SecurityLevel: fromGRPCSecurityLevel(info.SecurityLevel),
+		},
+		State: info.State,
+	}
+}
+
+func fromGRPCSecurityLevel(level gcredentials.SecurityLevel) security.SecurityLevel {
+	switch level {
+	case gcredentials.NoSecurity:
+		return security.NoSecurity
+	case gcredentials.IntegrityOnly:
+		return security.IntegrityOnly
+	case gcredentials.PrivacyAndIntegrity:
+		return security.PrivacyAndIntegrity
+	default:
+		return security.InvalidSecurityLevel
+	}
 }
 
 type statsHandlerBridge struct {

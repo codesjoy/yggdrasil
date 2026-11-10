@@ -17,9 +17,11 @@ package grpc
 import (
 	"context"
 	stdtls "crypto/tls"
+	"crypto/x509"
 	"errors"
 	"io"
 	"net"
+	"net/url"
 	"testing"
 	"time"
 
@@ -41,6 +43,7 @@ import (
 	stats2 "github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc/stats"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/peer"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
+	ytls "github.com/codesjoy/yggdrasil/v3/transport/support/security/tls"
 )
 
 func TestToGRPCMetadata(t *testing.T) {
@@ -775,6 +778,78 @@ func TestFromGRPCPeer_WithGRPCAuthInfo(t *testing.T) {
 	assert.Equal(t, "192.168.1.1", got.RemoteIP)
 	require.NotNil(t, got.AuthInfo)
 	assert.Equal(t, "test", got.AuthInfo.AuthType())
+}
+
+func TestFromGRPCPeer_WithGRPCTLSAuthInfo(t *testing.T) {
+	spiffeID := &url.URL{Scheme: "spiffe", Host: "example.org", Path: "/workload"}
+	state := stdtls.ConnectionState{
+		HandshakeComplete:  true,
+		NegotiatedProtocol: "h2",
+		PeerCertificates:   []*x509.Certificate{{URIs: []*url.URL{spiffeID}}},
+	}
+	tlsInfo := gcredentials.TLSInfo{
+		State: state,
+		CommonAuthInfo: gcredentials.CommonAuthInfo{
+			SecurityLevel: gcredentials.PrivacyAndIntegrity,
+		},
+	}
+	tests := []struct {
+		name     string
+		authInfo gcredentials.AuthInfo
+	}{
+		{name: "value", authInfo: tlsInfo},
+		{name: "pointer", authInfo: &tlsInfo},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := fromGRPCPeer(&gpeer.Peer{AuthInfo: tt.authInfo}, "grpc")
+			require.NotNil(t, got)
+
+			tlsAuthInfo, ok := got.AuthInfo.(ytls.AuthInfo)
+			require.True(t, ok)
+			assert.Equal(t, "tls", tlsAuthInfo.AuthType())
+			assert.Equal(t, security.PrivacyAndIntegrity, tlsAuthInfo.SecurityLevel)
+			assert.Equal(t, state, tlsAuthInfo.State)
+			require.NotNil(t, ytls.SPIFFEIDFromPeer(got))
+			assert.Equal(t, spiffeID.String(), ytls.SPIFFEIDFromPeer(got).String())
+		})
+	}
+}
+
+func TestFromGRPCPeer_WithNilGRPCTLSAuthInfo(t *testing.T) {
+	got := fromGRPCPeer(&gpeer.Peer{
+		AuthInfo: (*gcredentials.TLSInfo)(nil),
+	}, "grpc")
+	require.NotNil(t, got)
+	assert.Nil(t, got.AuthInfo)
+}
+
+func TestFromGRPCSecurityLevel(t *testing.T) {
+	tests := []struct {
+		name  string
+		input gcredentials.SecurityLevel
+		want  security.SecurityLevel
+	}{
+		{name: "no security", input: gcredentials.NoSecurity, want: security.NoSecurity},
+		{name: "integrity only", input: gcredentials.IntegrityOnly, want: security.IntegrityOnly},
+		{
+			name:  "privacy and integrity",
+			input: gcredentials.PrivacyAndIntegrity,
+			want:  security.PrivacyAndIntegrity,
+		},
+		{
+			name:  "unknown",
+			input: gcredentials.SecurityLevel(99),
+			want:  security.InvalidSecurityLevel,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, fromGRPCSecurityLevel(tt.input))
+		})
+	}
 }
 
 func TestFromGRPCPeer_NonTCPAddr(t *testing.T) {
