@@ -49,11 +49,33 @@ func BuiltinUnaryClientProviders() []interceptor.UnaryClientInterceptorProvider 
 	return BuiltinUnaryClientProvidersWithConfig(nil)
 }
 
+// BuiltinUnaryClientProvidersE returns built-in unary client providers.
+func BuiltinUnaryClientProvidersE() ([]interceptor.UnaryClientInterceptorProvider, error) {
+	return BuiltinUnaryClientProvidersWithConfigE(nil)
+}
+
 // BuiltinUnaryClientProvidersWithConfig returns built-in unary client interceptor providers bound to explicit config.
+//
+// Deprecated: use BuiltinUnaryClientProvidersWithConfigE to receive config errors.
 func BuiltinUnaryClientProvidersWithConfig(
 	source any,
 ) []interceptor.UnaryClientInterceptorProvider {
-	loggingCfg := mustLoadConfig(source)
+	providers, err := BuiltinUnaryClientProvidersWithConfigE(source)
+	if err != nil {
+		panic(err)
+	}
+	return providers
+}
+
+// BuiltinUnaryClientProvidersWithConfigE returns built-in unary client
+// interceptor providers and reports invalid config.
+func BuiltinUnaryClientProvidersWithConfigE(
+	source any,
+) ([]interceptor.UnaryClientInterceptorProvider, error) {
+	loggingCfg, err := loadConfig(source)
+	if err != nil {
+		return nil, err
+	}
 	names := providerNames()
 	out := make([]interceptor.UnaryClientInterceptorProvider, 0, len(names))
 	for _, name := range names {
@@ -68,7 +90,7 @@ func BuiltinUnaryClientProvidersWithConfig(
 			),
 		)
 	}
-	return out
+	return out, nil
 }
 
 // BuiltinStreamClientProviders returns built-in stream client interceptor providers.
@@ -76,11 +98,33 @@ func BuiltinStreamClientProviders() []interceptor.StreamClientInterceptorProvide
 	return BuiltinStreamClientProvidersWithConfig(nil)
 }
 
+// BuiltinStreamClientProvidersE returns built-in stream client providers.
+func BuiltinStreamClientProvidersE() ([]interceptor.StreamClientInterceptorProvider, error) {
+	return BuiltinStreamClientProvidersWithConfigE(nil)
+}
+
 // BuiltinStreamClientProvidersWithConfig returns built-in stream client interceptor providers bound to explicit config.
+//
+// Deprecated: use BuiltinStreamClientProvidersWithConfigE to receive config errors.
 func BuiltinStreamClientProvidersWithConfig(
 	source any,
 ) []interceptor.StreamClientInterceptorProvider {
-	loggingCfg := mustLoadConfig(source)
+	providers, err := BuiltinStreamClientProvidersWithConfigE(source)
+	if err != nil {
+		panic(err)
+	}
+	return providers
+}
+
+// BuiltinStreamClientProvidersWithConfigE returns built-in stream client
+// interceptor providers and reports invalid config.
+func BuiltinStreamClientProvidersWithConfigE(
+	source any,
+) ([]interceptor.StreamClientInterceptorProvider, error) {
+	loggingCfg, err := loadConfig(source)
+	if err != nil {
+		return nil, err
+	}
 	names := providerNames()
 	out := make([]interceptor.StreamClientInterceptorProvider, 0, len(names))
 	for _, name := range names {
@@ -95,7 +139,7 @@ func BuiltinStreamClientProvidersWithConfig(
 			),
 		)
 	}
-	return out
+	return out, nil
 }
 
 // BuiltinUnaryServerProviders returns built-in unary server interceptor providers.
@@ -103,11 +147,33 @@ func BuiltinUnaryServerProviders() []interceptor.UnaryServerInterceptorProvider 
 	return BuiltinUnaryServerProvidersWithConfig(nil)
 }
 
+// BuiltinUnaryServerProvidersE returns built-in unary server providers.
+func BuiltinUnaryServerProvidersE() ([]interceptor.UnaryServerInterceptorProvider, error) {
+	return BuiltinUnaryServerProvidersWithConfigE(nil)
+}
+
 // BuiltinUnaryServerProvidersWithConfig returns built-in unary server interceptor providers bound to explicit config.
+//
+// Deprecated: use BuiltinUnaryServerProvidersWithConfigE to receive config errors.
 func BuiltinUnaryServerProvidersWithConfig(
 	source any,
 ) []interceptor.UnaryServerInterceptorProvider {
-	loggingCfg := mustLoadConfig(source)
+	providers, err := BuiltinUnaryServerProvidersWithConfigE(source)
+	if err != nil {
+		panic(err)
+	}
+	return providers
+}
+
+// BuiltinUnaryServerProvidersWithConfigE returns built-in unary server
+// interceptor providers and reports invalid config.
+func BuiltinUnaryServerProvidersWithConfigE(
+	source any,
+) ([]interceptor.UnaryServerInterceptorProvider, error) {
+	loggingCfg, err := loadConfig(source)
+	if err != nil {
+		return nil, err
+	}
 	names := providerNames()
 	out := make([]interceptor.UnaryServerInterceptorProvider, 0, len(names))
 	for _, name := range names {
@@ -122,7 +188,7 @@ func BuiltinUnaryServerProvidersWithConfig(
 			),
 		)
 	}
-	return out
+	return out, nil
 }
 
 // BuiltinStreamServerProviders returns built-in stream server interceptor providers.
@@ -130,11 +196,33 @@ func BuiltinStreamServerProviders() []interceptor.StreamServerInterceptorProvide
 	return BuiltinStreamServerProvidersWithConfig(nil)
 }
 
+// BuiltinStreamServerProvidersE returns built-in stream server providers.
+func BuiltinStreamServerProvidersE() ([]interceptor.StreamServerInterceptorProvider, error) {
+	return BuiltinStreamServerProvidersWithConfigE(nil)
+}
+
 // BuiltinStreamServerProvidersWithConfig returns built-in stream server interceptor providers bound to explicit config.
+//
+// Deprecated: use BuiltinStreamServerProvidersWithConfigE to receive config errors.
 func BuiltinStreamServerProvidersWithConfig(
 	source any,
 ) []interceptor.StreamServerInterceptorProvider {
-	loggingCfg := mustLoadConfig(source)
+	providers, err := BuiltinStreamServerProvidersWithConfigE(source)
+	if err != nil {
+		panic(err)
+	}
+	return providers
+}
+
+// BuiltinStreamServerProvidersWithConfigE returns built-in stream server
+// interceptor providers and reports invalid config.
+func BuiltinStreamServerProvidersWithConfigE(
+	source any,
+) ([]interceptor.StreamServerInterceptorProvider, error) {
+	loggingCfg, err := loadConfig(source)
+	if err != nil {
+		return nil, err
+	}
 	names := providerNames()
 	out := make([]interceptor.StreamServerInterceptorProvider, 0, len(names))
 	for _, name := range names {
@@ -149,15 +237,15 @@ func BuiltinStreamServerProvidersWithConfig(
 			),
 		)
 	}
-	return out
+	return out, nil
 }
 
-func mustLoadConfig(source any) *Config {
+func loadConfig(source any) (*Config, error) {
 	cfg := Config{}
 	if err := config.NewSnapshot(source).Decode(&cfg); err != nil {
-		panic(fmt.Sprintf("load logging interceptor config: %v", err))
+		return nil, fmt.Errorf("load logging interceptor config: %w", err)
 	}
-	return &cfg
+	return &cfg, nil
 }
 
 type logging struct {

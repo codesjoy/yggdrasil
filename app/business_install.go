@@ -16,7 +16,9 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 
 	internalinstall "github.com/codesjoy/yggdrasil/v3/app/internal/install"
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
@@ -190,187 +192,95 @@ func (a *App) installBundleLocked(bundle *BusinessBundle) error {
 	if bundle == nil {
 		return nil
 	}
+	staged := newStagedInstall(a)
 	for _, item := range bundle.RPCBindings {
-		if err := a.installRPCBinding(item); err != nil {
+		if err := staged.installRPCBinding(item); err != nil {
 			return err
 		}
 	}
 	for _, item := range bundle.RESTBindings {
-		if err := a.installRESTBinding(item); err != nil {
+		if err := staged.installRESTBinding(item); err != nil {
 			return err
 		}
 	}
 	for _, item := range bundle.RawHTTP {
-		if err := a.installRawHTTPBinding(item); err != nil {
+		if err := staged.installRawHTTPBinding(item); err != nil {
 			return err
 		}
 	}
 	for _, item := range bundle.GovernorHTTP {
-		if err := a.installGovernorHTTPBinding(item); err != nil {
+		if err := staged.installGovernorHTTPBinding(item); err != nil {
 			return err
 		}
 	}
 	for _, item := range bundle.Tasks {
-		if err := a.addBackgroundTask(item); err != nil {
+		if err := staged.addBackgroundTask(item); err != nil {
 			return err
 		}
 	}
 	for _, item := range bundle.Hooks {
-		if err := a.addBusinessHook(item); err != nil {
+		if err := staged.addBusinessHook(item); err != nil {
 			return err
 		}
 	}
+	extensions := make([]BusinessInstallable, 0, len(bundle.Extensions))
 	for _, item := range bundle.Extensions {
 		if item == nil {
 			continue
 		}
+		extensions = append(extensions, item)
 		ctx := &InstallContext{
 			Runtime:   a.runtime,
-			installer: a,
+			installer: staged,
 		}
 		if err := item.Install(ctx); err != nil {
-			return internalinstall.ValidationError(
+			installErr := internalinstall.ValidationError(
 				fmt.Sprintf("install extension %q: %v", item.Kind(), err),
 				err,
 			)
+			if rollbackErr := staged.rollbackExtensions(extensions); rollbackErr != nil {
+				return internalinstall.ValidationError(
+					fmt.Sprintf("install extension %q rollback failed", item.Kind()),
+					errors.Join(installErr, rollbackErr),
+				)
+			}
+			return installErr
 		}
 	}
-	a.bundleDiagnostics = append(a.bundleDiagnostics, bundle.Diagnostics...)
-	return nil
+	staged.diagnostics = append(staged.diagnostics, bundle.Diagnostics...)
+	return staged.commit()
 }
 
 func (a *App) installRPCBinding(binding RPCBinding) error {
-	opts, err := a.installOptions()
-	if err != nil {
+	staged := newStagedInstall(a)
+	if err := staged.installRPCBinding(binding); err != nil {
 		return err
 	}
-	desc, serviceName, err := internalinstall.ValidateRPCBinding(
-		len(opts.resolvedSettings.Server.Transports) > 0,
-		binding.ServiceName,
-		binding.Desc,
-		binding.Impl,
-	)
-	if err != nil {
-		return err
-	}
-	if err := internalinstall.CheckServiceConflict(
-		a.installedRPCServices,
-		desc.ServiceName,
-		serviceName,
-	); err != nil {
-		return err
-	}
-	svr, err := a.installServer("rpc")
-	if err != nil {
-		return err
-	}
-	svr.RegisterService(desc, binding.Impl)
-	a.installedRPCServices[desc.ServiceName] = struct{}{}
-	return nil
+	return staged.commit()
 }
 
 func (a *App) installRESTBinding(binding RESTBinding) error {
-	opts, err := a.installOptions()
-	if err != nil {
+	staged := newStagedInstall(a)
+	if err := staged.installRESTBinding(binding); err != nil {
 		return err
 	}
-	desc, _, err := internalinstall.ValidateRESTBinding(
-		opts.resolvedSettings.Server.RestEnabled,
-		binding.Name,
-		binding.Desc,
-		binding.Impl,
-	)
-	if err != nil {
-		return err
-	}
-	prefix := internalinstall.BuildRESTRoutePrefix(binding.Prefixes)
-	for _, method := range desc.Methods {
-		if err := internalinstall.CheckRouteConflict(
-			"rest",
-			a.installedHTTPRoutes,
-			method.Method,
-			prefix+method.Path,
-		); err != nil {
-			return err
-		}
-	}
-	svr, err := a.installServer("rest")
-	if err != nil {
-		return err
-	}
-	svr.RegisterRestService(desc, binding.Impl, binding.Prefixes...)
-	for _, method := range desc.Methods {
-		a.installedHTTPRoutes[internalinstall.RouteKey(method.Method, prefix+method.Path)] = struct{}{}
-	}
-	return nil
+	return staged.commit()
 }
 
 func (a *App) installRawHTTPBinding(binding RawHTTPBinding) error {
-	opts, err := a.installOptions()
-	if err != nil {
+	staged := newStagedInstall(a)
+	if err := staged.installRawHTTPBinding(binding); err != nil {
 		return err
 	}
-	desc, err := internalinstall.ValidateRawHTTPBinding(
-		opts.resolvedSettings.Server.RestEnabled,
-		binding.Desc,
-		binding.Method,
-		binding.Path,
-		binding.Handler,
-	)
-	if err != nil {
-		return err
-	}
-	if err := internalinstall.CheckRouteConflict(
-		"raw http",
-		a.installedHTTPRoutes,
-		desc.Method,
-		desc.Path,
-	); err != nil {
-		return err
-	}
-	svr, err := a.installServer("raw http")
-	if err != nil {
-		return err
-	}
-	svr.RegisterRestRawHandlers(desc)
-	a.installedHTTPRoutes[internalinstall.RouteKey(desc.Method, desc.Path)] = struct{}{}
-	return nil
+	return staged.commit()
 }
 
 func (a *App) installGovernorHTTPBinding(binding GovernorHTTPBinding) error {
-	opts, err := a.installOptions()
-	if err != nil {
+	staged := newStagedInstall(a)
+	if err := staged.installGovernorHTTPBinding(binding); err != nil {
 		return err
 	}
-	method, path, err := internalinstall.ValidateGovernorHTTPBinding(
-		binding.Method,
-		binding.Path,
-		binding.Handler,
-	)
-	if err != nil {
-		return err
-	}
-	if opts.governor == nil {
-		return internalinstall.ValidationError("governor server is not available", nil)
-	}
-	if opts.governor.HasRoute(path) {
-		return internalinstall.ConflictError(
-			fmt.Sprintf("governor route %s %s already installed", method, path),
-			nil,
-		)
-	}
-	// Governor routes are dispatched by path, so they are keyed by path alone.
-	if err := internalinstall.CheckRouteConflict(
-		"governor http",
-		a.installedGovernorRoutes,
-		"",
-		path,
-	); err != nil {
-		return err
-	}
-	opts.governor.Handle(method, path, binding.Handler)
-	a.installedGovernorRoutes[internalinstall.RouteKey("", path)] = struct{}{}
-	return nil
+	return staged.commit()
 }
 
 func (a *App) installOptions() (*options, error) {
@@ -399,29 +309,373 @@ func (a *App) installServer(bindingType string) (server.Server, error) {
 }
 
 func (a *App) addBackgroundTask(task BackgroundTask) error {
-	if task == nil {
-		return internalinstall.ValidationError("background task is nil", nil)
+	staged := newStagedInstall(a)
+	if err := staged.addBackgroundTask(task); err != nil {
+		return err
 	}
-	a.opts.internalServers = append(a.opts.internalServers, task)
-	return nil
+	return staged.commit()
 }
 
 func (a *App) addBusinessHook(hook BusinessHook) error {
+	staged := newStagedInstall(a)
+	if err := staged.addBusinessHook(hook); err != nil {
+		return err
+	}
+	return staged.commit()
+}
+
+type stagedRPCBinding struct {
+	desc *server.ServiceDesc
+	name string
+	impl any
+}
+
+type stagedRESTBinding struct {
+	desc     *server.RestServiceDesc
+	impl     any
+	prefixes []string
+	routes   []string
+}
+
+type stagedRawHTTPBinding struct {
+	desc *server.RestRawHandlerDesc
+}
+
+type stagedGovernorHTTPBinding struct {
+	method  string
+	path    string
+	handler http.HandlerFunc
+}
+
+type stagedInstall struct {
+	app *App
+	svr server.Server
+
+	rpcBindings      []stagedRPCBinding
+	restBindings     []stagedRESTBinding
+	rawHTTPBindings  []stagedRawHTTPBinding
+	governorBindings []stagedGovernorHTTPBinding
+	tasks            []BackgroundTask
+	hooks            []BusinessHook
+	diagnostics      []BundleDiag
+
+	rpcServices    map[string]struct{}
+	httpRoutes     map[string]struct{}
+	governorRoutes map[string]struct{}
+}
+
+func newStagedInstall(app *App) *stagedInstall {
+	staged := &stagedInstall{
+		app:            app,
+		rpcServices:    map[string]struct{}{},
+		httpRoutes:     map[string]struct{}{},
+		governorRoutes: map[string]struct{}{},
+	}
+	if app != nil {
+		for key := range app.installedRPCServices {
+			staged.rpcServices[key] = struct{}{}
+		}
+		for key := range app.installedHTTPRoutes {
+			staged.httpRoutes[key] = struct{}{}
+		}
+		for key := range app.installedGovernorRoutes {
+			staged.governorRoutes[key] = struct{}{}
+		}
+		if app.opts != nil {
+			staged.svr = app.opts.server
+		}
+	}
+	return staged
+}
+
+func (s *stagedInstall) installRPCBinding(binding RPCBinding) error {
+	opts, err := s.app.installOptions()
+	if err != nil {
+		return err
+	}
+	desc, serviceName, err := internalinstall.ValidateRPCBinding(
+		len(opts.resolvedSettings.Server.Transports) > 0,
+		binding.ServiceName,
+		binding.Desc,
+		binding.Impl,
+	)
+	if err != nil {
+		return err
+	}
+	if _, exists := s.rpcServices[desc.ServiceName]; exists {
+		return internalinstall.ConflictError(
+			fmt.Sprintf("rpc service %q already installed", serviceName),
+			nil,
+		)
+	}
+	if _, err := s.ensureServer("rpc"); err != nil {
+		return err
+	}
+	s.rpcServices[desc.ServiceName] = struct{}{}
+	s.rpcBindings = append(s.rpcBindings, stagedRPCBinding{
+		desc: desc,
+		name: serviceName,
+		impl: binding.Impl,
+	})
+	return nil
+}
+
+func (s *stagedInstall) installRESTBinding(binding RESTBinding) error {
+	opts, err := s.app.installOptions()
+	if err != nil {
+		return err
+	}
+	desc, _, err := internalinstall.ValidateRESTBinding(
+		opts.resolvedSettings.Server.RestEnabled,
+		binding.Name,
+		binding.Desc,
+		binding.Impl,
+	)
+	if err != nil {
+		return err
+	}
+	prefix := internalinstall.BuildRESTRoutePrefix(binding.Prefixes)
+	routes := make([]string, 0, len(desc.Methods))
+	for _, method := range desc.Methods {
+		route := prefix + method.Path
+		key := internalinstall.RouteKey(method.Method, route)
+		if _, exists := s.httpRoutes[key]; exists {
+			return internalinstall.ConflictError(
+				fmt.Sprintf("rest route %s %s already installed", method.Method, route),
+				nil,
+			)
+		}
+		s.httpRoutes[key] = struct{}{}
+		routes = append(routes, key)
+	}
+	if _, err := s.ensureServer("rest"); err != nil {
+		return err
+	}
+	s.restBindings = append(s.restBindings, stagedRESTBinding{
+		desc:     desc,
+		impl:     binding.Impl,
+		prefixes: append([]string(nil), binding.Prefixes...),
+		routes:   routes,
+	})
+	return nil
+}
+
+func (s *stagedInstall) installRawHTTPBinding(binding RawHTTPBinding) error {
+	opts, err := s.app.installOptions()
+	if err != nil {
+		return err
+	}
+	desc, err := internalinstall.ValidateRawHTTPBinding(
+		opts.resolvedSettings.Server.RestEnabled,
+		binding.Desc,
+		binding.Method,
+		binding.Path,
+		binding.Handler,
+	)
+	if err != nil {
+		return err
+	}
+	key := internalinstall.RouteKey(desc.Method, desc.Path)
+	if _, exists := s.httpRoutes[key]; exists {
+		return internalinstall.ConflictError(
+			fmt.Sprintf("raw http route %s %s already installed", desc.Method, desc.Path),
+			nil,
+		)
+	}
+	if _, err := s.ensureServer("raw http"); err != nil {
+		return err
+	}
+	s.httpRoutes[key] = struct{}{}
+	s.rawHTTPBindings = append(s.rawHTTPBindings, stagedRawHTTPBinding{desc: desc})
+	return nil
+}
+
+func (s *stagedInstall) installGovernorHTTPBinding(binding GovernorHTTPBinding) error {
+	opts, err := s.app.installOptions()
+	if err != nil {
+		return err
+	}
+	method, path, err := internalinstall.ValidateGovernorHTTPBinding(
+		binding.Method,
+		binding.Path,
+		binding.Handler,
+	)
+	if err != nil {
+		return err
+	}
+	if opts.governor == nil {
+		return internalinstall.ValidationError("governor server is not available", nil)
+	}
+	if opts.governor.HasRoute(path) {
+		return internalinstall.ConflictError(
+			fmt.Sprintf("governor route %s %s already installed", method, path),
+			nil,
+		)
+	}
+	key := internalinstall.RouteKey("", path)
+	if _, exists := s.governorRoutes[key]; exists {
+		return internalinstall.ConflictError(
+			fmt.Sprintf("governor http route %s already installed", path),
+			nil,
+		)
+	}
+	s.governorRoutes[key] = struct{}{}
+	s.governorBindings = append(s.governorBindings, stagedGovernorHTTPBinding{
+		method:  method,
+		path:    path,
+		handler: binding.Handler,
+	})
+	return nil
+}
+
+func (s *stagedInstall) addBackgroundTask(task BackgroundTask) error {
+	if task == nil {
+		return internalinstall.ValidationError("background task is nil", nil)
+	}
+	s.tasks = append(s.tasks, task)
+	return nil
+}
+
+func (s *stagedInstall) addBusinessHook(hook BusinessHook) error {
 	if hook.Func == nil {
 		return internalinstall.ValidationError("business hook func is nil", nil)
 	}
 	switch hook.Stage {
-	case BusinessHookBeforeStart:
-		a.opts.beforeStartHooks = append(a.opts.beforeStartHooks, hook.Func)
-	case BusinessHookBeforeStop:
-		a.opts.beforeStopHooks = append(a.opts.beforeStopHooks, hook.Func)
-	case BusinessHookAfterStop:
-		a.opts.afterStopHooks = append(a.opts.afterStopHooks, hook.Func)
+	case BusinessHookBeforeStart, BusinessHookBeforeStop, BusinessHookAfterStop:
 	default:
 		return internalinstall.ValidationError(
 			fmt.Sprintf("unsupported business hook stage %q", hook.Stage),
 			nil,
 		)
 	}
+	s.hooks = append(s.hooks, hook)
 	return nil
+}
+
+func (s *stagedInstall) ensureServer(bindingType string) (server.Server, error) {
+	if s.svr != nil {
+		return s.svr, nil
+	}
+	svr, err := s.app.installServer(bindingType)
+	if err != nil {
+		return nil, err
+	}
+	s.svr = svr
+	return svr, nil
+}
+
+func (s *stagedInstall) commit() error {
+	if s.app == nil || s.app.opts == nil {
+		return internalinstall.ValidationError("app is not ready", nil)
+	}
+	if err := s.app.installStagedLifecycle(s.tasks, s.hooks); err != nil {
+		return internalinstall.ValidationError("install staged lifecycle", err)
+	}
+	if s.svr != nil {
+		s.app.opts.server = s.svr
+	}
+	for _, binding := range s.rpcBindings {
+		s.svr.RegisterService(binding.desc, binding.impl)
+		s.app.installedRPCServices[binding.desc.ServiceName] = struct{}{}
+	}
+	for _, binding := range s.restBindings {
+		s.svr.RegisterRestService(binding.desc, binding.impl, binding.prefixes...)
+		for _, route := range binding.routes {
+			s.app.installedHTTPRoutes[route] = struct{}{}
+		}
+	}
+	for _, binding := range s.rawHTTPBindings {
+		s.svr.RegisterRestRawHandlers(binding.desc)
+		s.app.installedHTTPRoutes[internalinstall.RouteKey(
+			binding.desc.Method,
+			binding.desc.Path,
+		)] = struct{}{}
+	}
+	for _, binding := range s.governorBindings {
+		s.app.opts.governor.Handle(binding.method, binding.path, binding.handler)
+		s.app.installedGovernorRoutes[internalinstall.RouteKey(
+			"",
+			binding.path,
+		)] = struct{}{}
+	}
+	for _, task := range s.tasks {
+		s.app.opts.internalServers = append(s.app.opts.internalServers, task)
+	}
+	for _, hook := range s.hooks {
+		switch hook.Stage {
+		case BusinessHookBeforeStart:
+			s.app.opts.beforeStartHooks = append(s.app.opts.beforeStartHooks, hook.Func)
+		case BusinessHookBeforeStop:
+			s.app.opts.beforeStopHooks = append(s.app.opts.beforeStopHooks, hook.Func)
+		case BusinessHookAfterStop:
+			s.app.opts.afterStopHooks = append(s.app.opts.afterStopHooks, hook.Func)
+		}
+	}
+	s.app.bundleDiagnostics = append(s.app.bundleDiagnostics, s.diagnostics...)
+	return nil
+}
+
+func (a *App) installStagedLifecycle(
+	tasks []BackgroundTask,
+	hooks []BusinessHook,
+) error {
+	opts := make([]lifecycleOption, 0, len(tasks)+len(hooks)+1)
+	if len(tasks) > 0 {
+		servers := make([]InternalServer, 0, len(tasks))
+		for _, task := range tasks {
+			servers = append(servers, task)
+		}
+		opts = append(opts, withLifecycleInternalServers(servers...))
+	}
+	var beforeStart []func(context.Context) error
+	var beforeStop []func(context.Context) error
+	var afterStop []func(context.Context) error
+	for _, hook := range hooks {
+		switch hook.Stage {
+		case BusinessHookBeforeStart:
+			beforeStart = append(beforeStart, hook.Func)
+		case BusinessHookBeforeStop:
+			beforeStop = append(beforeStop, hook.Func)
+		case BusinessHookAfterStop:
+			afterStop = append(afterStop, hook.Func)
+		}
+	}
+	if len(beforeStart) > 0 {
+		opts = append(opts, withLifecycleBeforeStartHooks(beforeStart...))
+	}
+	if len(beforeStop) > 0 {
+		opts = append(opts, withLifecycleBeforeStopHooks(beforeStop...))
+	}
+	if len(afterStop) > 0 {
+		opts = append(opts, withLifecycleAfterStopHooks(afterStop...))
+	}
+	if len(opts) == 0 {
+		return nil
+	}
+	return a.lifecycle.Init(opts...)
+}
+
+func (s *stagedInstall) rollbackExtensions(extensions []BusinessInstallable) error {
+	var err error
+	for index := len(extensions) - 1; index >= 0; index-- {
+		item, ok := extensions[index].(BusinessInstallRollback)
+		if !ok {
+			continue
+		}
+		rollbackCtx := &InstallContext{
+			Runtime:   s.app.runtime,
+			installer: s,
+		}
+		if rollbackErr := item.RollbackInstall(rollbackCtx); rollbackErr != nil {
+			err = errors.Join(
+				err,
+				fmt.Errorf(
+					"rollback extension %q: %w",
+					extensions[index].Kind(),
+					rollbackErr,
+				),
+			)
+		}
+	}
+	return err
 }

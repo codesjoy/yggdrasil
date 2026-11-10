@@ -25,6 +25,10 @@ import (
 )
 
 func (runner *Runner) register() error {
+	return runner.registerWithContext(context.Background())
+}
+
+func (runner *Runner) registerWithContext(ctx context.Context) error {
 	if runner.registry == nil {
 		return nil
 	}
@@ -33,18 +37,24 @@ func (runner *Runner) register() error {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	registerCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	if err := runner.registry.Register(ctx, runner); err != nil {
+	if err := runner.registry.Register(registerCtx, runner); err != nil {
 		runner.resetRegistering()
 		slog.Error("fault to register application", slog.Any("error", err))
 		return err
 	}
 
 	if runner.finishRegister() == registryStateCancel {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		if err := runner.registry.Deregister(ctx, runner); err != nil {
+		deregisterCtx, deregisterCancel := context.WithTimeout(
+			context.WithoutCancel(registerCtx),
+			3*time.Second,
+		)
+		defer deregisterCancel()
+		if err := runner.registry.Deregister(deregisterCtx, runner); err != nil {
 			slog.Error(
 				"fault to deregister application after concurrent stop",
 				slog.Any("error", err),

@@ -16,10 +16,13 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,7 +33,45 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/config/source"
 	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
 	configtest "github.com/codesjoy/yggdrasil/v3/config/testutil"
+	"github.com/codesjoy/yggdrasil/v3/module"
 )
+
+type recordingReloadModule struct {
+	name   string
+	count  atomic.Int32
+	values chan string
+}
+
+func (m *recordingReloadModule) Name() string       { return m.name }
+func (m *recordingReloadModule) ConfigPath() string { return "test" }
+func (m *recordingReloadModule) PrepareReload(
+	_ context.Context,
+	view config.View,
+) (module.ReloadCommitter, error) {
+	var payload struct {
+		Value string `mapstructure:"value"`
+	}
+	if err := view.Decode(&payload); err != nil {
+		return nil, err
+	}
+	m.count.Add(1)
+	if m.values != nil {
+		select {
+		case m.values <- payload.Value:
+		default:
+		}
+	}
+	return noOpReloadCommitter{}, nil
+}
+
+type watchableAppConfigSource struct {
+	*mockConfigSource
+	changes chan source.Data
+}
+
+func (s *watchableAppConfigSource) Watch() (<-chan source.Data, error) {
+	return s.changes, nil
+}
 
 func TestResolveConfigPath(t *testing.T) {
 	withTestFlagSet(t)
@@ -306,6 +347,120 @@ func TestStopClosesManagedConfigSourcesOnce(t *testing.T) {
 	require.NoError(t, app.initializeLocked(context.Background()))
 	require.NoError(t, app.Stop(context.Background()))
 	assert.Equal(t, int32(1), atomic.LoadInt32(&closeCount))
+}
+
+func TestStopClosesOwnedConfigManager(t *testing.T) {
+	app := newTestApp(t, "owned-config-manager")
+	require.NoError(t, app.initializeLocked(context.Background()))
+	manager := app.opts.configManager
+	require.True(t, app.opts.configManagerOwned)
+	require.NoError(t, app.Stop(context.Background()))
+
+	require.Error(t, manager.LoadLayer(
+		"after-close",
+		config.PriorityOverride,
+		memory.NewSource("after-close", map[string]any{
+			"after_close": map[string]any{"value": "unexpected"},
+		}),
+	))
+	require.True(t, manager.Section("after_close").Empty())
+}
+
+func TestStopLeavesInjectedConfigManagerOpen(t *testing.T) {
+	manager := config.NewManager()
+	app := newTestApp(t, "external-config-manager", WithConfigManager(manager))
+	require.NoError(t, app.initializeLocked(context.Background()))
+	require.False(t, app.opts.configManagerOwned)
+	require.NoError(t, app.Stop(context.Background()))
+
+	require.NoError(t, manager.LoadLayer(
+		"after-stop",
+		config.PriorityOverride,
+		memory.NewSource("after-stop", map[string]any{
+			"after_stop": map[string]any{"value": "visible"},
+		}),
+	))
+	var payload struct {
+		Value string `mapstructure:"value"`
+	}
+	require.NoError(t, manager.Section("after_stop").Decode(&payload))
+	require.Equal(t, "visible", payload.Value)
+}
+
+func TestConfigWatchKeepsServingChangesUntilRunning(t *testing.T) {
+	configData := assemblyTestConfig(false)
+	configData["test"] = map[string]any{"value": "initial"}
+	mod := &recordingReloadModule{
+		name:   "recording.reload",
+		values: make(chan string, 1),
+	}
+	app, manager := newInitializedAppWithConfig(
+		t,
+		"config-watch-serving",
+		configData,
+		WithModules(mod, testTransportModule{recorder: newTransportRecorder()}),
+	)
+	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+
+	app.mu.Lock()
+	app.state = lifecycleStateServing
+	app.installConfigWatchLocked()
+	app.mu.Unlock()
+
+	require.NoError(t, manager.LoadLayer(
+		"serving-change",
+		config.PriorityOverride,
+		memory.NewSource("serving-change", map[string]any{
+			"test": map[string]any{"value": "updated"},
+		}),
+	))
+	time.Sleep(50 * time.Millisecond)
+	require.Zero(t, mod.count.Load())
+
+	app.mu.Lock()
+	app.state = lifecycleStateRunning
+	app.mu.Unlock()
+	app.wakeConfigWatch()
+
+	require.Eventually(t, func() bool {
+		return mod.count.Load() == 1
+	}, 2*time.Second, 10*time.Millisecond)
+	select {
+	case value := <-mod.values:
+		require.Equal(t, "updated", value)
+	default:
+		t.Fatal("reload did not observe the latest pending snapshot")
+	}
+}
+
+func TestConfigWatchInvalidPayloadEntersDiagnostics(t *testing.T) {
+	changes := make(chan source.Data, 1)
+	cfgSource := &watchableAppConfigSource{
+		mockConfigSource: &mockConfigSource{
+			name: "watchable",
+			data: minimalV3Config("grpc"),
+		},
+		changes: changes,
+	}
+	app := newInitializedApp(
+		t,
+		"config-watch-diagnostics",
+		WithConfigSource("watchable", config.PriorityOverride, cfgSource),
+	)
+	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+
+	app.mu.Lock()
+	app.state = lifecycleStateRunning
+	app.installConfigWatchLocked()
+	app.mu.Unlock()
+
+	changes <- source.NewBytesData([]byte(`not-json`), json.Unmarshal)
+	require.Eventually(t, func() bool {
+		diag := app.assemblyDiagnostics()
+		return diag.LastErrorStage == "reload" &&
+			diag.LastError != nil &&
+			strings.Contains(diag.LastError.Message, "config watch")
+	}, 2*time.Second, 10*time.Millisecond)
 }
 
 func TestValidateStartup_DoesNotFailForRuntimeResolvedBindings(t *testing.T) {

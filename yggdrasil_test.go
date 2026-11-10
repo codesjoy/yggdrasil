@@ -39,6 +39,7 @@ type blockingTask struct {
 	stopped chan stopObservation
 	once    sync.Once
 	err     error
+	stopErr error
 }
 
 type stopObservation struct {
@@ -72,7 +73,7 @@ func (t *blockingTask) Stop(ctx context.Context) error {
 	t.once.Do(func() {
 		close(t.stopCh)
 	})
-	return nil
+	return t.stopErr
 }
 
 func rootConfigSource() source.Source {
@@ -173,6 +174,31 @@ func TestRunHappyPathStopsOnContextCancel(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("task did not receive stop context")
 	}
+}
+
+func TestRunJoinsShutdownError(t *testing.T) {
+	useTestManager()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stopErr := errors.New("shutdown failed")
+	task := newBlockingTask(nil)
+	task.stopErr = stopErr
+	go func() {
+		<-task.started
+		cancel()
+	}()
+
+	err := Run(
+		ctx,
+		"root-run-shutdown-error",
+		func(Runtime) (*BusinessBundle, error) {
+			return &BusinessBundle{Tasks: []BackgroundTask{task}}, nil
+		},
+		WithConfigSource("root", config.PriorityOverride, rootConfigSource()),
+	)
+	require.ErrorIs(t, err, stopErr)
 }
 
 func TestWaitPropagatesServeFailure(t *testing.T) {

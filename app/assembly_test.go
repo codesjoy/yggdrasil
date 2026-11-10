@@ -220,6 +220,23 @@ func TestStartWaitStopWithPreparedBusinessBundle(t *testing.T) {
 	require.Equal(t, int32(1), atomic.LoadInt32(&recorder.stopCalls))
 }
 
+func TestStartBlocksUntilModulesAreRunning(t *testing.T) {
+	recorder := newTransportRecorder()
+	manager := newTestManager(t, assemblyTestConfig(false))
+
+	app, err := New(
+		"start-synchronous",
+		WithConfigManager(manager),
+		WithModules(testTransportModule{recorder: recorder}),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+
+	require.NoError(t, app.Start(context.Background()))
+	require.Equal(t, int32(1), atomic.LoadInt32(&recorder.startCalls))
+	require.Equal(t, int32(1), atomic.LoadInt32(&recorder.handleCalls))
+}
+
 func TestRuntimeLookupSupportsTypedTargets(t *testing.T) {
 	manager := newTestManager(t, assemblyTestConfig(false))
 	app, err := New(
@@ -345,6 +362,129 @@ func TestInstallBusinessPartialFailureCleansUpBeforeReturn(t *testing.T) {
 	requireAssemblyErrorCode(t, err, yassembly.ErrInstallValidationFailed)
 	require.Equal(t, int32(1), atomic.LoadInt32(&closeCount))
 	require.ErrorIs(t, app.Start(context.Background()), errRestartUnsupported)
+}
+
+type stagedInstallExtension struct {
+	kind      string
+	install   func(*InstallContext) error
+	rollback  func(*InstallContext) error
+	rollbacks *[]string
+}
+
+type noOpBackgroundTask struct{}
+
+func (*noOpBackgroundTask) Serve() error               { return nil }
+func (*noOpBackgroundTask) Stop(context.Context) error { return nil }
+
+func (e stagedInstallExtension) Kind() string {
+	return e.kind
+}
+
+func (e stagedInstallExtension) Install(ctx *InstallContext) error {
+	if e.install == nil {
+		return nil
+	}
+	return e.install(ctx)
+}
+
+func (e stagedInstallExtension) RollbackInstall(ctx *InstallContext) error {
+	if e.rollbacks != nil {
+		*e.rollbacks = append(*e.rollbacks, e.kind)
+	}
+	if e.rollback == nil {
+		return nil
+	}
+	return e.rollback(ctx)
+}
+
+func TestInstallBusinessStagesUntilExtensionsAndRollsBack(t *testing.T) {
+	recorder := newTransportRecorder()
+	app, err := New(
+		"staged-install-rollback",
+		WithConfigManager(newTestManager(t, assemblyTestConfig(false))),
+		WithModules(testTransportModule{recorder: recorder}),
+	)
+	require.NoError(t, err)
+	require.NoError(t, app.Prepare(context.Background()))
+
+	rollbacks := []string{}
+	installErr := errors.New("extension install failed")
+	err = app.InstallBusiness(&BusinessBundle{
+		RPCBindings: []RPCBinding{{
+			ServiceName: testAssemblyServiceName,
+			Desc:        &testAssemblyRPCServiceDesc,
+			Impl:        &testAssemblyServiceImpl{},
+		}},
+		Tasks: []BackgroundTask{&mockInternalServer{}},
+		Hooks: []BusinessHook{{
+			Stage: BusinessHookBeforeStart,
+			Func:  func(context.Context) error { return nil },
+		}},
+		Extensions: []BusinessInstallable{
+			stagedInstallExtension{
+				kind: "first",
+				install: func(ctx *InstallContext) error {
+					return ctx.AddTask(&mockInternalServer{})
+				},
+				rollbacks: &rollbacks,
+			},
+			stagedInstallExtension{
+				kind: "second",
+				install: func(ctx *InstallContext) error {
+					if err := ctx.AddHook(BusinessHook{
+						Stage: BusinessHookAfterStop,
+						Func:  func(context.Context) error { return nil },
+					}); err != nil {
+						return err
+					}
+					return installErr
+				},
+				rollbacks: &rollbacks,
+			},
+		},
+	})
+	require.ErrorIs(t, err, installErr)
+	require.Equal(t, []string{"second", "first"}, rollbacks)
+	require.Empty(t, app.installedRPCServices)
+	require.Zero(t, len(app.opts.internalServers))
+	require.Zero(t, len(app.opts.beforeStartHooks))
+	require.Zero(t, len(app.opts.afterStopHooks))
+}
+
+func TestInstallBusinessCommitsStagedExtensionsAtomically(t *testing.T) {
+	app, err := New(
+		"staged-install-commit",
+		WithConfigManager(newTestManager(t, assemblyTestConfig(false))),
+		WithModules(testTransportModule{recorder: newTransportRecorder()}),
+	)
+	require.NoError(t, err)
+	require.NoError(t, app.Prepare(context.Background()))
+	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+
+	err = app.InstallBusiness(&BusinessBundle{
+		Extensions: []BusinessInstallable{
+			stagedInstallExtension{
+				kind: "task",
+				install: func(ctx *InstallContext) error {
+					return ctx.AddTask(&noOpBackgroundTask{})
+				},
+			},
+			stagedInstallExtension{
+				kind: "rpc",
+				install: func(ctx *InstallContext) error {
+					return ctx.RegisterRPC(RPCBinding{
+						ServiceName: testAssemblyServiceName,
+						Desc:        &testAssemblyRPCServiceDesc,
+						Impl:        &testAssemblyServiceImpl{},
+					})
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Contains(t, app.installedRPCServices, testAssemblyServiceName)
+	require.Len(t, app.opts.internalServers, 1)
+	require.True(t, app.explicitBundleInstalled)
 }
 
 // --- effectiveResolved ---

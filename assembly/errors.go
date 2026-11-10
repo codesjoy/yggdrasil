@@ -40,6 +40,7 @@ const (
 	ErrReloadRequiresRestart            ErrorCode = "ReloadRequiresRestart"
 	ErrRuntimeReconcileFailed           ErrorCode = "RuntimeReconcileFailed"
 	ErrIsolationRequiresProcessDefaults ErrorCode = "IsolationRequiresProcessDefaults"
+	ErrInsecureAdminExposure            ErrorCode = "InsecureAdminExposure"
 )
 
 // Error is one structured assembly/app error.

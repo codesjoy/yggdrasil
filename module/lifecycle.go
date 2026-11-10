@@ -34,14 +34,23 @@ func (h *Hub) Init(ctx context.Context, snap config.Snapshot) error {
 	h.snapshot = snap
 	h.mu.Unlock()
 
+	initialized := make([]Module, 0, len(topo))
 	for _, mod := range topo {
 		item, ok := mod.(Initializable)
 		if !ok {
 			continue
 		}
 		if err := item.Init(ctx, moduleView(mod, snap)); err != nil {
-			return fmt.Errorf("module %q init failed: %w", mod.Name(), err)
+			initErr := fmt.Errorf("module %q init failed: %w", mod.Name(), err)
+			if compensateErr := h.stopSequence(ctx, initialized); compensateErr != nil {
+				return errors.Join(
+					initErr,
+					fmt.Errorf("init compensation failed: %w", compensateErr),
+				)
+			}
+			return initErr
 		}
+		initialized = append(initialized, mod)
 	}
 	return nil
 }
@@ -125,6 +134,9 @@ type preparedReload struct {
 
 // Reload executes staged reload and updates snapshot on success.
 func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
+	h.reloadMu.Lock()
+	defer h.reloadMu.Unlock()
+
 	h.mu.Lock()
 	if !h.sealed {
 		h.mu.Unlock()
@@ -220,7 +232,7 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 	for i := range prepared {
 		item := prepared[i]
 		if err := item.committer.Commit(ctx); err != nil {
-			rollbackModule, rollbackErr := rollbackPrepared(ctx, prepared[i+1:])
+			rollbackModule, rollbackErr := rollbackPrepared(ctx, prepared)
 			state := ReloadState{
 				Phase:           ReloadPhaseRollback,
 				RestartRequired: true,
@@ -243,6 +255,38 @@ func (h *Hub) Reload(ctx context.Context, snap config.Snapshot) error {
 			h.mu.Unlock()
 			return fmt.Errorf("module %q commit reload failed: %w", item.module.Name(), err)
 		}
+	}
+
+	var finalizeErr error
+	finalizeModule := ""
+	for _, item := range prepared {
+		finalizer, ok := item.module.(ReloadFinalizer)
+		if !ok {
+			continue
+		}
+		if err := finalizer.FinalizeReload(ctx); err != nil {
+			if finalizeModule == "" {
+				finalizeModule = item.module.Name()
+			}
+			finalizeErr = errors.Join(
+				finalizeErr,
+				fmt.Errorf("module %q finalize reload failed: %w", item.module.Name(), err),
+			)
+		}
+	}
+	if finalizeErr != nil {
+		h.mu.Lock()
+		h.snapshot = snap
+		h.restartRequired = true
+		h.reloadState = ReloadState{
+			Phase:           ReloadPhaseDegraded,
+			RestartRequired: true,
+			Diverged:        true,
+			FailedModule:    finalizeModule,
+			FailedStage:     ReloadFailedStageFinalize,
+		}.withError(finalizeErr)
+		h.mu.Unlock()
+		return finalizeErr
 	}
 
 	h.mu.Lock()

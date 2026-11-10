@@ -111,7 +111,8 @@ and what each one owes the framework.
   `Initializable` (`Init(ctx, config.View) error`), `Startable`
   (`Start(ctx) error`), `Stoppable` (`Stop(ctx) error`), `Reloadable`
   (`PrepareReload(ctx, config.View) (ReloadCommitter, error)`), `ReloadCommitter`
-  (`Commit(ctx) error`, `Rollback(ctx) error`), and `ReloadReporter`
+  (`Commit(ctx) error`, `Rollback(ctx) error`), `ReloadFinalizer`
+  (`FinalizeReload(ctx) error`), and `ReloadReporter`
   (`ReloadState() ReloadState`).
 - A new behaviour **MUST** be added as a new optional interface with a type
   assertion at the call site. `module.Module` **MUST NOT** be widened, and a

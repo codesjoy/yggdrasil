@@ -93,6 +93,12 @@ type ReloadCommitter interface {
 	Rollback(ctx context.Context) error
 }
 
+// ReloadFinalizer releases resources that must remain available until every
+// reload committer has committed successfully.
+type ReloadFinalizer interface {
+	FinalizeReload(ctx context.Context) error
+}
+
 // ReloadReporter exposes module reload diagnostics.
 type ReloadReporter interface {
 	ReloadState() ReloadState
@@ -119,6 +125,7 @@ const (
 	ReloadFailedStagePrepare  ReloadFailedStage = "prepare"
 	ReloadFailedStageCommit   ReloadFailedStage = "commit"
 	ReloadFailedStageRollback ReloadFailedStage = "rollback"
+	ReloadFailedStageFinalize ReloadFailedStage = "finalize"
 )
 
 // ReloadState is the global/module reload state.

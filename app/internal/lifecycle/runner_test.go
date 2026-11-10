@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -530,4 +531,162 @@ func TestLifecycleStopRunsHooks(t *testing.T) {
 	assert.True(t, beforeStopCalled)
 	assert.True(t, cleanupCalled)
 	assert.True(t, afterStopCalled)
+}
+
+func TestLifecycleStopDuringStartCancelsAndCleansUp(t *testing.T) {
+	startEntered := make(chan struct{})
+	cleanupCalled := make(chan struct{})
+
+	gov, err := governor.NewServerWithConfig(governor.Config{Enabled: boolPtr(false)}, nil)
+	require.NoError(t, err)
+
+	runner, err := New(
+		WithGovernor(gov),
+		WithBeforeStartHooks(func(ctx context.Context) error {
+			close(startEntered)
+			<-ctx.Done()
+			return ctx.Err()
+		}),
+		WithCleanup("test", func(context.Context) error {
+			close(cleanupCalled)
+			return nil
+		}),
+	)
+	require.NoError(t, err)
+
+	startDone := make(chan error, 1)
+	go func() {
+		startDone <- runner.Start(context.Background())
+	}()
+
+	select {
+	case <-startEntered:
+	case <-time.After(time.Second):
+		t.Fatal("start hook did not run")
+	}
+
+	stopDone := make(chan error, 1)
+	go func() {
+		stopDone <- runner.Stop(context.Background())
+	}()
+
+	select {
+	case err := <-startDone:
+		require.Error(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Start did not observe cancellation")
+	}
+	select {
+	case err := <-stopDone:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not complete")
+	}
+	select {
+	case <-cleanupCalled:
+	default:
+		t.Fatal("cleanup hook did not run")
+	}
+}
+
+func TestLifecycleConcurrentStopReturnsSameResult(t *testing.T) {
+	gov, err := governor.NewServerWithConfig(governor.Config{Enabled: boolPtr(false)}, nil)
+	require.NoError(t, err)
+
+	stopErr := errors.New("stop failure")
+	internalServer := &failingStopInternalServer{err: stopErr}
+	runner, err := New(
+		WithGovernor(gov),
+		WithInternalServers(internalServer),
+	)
+	require.NoError(t, err)
+	require.NoError(t, runner.Start(context.Background()))
+
+	const callers = 8
+	results := make(chan error, callers)
+	var wg sync.WaitGroup
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results <- runner.Stop(context.Background())
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	for result := range results {
+		require.ErrorIs(t, result, stopErr)
+	}
+	require.Equal(t, int32(1), internalServer.stops.Load())
+}
+
+func TestLifecycleWaitReturnsAfterServerStops(t *testing.T) {
+	gov, err := governor.NewServerWithConfig(governor.Config{Enabled: boolPtr(false)}, nil)
+	require.NoError(t, err)
+
+	mainServer := &runningAppServer{stopCh: make(chan struct{})}
+	runner, err := New(WithGovernor(gov), WithServer(mainServer))
+	require.NoError(t, err)
+	require.NoError(t, runner.Start(context.Background()))
+
+	stopReturned := make(chan struct{})
+	go func() {
+		require.NoError(t, runner.Stop(context.Background()))
+		close(stopReturned)
+	}()
+	select {
+	case <-stopReturned:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not return")
+	}
+
+	waitDone := make(chan error, 1)
+	go func() {
+		waitDone <- runner.Wait()
+	}()
+	select {
+	case err := <-waitDone:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Wait did not observe the completed shutdown")
+	}
+}
+
+func TestLifecycleStopBeforeStartCachesHooksAndError(t *testing.T) {
+	stopErr := errors.New("stop failure")
+	internalServer := &failingStopInternalServer{err: stopErr}
+	var cleanupCalls int32
+	runner, err := New(
+		WithInternalServers(internalServer),
+		WithCleanup("cache", func(context.Context) error {
+			atomic.AddInt32(&cleanupCalls, 1)
+			return nil
+		}),
+	)
+	require.NoError(t, err)
+
+	first := runner.Stop(context.Background())
+	second := runner.Stop(context.Background())
+	require.ErrorIs(t, first, stopErr)
+	require.ErrorIs(t, second, stopErr)
+	require.Equal(t, int32(1), atomic.LoadInt32(&cleanupCalls))
+}
+
+func TestLifecycleStopAggregatesServerErrors(t *testing.T) {
+	firstErr := errors.New("first stop failure")
+	secondErr := errors.New("second stop failure")
+	runner, err := New(WithInternalServers(
+		&failingStopInternalServer{err: firstErr},
+		&failingStopInternalServer{err: secondErr},
+	))
+	require.NoError(t, err)
+
+	stopErr := runner.Stop(context.Background())
+	require.ErrorIs(t, stopErr, firstErr)
+	require.ErrorIs(t, stopErr, secondErr)
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }

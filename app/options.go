@@ -38,26 +38,28 @@ type configLayerSource struct {
 }
 
 type options struct {
-	mode             string
-	planOverrides    []yassembly.Override
-	server           server.Server
-	governor         *governor.Server
-	internalServers  []InternalServer
-	registry         registry.Registry
-	shutdownTimeout  time.Duration
-	beforeStartHooks []func(context.Context) error
-	beforeStopHooks  []func(context.Context) error
-	afterStopHooks   []func(context.Context) error
-	lifecycleOptions []lifecycleOption
-	configManager    *config.Manager
-	configPath       string
-	configSources    []configLayerSource
-	configBuilders   map[string]configchain.ContextBuilder
+	mode               string
+	planOverrides      []yassembly.Override
+	server             server.Server
+	governor           *governor.Server
+	internalServers    []InternalServer
+	registry           registry.Registry
+	shutdownTimeout    time.Duration
+	beforeStartHooks   []func(context.Context) error
+	beforeStopHooks    []func(context.Context) error
+	afterStopHooks     []func(context.Context) error
+	lifecycleOptions   []lifecycleOption
+	configManager      *config.Manager
+	configManagerOwned bool
+	configPath         string
+	configSources      []configLayerSource
+	configBuilders     map[string]configchain.ContextBuilder
 
 	managedConfigSources          []source.Source
 	configSourceCleanupRegistered bool
 	configFileLoaded              bool
 	managedConfigSourcesClosed    bool
+	managedConfigManagerClosed    bool
 	processDefaults               bool
 	resolvedSettings              settings.Resolved
 	modules                       []module.Module

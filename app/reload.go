@@ -30,6 +30,9 @@ func (a *App) Reload(ctx context.Context) error {
 	a.reloadMu.Lock()
 	defer a.reloadMu.Unlock()
 
+	if a.stopping.Load() {
+		return nil
+	}
 	a.mu.Lock()
 	if a.state != lifecycleStateRunning {
 		a.mu.Unlock()

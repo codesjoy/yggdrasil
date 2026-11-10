@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -36,6 +37,7 @@ type testModule struct {
 	prepareErr  error
 	commitErr   error
 	rollbackErr error
+	rollbackLog *[]string
 
 	started   atomic.Bool
 	stopped   atomic.Int32
@@ -83,9 +85,122 @@ func (c reloadCommitter) Commit(context.Context) error {
 func (c reloadCommitter) Rollback(context.Context) error {
 	if c.m != nil {
 		c.m.rollbacks.Add(1)
+		if c.m.rollbackLog != nil {
+			*c.m.rollbackLog = append(*c.m.rollbackLog, c.m.name)
+		}
 		return c.m.rollbackErr
 	}
 	return nil
+}
+
+func TestReloadCommitFailureRollsBackFailedAndCommittedModules(t *testing.T) {
+	rollbackLog := []string{}
+	first := &testModule{name: "first", path: "mod.first", rollbackLog: &rollbackLog}
+	second := &testModule{
+		name:        "second",
+		path:        "mod.second",
+		deps:        []string{"first"},
+		commitErr:   errors.New("commit failed"),
+		rollbackLog: &rollbackLog,
+	}
+	third := &testModule{
+		name:        "third",
+		path:        "mod.third",
+		deps:        []string{"second"},
+		rollbackLog: &rollbackLog,
+	}
+
+	h := NewHub()
+	require.NoError(t, h.Use(first, second, third))
+	require.NoError(t, h.Seal())
+	require.NoError(t, h.Init(context.Background(), config.NewSnapshot(map[string]any{
+		"mod": map[string]any{
+			"first":  map[string]any{"v": 1},
+			"second": map[string]any{"v": 1},
+			"third":  map[string]any{"v": 1},
+		},
+	})))
+
+	err := h.Reload(context.Background(), config.NewSnapshot(map[string]any{
+		"mod": map[string]any{
+			"first":  map[string]any{"v": 2},
+			"second": map[string]any{"v": 2},
+			"third":  map[string]any{"v": 2},
+		},
+	}))
+	require.Error(t, err)
+	require.Equal(t, []string{"third", "second", "first"}, rollbackLog)
+	require.Equal(t, int32(1), first.rollbacks.Load())
+	require.Equal(t, int32(1), second.rollbacks.Load())
+	require.Equal(t, int32(1), third.rollbacks.Load())
+}
+
+type blockingReloadModule struct {
+	name      string
+	path      string
+	entered   chan struct{}
+	release   chan struct{}
+	active    atomic.Int32
+	maxActive atomic.Int32
+}
+
+func (m *blockingReloadModule) Name() string       { return m.name }
+func (m *blockingReloadModule) ConfigPath() string { return m.path }
+func (m *blockingReloadModule) PrepareReload(
+	context.Context,
+	config.View,
+) (ReloadCommitter, error) {
+	active := m.active.Add(1)
+	for {
+		maxActive := m.maxActive.Load()
+		if active <= maxActive || m.maxActive.CompareAndSwap(maxActive, active) {
+			break
+		}
+	}
+	defer m.active.Add(-1)
+	select {
+	case m.entered <- struct{}{}:
+	default:
+	}
+	<-m.release
+	return reloadCommitter{}, nil
+}
+
+func TestReloadSerializesConcurrentCalls(t *testing.T) {
+	mod := &blockingReloadModule{
+		name:    "serialized",
+		path:    "mod.serialized",
+		entered: make(chan struct{}, 2),
+		release: make(chan struct{}),
+	}
+	h := NewHub()
+	require.NoError(t, h.Use(mod))
+	require.NoError(t, h.Seal())
+	require.NoError(t, h.Init(context.Background(), config.NewSnapshot(map[string]any{
+		"mod": map[string]any{"serialized": map[string]any{"v": 1}},
+	})))
+
+	results := make(chan error, 2)
+	go func() {
+		results <- h.Reload(context.Background(), config.NewSnapshot(map[string]any{
+			"mod": map[string]any{"serialized": map[string]any{"v": 2}},
+		}))
+	}()
+	require.Eventually(t, func() bool {
+		return len(mod.entered) == 1
+	}, time.Second, time.Millisecond)
+	go func() {
+		results <- h.Reload(context.Background(), config.NewSnapshot(map[string]any{
+			"mod": map[string]any{"serialized": map[string]any{"v": 3}},
+		}))
+	}()
+	time.Sleep(20 * time.Millisecond)
+	require.Equal(t, int32(1), mod.maxActive.Load())
+	close(mod.release)
+
+	require.NoError(t, <-results)
+	require.NoError(t, <-results)
+	require.Equal(t, int32(1), mod.maxActive.Load())
 }
 
 type capProvider struct {
@@ -163,7 +278,11 @@ func TestReloadPrepareFailureSetsState(t *testing.T) {
 }
 
 func TestReloadCommitFailureSetsFailedStageCommit(t *testing.T) {
-	a := &testModule{name: "a", path: "mod.a", commitErr: errors.New("commit failed")}
+	a := &testModule{
+		name:      "a",
+		path:      "mod.a",
+		commitErr: errors.New("commit failed"),
+	}
 	h := NewHub()
 	require.NoError(t, h.Use(a))
 	require.NoError(t, h.Seal())
@@ -183,7 +302,12 @@ func TestReloadCommitFailureSetsFailedStageCommit(t *testing.T) {
 }
 
 func TestReloadRollbackFailureEntersDegradedAndBlocksNextReload(t *testing.T) {
-	a := &testModule{name: "a", path: "mod.a", commitErr: errors.New("commit failed")}
+	a := &testModule{
+		name:      "a",
+		path:      "mod.a",
+		deps:      []string{"b"},
+		commitErr: errors.New("commit failed"),
+	}
 	b := &testModule{name: "b", path: "mod.b", rollbackErr: errors.New("rollback failed")}
 	h := NewHub()
 	require.NoError(t, h.Use(a, b))

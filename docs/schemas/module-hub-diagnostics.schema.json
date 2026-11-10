@@ -110,7 +110,10 @@
         "restart_required": { "type": "boolean" },
         "diverged": { "type": "boolean" },
         "failed_module": { "type": "string" },
-        "failed_stage": { "type": "string" },
+        "failed_stage": {
+          "type": "string",
+          "enum": ["", "prepare", "commit", "rollback", "finalize"]
+        },
         "last_error": { "type": "string" }
       }
     },

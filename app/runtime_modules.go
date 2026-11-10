@@ -322,28 +322,46 @@ func (m connectivityRuntimeModule) PrepareReload(
 	if err != nil {
 		return nil, err
 	}
+	preparedAdapters, err := m.app.prepareRuntimeAdapters(next)
+	if err != nil {
+		return nil, err
+	}
+	m.app.stageRuntimeAdapters(preparedAdapters)
 	return connectivityRuntimeCommitter{
-		app:             m.app,
-		next:            next,
-		restartRequired: restartRequired,
+		app:              m.app,
+		next:             next,
+		preparedAdapters: preparedAdapters,
+		restartRequired:  restartRequired,
 	}, nil
 }
 
+func (m connectivityRuntimeModule) FinalizeReload(context.Context) error {
+	return m.app.finalizePendingRuntimeAdapters()
+}
+
 type connectivityRuntimeCommitter struct {
-	app             *App
-	next            *Snapshot
-	restartRequired bool
+	app              *App
+	next             *Snapshot
+	preparedAdapters *preparedRuntimeAdapters
+	restartRequired  bool
 }
 
 func (c connectivityRuntimeCommitter) Commit(context.Context) error {
 	if c.app == nil {
 		return nil
 	}
-	c.app.setRuntimeSnapshot(c.next)
+	if err := c.app.activateRuntimeAdapters(c.preparedAdapters); err != nil {
+		return err
+	}
 	if c.restartRequired && c.app.hub != nil {
 		c.app.hub.MarkRestartRequired("connectivity.runtime")
 	}
-	return c.app.applyRuntimeAdapters(c.next)
+	return nil
 }
 
-func (connectivityRuntimeCommitter) Rollback(context.Context) error { return nil }
+func (c connectivityRuntimeCommitter) Rollback(context.Context) error {
+	if c.app == nil {
+		return nil
+	}
+	return c.app.rollbackPendingRuntimeAdapters(c.preparedAdapters)
+}

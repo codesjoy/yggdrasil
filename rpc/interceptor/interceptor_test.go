@@ -1003,3 +1003,25 @@ func TestChainWithProviders_MissingProvider(t *testing.T) {
 		assert.NoError(t, err)
 	})
 }
+
+func TestChainInterceptorsE_RejectsMissingProviders(t *testing.T) {
+	_, err := ChainUnaryClientInterceptorsWithProvidersE(
+		"svc",
+		[]string{"missing"},
+		nil,
+	)
+	require.Error(t, err)
+
+	_, err = ChainStreamClientInterceptorsWithProvidersE(
+		"svc",
+		[]string{"missing"},
+		nil,
+	)
+	require.Error(t, err)
+
+	_, err = ChainUnaryServerInterceptorsWithProvidersE([]string{"missing"}, nil)
+	require.Error(t, err)
+
+	_, err = ChainStreamServerInterceptorsWithProvidersE([]string{"missing"}, nil)
+	require.Error(t, err)
+}

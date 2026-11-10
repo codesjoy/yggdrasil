@@ -25,6 +25,9 @@ import (
 // Hub is the module runtime center.
 type Hub struct {
 	mu sync.RWMutex
+	// reloadMu serializes staged reload cycles without holding the state lock
+	// across module callbacks.
+	reloadMu sync.Mutex
 
 	modules []Module
 	index   map[string]Module

@@ -19,9 +19,11 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/codesjoy/yggdrasil/v3/admin/governor"
@@ -53,6 +55,7 @@ const (
 	lifecycleStateBusinessInstalled
 	lifecycleStateServing
 	lifecycleStateRunning
+	lifecycleStateStopping
 	lifecycleStateStopped
 )
 
@@ -117,17 +120,33 @@ var (
 type App struct {
 	name string
 
-	mu    sync.Mutex
-	state lifecycleState
+	mu                     sync.Mutex
+	state                  lifecycleState
+	lifecycleOptsInstalled bool
+	stopping               atomic.Bool
 
 	opts *options
 
 	lifecycle *lifecycleRunner
 	hub       *module.Hub
 
-	reloadMu     sync.Mutex
+	reloadMu sync.Mutex
+
+	watchMu      sync.Mutex
 	stopWatch    func()
 	watchStarted bool
+	configWake   chan struct{}
+	configStop   chan struct{}
+	configDone   chan struct{}
+
+	configPending      config.Snapshot
+	configPendingValid bool
+	configGeneration   uint64
+	configLastApplied  string
+
+	stopOnce sync.Once
+	stopDone chan struct{}
+	stopErr  error
 
 	waitDone chan struct{}
 	waitErr  error
@@ -139,6 +158,7 @@ type App struct {
 	tracerShutdown             func(context.Context) error
 	meterShutdown              func(context.Context) error
 	processDefaultsLease       *processDefaultsLease
+	pendingRuntimeAdapters     *preparedRuntimeAdapters
 
 	runtime            Runtime
 	lastPlanResult     *yassembly.Result
@@ -178,6 +198,7 @@ func New(appName string, ops ...Option) (*App, error) {
 		opts:                    opts,
 		lifecycle:               lifecycle,
 		hub:                     module.NewHub(),
+		stopDone:                make(chan struct{}),
 		installedRPCServices:    map[string]struct{}{},
 		installedHTTPRoutes:     map[string]struct{}{},
 		installedGovernorRoutes: map[string]struct{}{},
@@ -186,6 +207,7 @@ func New(appName string, ops ...Option) (*App, error) {
 
 func (a *App) buildLifecycleOptions() []lifecycleOption {
 	out := a.opts.buildLifecycleOptions()
+	out = append(out, withLifecycleBeforeStopHooks(a.beginStop))
 	if a.identityResolved {
 		out = append(out, withLifecycleIdentity(a.identity))
 	}
@@ -193,9 +215,7 @@ func (a *App) buildLifecycleOptions() []lifecycleOption {
 		out,
 		withLifecycleCleanup("runtime_adapters", a.shutdownRuntimeAdapters),
 		withLifecycleCleanup("config_watch", func(context.Context) error {
-			a.mu.Lock()
-			a.stopConfigWatchLocked()
-			a.mu.Unlock()
+			a.stopConfigWatch()
 			return nil
 		}),
 	)
@@ -203,16 +223,16 @@ func (a *App) buildLifecycleOptions() []lifecycleOption {
 }
 
 func (a *App) prepareStartLocked(ctx context.Context) error {
+	if a.stopping.Load() {
+		return errRestartUnsupported
+	}
 	switch a.state {
 	case lifecycleStateServing, lifecycleStateRunning:
 		return errApplicationAlreadyRunning
-	case lifecycleStateStopped:
+	case lifecycleStateStopping, lifecycleStateStopped:
 		return errRestartUnsupported
 	}
 	if err := a.initializeLocked(ctx); err != nil {
-		return err
-	}
-	if err := a.lifecycle.Init(a.buildLifecycleOptions()...); err != nil {
 		return err
 	}
 	a.state = lifecycleStateServing
@@ -223,18 +243,47 @@ func (a *App) prepareStartLocked(ctx context.Context) error {
 }
 
 func (a *App) ensureClientReadyLocked(ctx context.Context) error {
-	if a.state == lifecycleStateStopped {
+	if a.stopping.Load() || a.state == lifecycleStateStopping || a.state == lifecycleStateStopped {
 		return errRestartUnsupported
 	}
 	return a.initializeLocked(ctx)
 }
 
 func (a *App) stopConfigWatchLocked() {
-	if a.stopWatch == nil {
+	a.stopConfigWatch()
+}
+
+func (a *App) stopConfigWatch() {
+	a.watchMu.Lock()
+	if !a.watchStarted && a.stopWatch == nil {
+		a.watchMu.Unlock()
 		return
 	}
-	a.stopWatch()
+	stopWatch := a.stopWatch
+	stop := a.configStop
+	done := a.configDone
 	a.stopWatch = nil
+	a.watchStarted = false
+	a.watchMu.Unlock()
+
+	if stopWatch != nil {
+		stopWatch()
+	}
+	if stop != nil {
+		close(stop)
+	}
+	if done != nil {
+		<-done
+	}
+}
+
+func (a *App) beginStop(ctx context.Context) error {
+	a.stopping.Store(true)
+	a.stopConfigWatch()
+	a.reloadMu.Lock()
+	a.reloadMu.Unlock() //nolint:staticcheck // barrier for an in-flight reload.
+	_ = ctx
+	return nil
 }
 
 func (a *App) setStoppedLocked() {
@@ -258,13 +307,19 @@ func (a *App) stopResources(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	var err error
-	err = errors.Join(err, a.lifecycle.Stop(ctx))
-	err = errors.Join(err, a.shutdownRuntimeAdapters(ctx))
-	if a.opts != nil {
-		err = errors.Join(err, closeManagedConfigSources(a.opts))
-	}
-	return err
+	a.stopOnce.Do(func() {
+		var err error
+		err = errors.Join(err, a.lifecycle.Stop(ctx))
+		err = errors.Join(err, a.shutdownRuntimeAdapters(ctx))
+		if a.opts != nil {
+			err = errors.Join(err, closeManagedConfigSources(a.opts))
+			err = errors.Join(err, closeManagedConfigManager(a.opts))
+		}
+		a.stopErr = err
+		close(a.stopDone)
+	})
+	<-a.stopDone
+	return a.stopErr
 }
 
 func (a *App) reloadAsync() {
@@ -282,15 +337,26 @@ func (a *App) Start(ctx context.Context) (err error) {
 		a.mu.Unlock()
 		return err
 	}
-	done := a.waitDone
-	a.state = lifecycleStateRunning
 	a.mu.Unlock()
 
-	go func(waitDone chan struct{}) {
-		_ = waitDone
-		runErr := a.lifecycle.Run(ctx)
-		a.finishRun(runErr)
-	}(done)
+	if err = a.lifecycle.Start(ctx); err != nil {
+		if a.stopping.Load() && errors.Is(err, context.Canceled) {
+			stopErr := a.stopResources(context.Background())
+			a.finishRun(stopErr)
+			return nil
+		}
+		cleanupErr := a.stopResources(context.Background())
+		startErr := errors.Join(err, cleanupErr)
+		a.finishRun(startErr)
+		return startErr
+	}
+	a.mu.Lock()
+	a.state = lifecycleStateRunning
+	a.mu.Unlock()
+	a.wakeConfigWatch()
+	go func() {
+		a.finishRun(a.lifecycle.Wait())
+	}()
 	return nil
 }
 
@@ -313,12 +379,18 @@ func (a *App) Wait() error {
 
 // Stop stops the application.
 func (a *App) Stop(ctx context.Context) error {
+	a.stopping.Store(true)
 	a.mu.Lock()
-	a.stopConfigWatchLocked()
-	a.setStoppedLocked()
+	if a.state != lifecycleStateNew {
+		a.state = lifecycleStateStopping
+	}
 	a.mu.Unlock()
 
-	return a.stopResources(ctx)
+	err := errors.Join(a.beginStop(ctx), a.stopResources(ctx))
+	a.mu.Lock()
+	a.setStoppedLocked()
+	a.mu.Unlock()
+	return err
 }
 
 // NewClient creates a client for target service.
@@ -354,7 +426,7 @@ func (a *App) initializeLocked(ctx context.Context) (err error) {
 		lifecycleStateServing,
 		lifecycleStateRunning:
 		return nil
-	case lifecycleStateStopped:
+	case lifecycleStateStopping, lifecycleStateStopped:
 		return errRestartUnsupported
 	}
 	if a.opts != nil && a.opts.processDefaults && a.processDefaultsLease == nil {
@@ -366,6 +438,9 @@ func (a *App) initializeLocked(ctx context.Context) (err error) {
 	defer func() {
 		if !cleanupNeeded || err == nil {
 			return
+		}
+		if installErr := a.installLifecycleOptions(); installErr != nil {
+			err = errors.Join(err, installErr)
 		}
 		a.state = lifecycleStateStopped
 		if cleanupErr := a.stopResources(context.Background()); cleanupErr != nil {
@@ -417,7 +492,10 @@ func (a *App) initializeLocked(ctx context.Context) (err error) {
 		err = wrapAssemblyStageError("prepare", err)
 		return err
 	}
-	a.initRegistry()
+	if err = a.initRegistry(); err != nil {
+		err = wrapAssemblyStageError("prepare", err)
+		return err
+	}
 	if err = a.initServer(); err != nil {
 		err = wrapAssemblyStageError("prepare", err)
 		return err
@@ -433,24 +511,150 @@ func (a *App) initializeLocked(ctx context.Context) (err error) {
 		},
 	}
 	a.installDiagnosticsRoutes()
+	if err = a.installLifecycleOptions(); err != nil {
+		err = wrapAssemblyStageError("prepare", err)
+		return err
+	}
 	a.state = lifecycleStateInitialized
 	cleanupNeeded = false
 	return nil
 }
 
+func (a *App) installLifecycleOptions() error {
+	if a.lifecycleOptsInstalled {
+		return nil
+	}
+	if err := a.lifecycle.Init(a.buildLifecycleOptions()...); err != nil {
+		return err
+	}
+	a.lifecycleOptsInstalled = true
+	return nil
+}
+
 func (a *App) installConfigWatchLocked() {
+	a.watchMu.Lock()
 	if a.watchStarted || a.opts == nil || a.opts.configManager == nil {
+		a.watchMu.Unlock()
 		return
 	}
-	first := true
-	a.stopWatch = a.opts.configManager.Watch(nil, func(config.Snapshot) {
-		if first {
-			first = false
-			return
-		}
-		a.reloadAsync()
-	})
+	a.configWake = make(chan struct{}, 1)
+	a.configStop = make(chan struct{})
+	a.configDone = make(chan struct{})
+	a.configLastApplied = string(a.opts.configManager.Snapshot().Bytes())
+	a.configPendingValid = false
 	a.watchStarted = true
+	a.watchMu.Unlock()
+
+	stopWatch := a.opts.configManager.WatchWithError(
+		nil,
+		a.queueConfigSnapshot,
+		a.handleConfigWatchError,
+	)
+	a.watchMu.Lock()
+	a.stopWatch = stopWatch
+	go a.runConfigWatcher(a.configStop, a.configWake, a.configDone)
+	a.watchMu.Unlock()
+}
+
+func (a *App) queueConfigSnapshot(snapshot config.Snapshot) {
+	a.watchMu.Lock()
+	a.configPending = snapshot
+	a.configPendingValid = true
+	a.configGeneration++
+	wake := a.configWake
+	a.watchMu.Unlock()
+	signalChannel(wake)
+}
+
+func (a *App) handleConfigWatchError(err error) {
+	if err == nil {
+		return
+	}
+	_ = a.recordReloadError(wrapAssemblyStageError(
+		"reload",
+		fmt.Errorf("config watch: %w", err),
+	))
+}
+
+func (a *App) wakeConfigWatch() {
+	a.watchMu.Lock()
+	wake := a.configWake
+	a.watchMu.Unlock()
+	signalChannel(wake)
+}
+
+func signalChannel(channel chan struct{}) {
+	if channel == nil {
+		return
+	}
+	select {
+	case channel <- struct{}{}:
+	default:
+	}
+}
+
+func (a *App) runConfigWatcher(
+	stop <-chan struct{},
+	wake <-chan struct{},
+	done chan<- struct{},
+) {
+	defer close(done)
+	for {
+		select {
+		case <-stop:
+			return
+		case <-wake:
+			a.processPendingConfig()
+		}
+	}
+}
+
+func (a *App) processPendingConfig() {
+	a.mu.Lock()
+	running := a.state == lifecycleStateRunning && !a.stopping.Load()
+	manager := a.opts.configManager
+	a.mu.Unlock()
+	if !running || manager == nil {
+		return
+	}
+
+	a.watchMu.Lock()
+	if !a.configPendingValid {
+		a.watchMu.Unlock()
+		return
+	}
+	generation := a.configGeneration
+	applied := a.configLastApplied
+	a.watchMu.Unlock()
+
+	snapshot := manager.Snapshot()
+	if string(snapshot.Bytes()) == applied {
+		a.watchMu.Lock()
+		if a.configGeneration == generation {
+			a.configPendingValid = false
+		}
+		a.watchMu.Unlock()
+		return
+	}
+
+	err := a.Reload(context.Background())
+	a.mu.Lock()
+	stillRunning := a.state == lifecycleStateRunning && !a.stopping.Load()
+	a.mu.Unlock()
+
+	a.watchMu.Lock()
+	if err == nil && stillRunning {
+		a.configLastApplied = string(snapshot.Bytes())
+	}
+	next := a.configGeneration != generation
+	if !next {
+		a.configPendingValid = false
+	}
+	wake := a.configWake
+	a.watchMu.Unlock()
+	if next {
+		signalChannel(wake)
+	}
 }
 
 func (a *App) initHub(ctx context.Context) error {
@@ -488,6 +692,15 @@ func initGovernor(opts *options) error {
 		opts.configManager,
 	)
 	if err != nil {
+		if errors.Is(err, governor.ErrInsecureExposure) {
+			return yassembly.NewError(
+				yassembly.ErrInsecureAdminExposure,
+				"prepare",
+				"governor non-loopback exposure requires authentication",
+				err,
+				nil,
+			)
+		}
 		return err
 	}
 	opts.governor = svr

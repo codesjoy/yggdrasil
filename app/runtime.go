@@ -106,15 +106,42 @@ func runtimeShutdown(v any) func(context.Context) error {
 	}
 }
 
+type preparedRuntimeAdapters struct {
+	snapshot *Snapshot
+
+	previousSnapshot *Snapshot
+	oldTracer        func(context.Context) error
+	oldMeter         func(context.Context) error
+
+	tracerShutdown func(context.Context) error
+	meterShutdown  func(context.Context) error
+	lease          *processDefaultsLease
+
+	activated  bool
+	finalized  bool
+	rolledBack bool
+}
+
 func (a *App) applyRuntimeAdapters(snapshot *Snapshot) error {
+	prepared, err := a.prepareRuntimeAdapters(snapshot)
+	if err != nil {
+		return err
+	}
+	if err = a.activateRuntimeAdapters(prepared); err != nil {
+		return err
+	}
+	return a.finalizeRuntimeAdapters(prepared)
+}
+
+func (a *App) prepareRuntimeAdapters(snapshot *Snapshot) (*preparedRuntimeAdapters, error) {
 	if snapshot == nil {
-		return errors.New("runtime snapshot is nil")
+		return nil, errors.New("runtime snapshot is nil")
 	}
 
 	snapshot.Identity = publicIdentity(a.identity)
 	handler, err := snapshot.BuildDefaultLoggerHandler()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	snapshot.Logger = slog.New(handler)
 	remoteLoggerLvStr := snapshot.Resolved.Logging.RemoteLevel
@@ -123,27 +150,24 @@ func (a *App) applyRuntimeAdapters(snapshot *Snapshot) error {
 	}
 	var remoteLoggerLv slog.Level
 	if err = remoteLoggerLv.UnmarshalText([]byte(remoteLoggerLvStr)); err != nil {
-		return err
+		return nil, err
 	}
 	snapshot.RemoteLogger = remotelog.New(remoteLoggerLv, handler)
 	snapshot.TextMapPropagator = xotel.DefaultPropagator()
 
-	oldTracer := a.swapTracerShutdown(nil)
+	prepared := &preparedRuntimeAdapters{snapshot: snapshot}
 	if tp, ok := snapshot.BuildTracerProvider(a.identity.AppName); ok {
 		snapshot.TracerProvider = tp
-		a.swapTracerShutdown(runtimeShutdown(tp))
+		prepared.tracerShutdown = runtimeShutdown(tp)
 	} else {
 		snapshot.TracerProvider = tracenoop.NewTracerProvider()
-		a.swapTracerShutdown(nil)
 	}
 
-	oldMeter := a.swapMeterShutdown(nil)
 	if mp, ok := snapshot.BuildMeterProvider(a.identity.AppName); ok {
 		snapshot.MeterProvider = mp
-		a.swapMeterShutdown(runtimeShutdown(mp))
+		prepared.meterShutdown = runtimeShutdown(mp)
 	} else {
 		snapshot.MeterProvider = metricnoop.NewMeterProvider()
-		a.swapMeterShutdown(nil)
 	}
 
 	statsBuilders := internalruntime.BindStatsHandlerBuildersWithRuntime(
@@ -164,21 +188,110 @@ func (a *App) applyRuntimeAdapters(snapshot *Snapshot) error {
 		statsBuilders,
 		false,
 	)
-	if a.opts != nil && a.opts.processDefaults && a.processDefaultsLease != nil {
-		a.processDefaultsLease.install(snapshot)
+	if a.opts != nil && a.opts.processDefaults {
+		a.runtimeMu.RLock()
+		prepared.lease = a.processDefaultsLease
+		a.runtimeMu.RUnlock()
 	}
-	if oldTracer != nil {
-		if shutdownErr := oldTracer(context.Background()); shutdownErr != nil {
+	return prepared, nil
+}
+
+func (a *App) activateRuntimeAdapters(prepared *preparedRuntimeAdapters) error {
+	if prepared == nil || prepared.snapshot == nil {
+		return errors.New("prepared runtime adapters are required")
+	}
+	a.runtimeMu.Lock()
+	if !prepared.activated {
+		prepared.previousSnapshot = a.runtimeSnapshot
+		prepared.oldTracer = a.tracerShutdown
+		prepared.oldMeter = a.meterShutdown
+		a.runtimeSnapshot = prepared.snapshot
+		a.tracerShutdown = prepared.tracerShutdown
+		a.meterShutdown = prepared.meterShutdown
+		prepared.activated = true
+	}
+	a.runtimeMu.Unlock()
+	prepared.lease.install(prepared.snapshot)
+	return nil
+}
+
+func (a *App) rollbackRuntimeAdapters(prepared *preparedRuntimeAdapters) error {
+	if prepared == nil || prepared.rolledBack {
+		return nil
+	}
+	prepared.rolledBack = true
+	if prepared.activated {
+		a.runtimeMu.Lock()
+		a.runtimeSnapshot = prepared.previousSnapshot
+		a.tracerShutdown = prepared.oldTracer
+		a.meterShutdown = prepared.oldMeter
+		a.runtimeMu.Unlock()
+		prepared.lease.install(prepared.previousSnapshot)
+	}
+	return shutdownPreparedAdapters(
+		context.Background(),
+		prepared.tracerShutdown,
+		prepared.meterShutdown,
+	)
+}
+
+func (a *App) finalizeRuntimeAdapters(prepared *preparedRuntimeAdapters) error {
+	if prepared == nil || prepared.finalized {
+		return nil
+	}
+	prepared.finalized = true
+	return shutdownPreparedAdapters(
+		context.Background(),
+		prepared.oldTracer,
+		prepared.oldMeter,
+	)
+}
+
+func (a *App) stageRuntimeAdapters(prepared *preparedRuntimeAdapters) {
+	a.runtimeMu.Lock()
+	a.pendingRuntimeAdapters = prepared
+	a.runtimeMu.Unlock()
+}
+
+func (a *App) rollbackPendingRuntimeAdapters(
+	prepared *preparedRuntimeAdapters,
+) error {
+	err := a.rollbackRuntimeAdapters(prepared)
+	a.runtimeMu.Lock()
+	if a.pendingRuntimeAdapters == prepared {
+		a.pendingRuntimeAdapters = nil
+	}
+	a.runtimeMu.Unlock()
+	return err
+}
+
+func (a *App) finalizePendingRuntimeAdapters() error {
+	a.runtimeMu.Lock()
+	prepared := a.pendingRuntimeAdapters
+	a.pendingRuntimeAdapters = nil
+	a.runtimeMu.Unlock()
+	return a.finalizeRuntimeAdapters(prepared)
+}
+
+func shutdownPreparedAdapters(
+	ctx context.Context,
+	tracerShutdown func(context.Context) error,
+	meterShutdown func(context.Context) error,
+) error {
+	var err error
+	if tracerShutdown != nil {
+		if shutdownErr := tracerShutdown(ctx); shutdownErr != nil {
+			err = errors.Join(err, shutdownErr)
 			slog.Warn("shutdown previous tracer provider failed", slog.Any("error", shutdownErr))
 		}
 	}
-	if oldMeter != nil {
-		if shutdownErr := oldMeter(context.Background()); shutdownErr != nil {
+	if meterShutdown != nil {
+		if shutdownErr := meterShutdown(ctx); shutdownErr != nil {
+			err = errors.Join(err, shutdownErr)
 			slog.Warn("shutdown previous meter provider failed", slog.Any("error", shutdownErr))
 		}
 	}
-
-	return nil
+	return err
 }
 
 func (a *App) swapTracerShutdown(next func(context.Context) error) func(context.Context) error {
@@ -199,15 +312,20 @@ func (a *App) swapMeterShutdown(next func(context.Context) error) func(context.C
 
 func (a *App) shutdownRuntimeAdapters(ctx context.Context) error {
 	a.runtimeMu.Lock()
+	pending := a.pendingRuntimeAdapters
 	tracerShutdown := a.tracerShutdown
 	meterShutdown := a.meterShutdown
 	lease := a.processDefaultsLease
+	a.pendingRuntimeAdapters = nil
 	a.tracerShutdown = nil
 	a.meterShutdown = nil
 	a.processDefaultsLease = nil
 	a.runtimeMu.Unlock()
 
 	var err error
+	if pending != nil {
+		err = errors.Join(err, a.rollbackRuntimeAdapters(pending))
+	}
 	if lease != nil {
 		err = errors.Join(err, lease.release(ctx))
 	}
@@ -222,26 +340,25 @@ func (a *App) shutdownRuntimeAdapters(ctx context.Context) error {
 
 // --- initRegistry / initServer ---
 
-func (a *App) initRegistry() {
+func (a *App) initRegistry() error {
 	if a == nil || a.opts == nil {
-		return
+		return nil
 	}
 	snapshot := a.currentRuntimeSnapshot()
 	if snapshot == nil {
-		return
+		return nil
 	}
 	typeName := snapshot.Resolved.Discovery.Registry.Type
 	if typeName == "" {
-		return
+		return nil
 	}
 	r, err := snapshot.NewRegistry()
 	if err != nil {
-		slog.Warn(
-			"fault to initialize registry",
-			slog.String("type", typeName),
-			slog.Any("error", err),
+		return fmt.Errorf(
+			"initialize registry %q: %w",
+			typeName,
+			err,
 		)
-		return
 	}
 	a.opts.registry = r
 	if c, ok := r.(io.Closer); ok {
@@ -252,6 +369,7 @@ func (a *App) initRegistry() {
 			}),
 		)
 	}
+	return nil
 }
 
 func (a *App) initServer() error {
@@ -466,18 +584,34 @@ func (a *App) buildRuntimeSnapshot() (*Snapshot, bool, error) {
 	}
 
 	loggingCfg := internalruntime.LoggingInterceptorSource(resolved)
-	unaryServerBuiltins := internalruntime.MapUnaryServerProviders(
-		intlogging.BuiltinUnaryServerProvidersWithConfig(loggingCfg),
+	unaryServerProvidersBuiltin, err := intlogging.BuiltinUnaryServerProvidersWithConfigE(
+		loggingCfg,
 	)
-	streamServerBuiltins := internalruntime.MapStreamServerProviders(
-		intlogging.BuiltinStreamServerProvidersWithConfig(loggingCfg),
+	if err != nil {
+		return nil, false, err
+	}
+	unaryServerBuiltins := internalruntime.MapUnaryServerProviders(unaryServerProvidersBuiltin)
+	streamServerProvidersBuiltin, err := intlogging.BuiltinStreamServerProvidersWithConfigE(
+		loggingCfg,
 	)
-	unaryClientBuiltins := internalruntime.MapUnaryClientProviders(
-		intlogging.BuiltinUnaryClientProvidersWithConfig(loggingCfg),
+	if err != nil {
+		return nil, false, err
+	}
+	streamServerBuiltins := internalruntime.MapStreamServerProviders(streamServerProvidersBuiltin)
+	unaryClientProvidersBuiltin, err := intlogging.BuiltinUnaryClientProvidersWithConfigE(
+		loggingCfg,
 	)
-	streamClientBuiltins := internalruntime.MapStreamClientProviders(
-		intlogging.BuiltinStreamClientProvidersWithConfig(loggingCfg),
+	if err != nil {
+		return nil, false, err
+	}
+	unaryClientBuiltins := internalruntime.MapUnaryClientProviders(unaryClientProvidersBuiltin)
+	streamClientProvidersBuiltin, err := intlogging.BuiltinStreamClientProvidersWithConfigE(
+		loggingCfg,
 	)
+	if err != nil {
+		return nil, false, err
+	}
+	streamClientBuiltins := internalruntime.MapStreamClientProviders(streamClientProvidersBuiltin)
 
 	unaryServerProviders, err := internalruntime.ResolveOrderedRuntimeCapabilities[interceptor.UnaryServerInterceptorProvider](
 		a.hub,

@@ -22,8 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/codesjoy/yggdrasil/v3/admin/governor"
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/internal/defers"
@@ -77,7 +75,20 @@ func (e endpoint) Metadata() map[string]string {
 	return e.metadata
 }
 
-var errGovernorRequired = errors.New("application governor is required")
+var (
+	errGovernorRequired = errors.New("application governor is required")
+	errRunnerStopped    = errors.New("lifecycle runner is stopped")
+)
+
+type runnerState uint32
+
+const (
+	runnerStateIdle runnerState = iota
+	runnerStateStarting
+	runnerStateRunning
+	runnerStateStopping
+	runnerStateStopped
+)
 
 // Option mutates one runner before startup.
 type Option func(*Runner) error
@@ -172,10 +183,21 @@ func WithCleanup(name string, fn func(context.Context) error) Option {
 
 // Runner orchestrates startup, registration, and shutdown sequencing.
 type Runner struct {
-	runOnce  sync.Once
 	stopOnce sync.Once
 
-	mu sync.Mutex
+	mu    sync.Mutex
+	state runnerState
+
+	startDone   chan struct{}
+	startErr    error
+	startCancel context.CancelFunc
+	stopDone    chan struct{}
+	stopErr     error
+
+	serveWG       sync.WaitGroup
+	serveDone     chan struct{}
+	serveDoneOnce sync.Once
+	runErr        error
 
 	optionsMu sync.RWMutex
 	running   bool
@@ -204,7 +226,9 @@ func (runner *Runner) setRunning(running bool) {
 // New creates one lifecycle runner.
 func New(opts ...Option) (*Runner, error) {
 	runner := &Runner{
-		hooks: map[Stage]*defers.Defer{},
+		hooks:     map[Stage]*defers.Defer{},
+		stopDone:  make(chan struct{}),
+		serveDone: make(chan struct{}),
 	}
 	for stage := Stage(1); stage < StageMax; stage++ {
 		runner.hooks[stage] = defers.NewDefer()
@@ -233,20 +257,6 @@ func (runner *Runner) Init(opts ...Option) error {
 	return nil
 }
 
-// Stop stops the lifecycle exactly once.
-func (runner *Runner) Stop(ctx context.Context) error {
-	var err error
-	runner.stopOnce.Do(func() {
-		runner.setRunning(false)
-
-		ctx, cancel := runner.withStopTimeout(ctx)
-		defer cancel()
-
-		err = runner.runStopSequence(ctx)
-	})
-	return err
-}
-
 func (runner *Runner) withStopTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -262,13 +272,28 @@ func (runner *Runner) runStopSequence(ctx context.Context) error {
 	err = errors.Join(err, runner.runHooks(ctx, StageBeforeStop))
 	err = errors.Join(err, runner.deregister(ctx))
 	err = errors.Join(err, runner.stopServers(ctx))
+	err = errors.Join(err, runner.waitForServeLoops(ctx))
 	err = errors.Join(err, runner.runHooks(ctx, StageCleanup))
 	err = errors.Join(err, runner.runHooks(ctx, StageAfterStop))
 	return err
 }
 
-// Run starts the configured lifecycle.
-func (runner *Runner) Run(ctx context.Context) error {
+func (runner *Runner) waitForServeLoops(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		runner.serveWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// Start starts the configured lifecycle and waits for startup to complete.
+func (runner *Runner) Start(ctx context.Context) error {
 	if runner.governor == nil {
 		return errGovernorRequired
 	}
@@ -276,17 +301,183 @@ func (runner *Runner) Run(ctx context.Context) error {
 		ctx = context.Background()
 	}
 
-	var err error
-	runner.runOnce.Do(func() {
-		runner.setRunning(true)
+	runner.mu.Lock()
+	switch runner.state {
+	case runnerStateIdle:
+		runner.state = runnerStateStarting
+		runner.startDone = make(chan struct{})
+		runner.startErr = nil
+		runner.runErr = nil
+		startCtx, cancel := context.WithCancel(ctx)
+		runner.startCancel = cancel
+		runner.mu.Unlock()
 
-		if err = runner.startServers(ctx); err != nil {
-			return
+		err := runner.startSequence(startCtx)
+
+		runner.mu.Lock()
+		startCancel := runner.startCancel
+		runner.startCancel = nil
+		stopRequested := runner.state == runnerStateStopping
+		if err == nil && stopRequested {
+			err = context.Canceled
 		}
-		slog.Info("app shutdown")
+		runner.startErr = err
+		if err == nil {
+			runner.state = runnerStateRunning
+			runner.setRunning(true)
+		} else {
+			runner.state = runnerStateStopping
+			runner.setRunning(false)
+		}
+		close(runner.startDone)
+		runner.mu.Unlock()
+
+		if startCancel != nil {
+			startCancel()
+		}
+		if err != nil {
+			return errors.Join(err, runner.Stop(context.WithoutCancel(ctx)))
+		}
+		shutdownCtx := context.WithoutCancel(ctx)
+		go func() {
+			<-runner.serveDone
+			if stopErr := runner.Stop(shutdownCtx); stopErr != nil {
+				slog.Error("failed to stop after server exit", slog.Any("error", stopErr))
+			}
+		}()
+		return nil
+	case runnerStateStarting:
+		startDone := runner.startDone
+		runner.mu.Unlock()
+		<-startDone
+		runner.mu.Lock()
+		defer runner.mu.Unlock()
+		return runner.startErr
+	case runnerStateRunning:
+		runner.mu.Unlock()
+		return nil
+	case runnerStateStopping, runnerStateStopped:
+		stopDone := runner.stopDone
+		runner.mu.Unlock()
+		<-stopDone
+		return errRunnerStopped
+	default:
+		runner.mu.Unlock()
+		return errRunnerStopped
+	}
+}
+
+// Wait blocks until shutdown has fully completed.
+func (runner *Runner) Wait() error {
+	runner.mu.Lock()
+	if runner.state == runnerStateIdle {
+		runner.mu.Unlock()
+		_ = runner.Stop(context.Background())
+	}
+	stopDone := runner.stopDone
+	runner.mu.Unlock()
+
+	<-stopDone
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return errors.Join(runner.runErr, runner.stopErr)
+}
+
+// Stop stops the lifecycle exactly once and caches the first result.
+func (runner *Runner) Stop(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	runner.mu.Lock()
+	var startDone <-chan struct{}
+	var cancel context.CancelFunc
+	switch runner.state {
+	case runnerStateIdle:
+		runner.state = runnerStateStopping
+	case runnerStateStarting:
+		runner.state = runnerStateStopping
+		startDone = runner.startDone
+		cancel = runner.startCancel
+	case runnerStateRunning:
+		runner.state = runnerStateStopping
+	case runnerStateStopping, runnerStateStopped:
+	}
+	runner.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	if startDone != nil {
+		select {
+		case <-startDone:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	runner.stopOnce.Do(func() {
+		runner.setRunning(false)
+		stopCtx, cancelStop := runner.withStopTimeout(ctx)
+		defer cancelStop()
+
+		err := runner.runStopSequence(stopCtx)
+		runner.mu.Lock()
+		runner.stopErr = err
+		runner.state = runnerStateStopped
+		close(runner.stopDone)
+		runner.mu.Unlock()
 	})
 
-	return err
+	<-runner.stopDone
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.stopErr
+}
+
+// Run starts the configured lifecycle and blocks until shutdown completes.
+func (runner *Runner) Run(ctx context.Context) error {
+	if err := runner.Start(ctx); err != nil {
+		return err
+	}
+	return runner.Wait()
+}
+
+func (runner *Runner) startSequence(ctx context.Context) error {
+	if runner.governor == nil {
+		return errGovernorRequired
+	}
+	if err := runner.runHooks(ctx, StageBeforeStart); err != nil {
+		return err
+	}
+
+	mainStarted := make(chan struct{}, 1)
+	mainResult := make(chan error, 1)
+	if runner.server != nil {
+		runner.launchServe("main server", func() error {
+			return runner.server.Serve(mainStarted)
+		}, mainResult)
+	} else {
+		mainStarted <- struct{}{}
+		mainResult <- nil
+	}
+	runner.launchServe("governor", runner.governor.Serve, nil)
+	for index, item := range runner.internalServers {
+		index := index
+		internalServer := item
+		runner.launchServe(fmt.Sprintf("internal server[%d]", index), internalServer.Serve, nil)
+	}
+
+	if err := runner.waitForMainServer(ctx, mainStarted, mainResult); err != nil {
+		return err
+	}
+	if err := runner.waitForGovernor(ctx); err != nil {
+		return err
+	}
+	if err := runner.registerWithContext(ctx); err != nil {
+		return fmt.Errorf("register application: %w", err)
+	}
+	return nil
 }
 
 func (runner *Runner) runHooks(ctx context.Context, stage Stage) error {
@@ -297,89 +488,74 @@ func (runner *Runner) runHooks(ctx context.Context, stage Stage) error {
 	return hooks.Done(ctx)
 }
 
-func (runner *Runner) newStopAsyncOnFailure() func() {
-	var stopOnce sync.Once
-	return func() {
-		stopOnce.Do(func() {
-			go func() {
-				if err := runner.Stop(context.Background()); err != nil {
-					slog.Error(
-						"fault to stop application after serve failure",
-						slog.Any("error", err),
-					)
-				}
-			}()
-		})
-	}
-}
-
-func (runner *Runner) startManagedServer(
-	group *errgroup.Group,
-	stopAsync func(),
+func (runner *Runner) launchServe(
 	name string,
 	serve func() error,
+	result chan<- error,
 ) {
-	group.Go(func() error {
-		if err := serve(); err != nil {
-			stopAsync()
-			return fmt.Errorf("%s: %w", name, err)
+	runner.serveWG.Add(1)
+	go func() {
+		defer runner.serveWG.Done()
+		err := serve()
+		if result != nil {
+			result <- err
+		}
+		if err != nil {
+			runner.noteServeExit(fmt.Errorf("%s: %w", name, err))
+		}
+	}()
+}
+
+func (runner *Runner) noteServeExit(err error) {
+	runner.mu.Lock()
+	switch runner.state {
+	case runnerStateStarting, runnerStateRunning:
+		runner.runErr = errors.Join(runner.runErr, err)
+	}
+	runner.mu.Unlock()
+	runner.serveDoneOnce.Do(func() {
+		close(runner.serveDone)
+	})
+}
+
+func (runner *Runner) waitForMainServer(
+	ctx context.Context,
+	started <-chan struct{},
+	result <-chan error,
+) error {
+	select {
+	case _, ok := <-started:
+		if ok {
+			return nil
+		}
+		select {
+		case err := <-result:
+			if err == nil {
+				return errors.New("main server exited during startup")
+			}
+			return fmt.Errorf("main server startup failed: %w", err)
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (runner *Runner) waitForGovernor(ctx context.Context) error {
+	result := make(chan error, 1)
+	go func() {
+		result <- runner.governor.WaitStarted(ctx)
+	}()
+	select {
+	case err := <-result:
+		if err != nil {
+			return fmt.Errorf("wait governor startup: %w", err)
 		}
 		return nil
-	})
-}
-
-func (runner *Runner) registerAfterStartup(
-	serverStartedCh <-chan struct{},
-	stopAsync func(),
-) error {
-	if _, ok := <-serverStartedCh; !ok {
-		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := runner.governor.WaitStarted(ctx); err != nil {
-		stopAsync()
-		return fmt.Errorf("wait governor startup: %w", err)
-	}
-	if err := runner.register(); err != nil {
-		stopAsync()
-		return fmt.Errorf("register application: %w", err)
-	}
-	return nil
-}
-
-func (runner *Runner) startServers(ctx context.Context) error {
-	if runner.governor == nil {
-		return errGovernorRequired
-	}
-	if err := runner.runHooks(ctx, StageBeforeStart); err != nil {
-		return err
-	}
-
-	var group errgroup.Group
-	serverStartedCh := make(chan struct{}, 1)
-	stopAsync := runner.newStopAsyncOnFailure()
-
-	if runner.server != nil {
-		runner.startManagedServer(&group, stopAsync, "main server", func() error {
-			return runner.server.Serve(serverStartedCh)
-		})
-	} else {
-		serverStartedCh <- struct{}{}
-	}
-
-	runner.startManagedServer(&group, stopAsync, "governor", runner.governor.Serve)
-
-	for _, item := range runner.internalServers {
-		internalServer := item
-		runner.startManagedServer(&group, stopAsync, "internal server", internalServer.Serve)
-	}
-
-	group.Go(func() error {
-		return runner.registerAfterStartup(serverStartedCh, stopAsync)
-	})
-
-	return group.Wait()
 }
 
 func attrsToAny(attrs ...slog.Attr) []any {
@@ -411,33 +587,57 @@ func stopManagedComponent(
 func (runner *Runner) stopServers(ctx context.Context) error {
 	slog.Info("stopping servers")
 
-	var group errgroup.Group
+	type stopTarget struct {
+		name  string
+		stop  func(context.Context) error
+		attrs []slog.Attr
+	}
+	targets := make([]stopTarget, 0, len(runner.internalServers)+2)
 	if runner.server != nil {
-		group.Go(func() error {
-			return stopManagedComponent(ctx, "main server", runner.server.Stop)
+		targets = append(targets, stopTarget{
+			name: "main server",
+			stop: runner.server.Stop,
 		})
 	}
 
 	for index, item := range runner.internalServers {
-		index := index
-		internalServer := item
-		group.Go(func() error {
-			return stopManagedComponent(
-				ctx,
-				"internal server",
-				internalServer.Stop,
-				slog.Int("index", index),
-			)
+		targets = append(targets, stopTarget{
+			name:  "internal server",
+			stop:  item.Stop,
+			attrs: []slog.Attr{slog.Int("index", index)},
 		})
 	}
 
 	if runner.governor != nil {
-		group.Go(func() error {
-			return stopManagedComponent(ctx, "governor", runner.governor.Shutdown)
+		targets = append(targets, stopTarget{
+			name: "governor",
+			stop: runner.governor.Shutdown,
 		})
 	}
 
-	if err := group.Wait(); err != nil {
+	errs := make([]error, len(targets))
+	var wg sync.WaitGroup
+	for index := range targets {
+		index := index
+		target := targets[index]
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs[index] = stopManagedComponent(
+				ctx,
+				target.name,
+				target.stop,
+				target.attrs...,
+			)
+		}()
+	}
+	wg.Wait()
+
+	var err error
+	for _, stopErr := range errs {
+		err = errors.Join(err, stopErr)
+	}
+	if err != nil {
 		return fmt.Errorf("error stopping servers: %w", err)
 	}
 	slog.Info("all servers stopped successfully")

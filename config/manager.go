@@ -16,6 +16,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"sync"
@@ -48,10 +49,13 @@ type layer struct {
 }
 
 type watcher struct {
-	id   uint64
-	path []string
-	fn   func(Snapshot)
+	id      uint64
+	path    []string
+	fn      func(Snapshot)
+	onError func(error)
 }
+
+var errManagerClosed = errors.New("config manager is closed")
 
 // Manager owns layered configuration sources and a current immutable snapshot.
 type Manager struct {
@@ -64,6 +68,7 @@ type Manager struct {
 	layers   map[string]layer
 	order    []string
 	watchers []watcher
+	watchWG  sync.WaitGroup
 
 	snapshotMap map[string]any
 	snapshot    atomic.Value
@@ -96,6 +101,12 @@ func (m *Manager) Bytes() []byte {
 
 // LoadLayer reads a source into a named layer and watches it when supported.
 func (m *Manager) LoadLayer(name string, priority Priority, src source.Source) error {
+	m.mu.Lock()
+	closed := m.closed
+	m.mu.Unlock()
+	if closed {
+		return errManagerClosed
+	}
 	if name == "" {
 		return errors.New("config layer name is required")
 	}
@@ -124,13 +135,19 @@ func (m *Manager) LoadLayer(name string, priority Priority, src source.Source) e
 		}
 	}
 
-	oldSrc, oldStop, notify := m.commitLayer(name, layer{
+	oldSrc, oldStop, notify, committed := m.commitLayer(name, layer{
 		name:     name,
 		priority: priority,
 		data:     normalized,
 		src:      src,
 		stop:     stop,
 	})
+	if !committed {
+		if stop != nil {
+			close(stop)
+		}
+		return errManagerClosed
+	}
 	if oldStop != nil {
 		close(oldStop)
 	}
@@ -140,7 +157,15 @@ func (m *Manager) LoadLayer(name string, priority Priority, src source.Source) e
 	m.dispatch(notify)
 
 	if changeCh != nil {
-		go m.watchLayer(name, changeCh, stop)
+		m.mu.Lock()
+		active := !m.closed
+		if active {
+			m.watchWG.Add(1)
+		}
+		m.mu.Unlock()
+		if active {
+			go m.watchLayer(name, changeCh, stop)
+		}
 	}
 	return nil
 }
@@ -169,6 +194,7 @@ func (m *Manager) Close() error {
 			err = errors.Join(err, item.src.Close())
 		}
 	}
+	m.watchWG.Wait()
 	return err
 }
 
@@ -177,9 +203,13 @@ type notification struct {
 	snapshot Snapshot
 }
 
-func (m *Manager) watch(path []string, fn func(Snapshot)) func() {
+func (m *Manager) watch(path []string, fn func(Snapshot), onError ...func(error)) func() {
 	if fn == nil {
 		return func() {}
+	}
+	var errorFn func(error)
+	if len(onError) > 0 {
+		errorFn = onError[0]
 	}
 
 	m.mu.Lock()
@@ -190,7 +220,12 @@ func (m *Manager) watch(path []string, fn func(Snapshot)) func() {
 	m.nextWatchID++
 	id := m.nextWatchID
 	storedPath := append([]string(nil), path...)
-	m.watchers = append(m.watchers, watcher{id: id, path: storedPath, fn: fn})
+	m.watchers = append(m.watchers, watcher{
+		id:      id,
+		path:    storedPath,
+		fn:      fn,
+		onError: errorFn,
+	})
 	snapshot := NewSnapshot(Lookup(m.snapshotMap, storedPath...))
 	m.mu.Unlock()
 
@@ -211,7 +246,18 @@ func (m *Manager) Watch(path []string, fn func(Snapshot)) func() {
 	return m.watch(path, fn)
 }
 
+// WatchWithError subscribes to changes and reports source decode errors.
+// The success callback is invoked once immediately with the current snapshot.
+func (m *Manager) WatchWithError(
+	path []string,
+	fn func(Snapshot),
+	onError func(error),
+) func() {
+	return m.watch(path, fn, onError)
+}
+
 func (m *Manager) watchLayer(name string, changeCh <-chan source.Data, stop <-chan struct{}) {
+	defer m.watchWG.Done()
 	for {
 		select {
 		case <-stop:
@@ -222,6 +268,11 @@ func (m *Manager) watchLayer(name string, changeCh <-chan source.Data, stop <-ch
 			}
 			normalized, err := decodeSourceData(change)
 			if err != nil {
+				m.dispatchError(fmt.Errorf(
+					"config layer %q watch decode failed: %w",
+					name,
+					err,
+				))
 				continue
 			}
 			m.replaceLayerData(name, normalized)
@@ -230,18 +281,18 @@ func (m *Manager) watchLayer(name string, changeCh <-chan source.Data, stop <-ch
 }
 
 func (m *Manager) replaceLayerData(name string, data map[string]any) {
-	_, _, notify := m.commitLayer(name, layer{name: name, data: data})
+	_, _, notify, _ := m.commitLayer(name, layer{name: name, data: data})
 	m.dispatch(notify)
 }
 
 func (m *Manager) commitLayer(
 	name string,
 	next layer,
-) (source.Source, chan struct{}, []notification) {
+) (source.Source, chan struct{}, []notification, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
-		return nil, nil, nil
+		return nil, nil, nil, false
 	}
 
 	prev, exists := m.layers[name]
@@ -267,15 +318,15 @@ func (m *Manager) commitLayer(
 	if reflect.DeepEqual(m.snapshotMap, merged) {
 		m.snapshotMap = merged
 		if next.src == prev.src {
-			return nil, nil, nil
+			return nil, nil, nil, true
 		}
-		return prev.src, prev.stop, nil
+		return prev.src, prev.stop, nil, true
 	}
 
 	oldSnapshot := m.snapshotMap
 	m.snapshotMap = merged
 	m.snapshot.Store(NewSnapshot(merged))
-	return prev.src, prev.stop, m.collectNotificationsLocked(oldSnapshot, merged)
+	return prev.src, prev.stop, m.collectNotificationsLocked(oldSnapshot, merged), true
 }
 
 func (m *Manager) mergeLocked() map[string]any {
@@ -332,6 +383,23 @@ func (m *Manager) collectNotificationsLocked(prev, next map[string]any) []notifi
 func (m *Manager) dispatch(items []notification) {
 	for _, item := range items {
 		item.fn(item.snapshot)
+	}
+}
+
+func (m *Manager) dispatchError(err error) {
+	if err == nil {
+		return
+	}
+	m.mu.Lock()
+	callbacks := make([]func(error), 0, len(m.watchers))
+	for _, item := range m.watchers {
+		if item.onError != nil {
+			callbacks = append(callbacks, item.onError)
+		}
+	}
+	m.mu.Unlock()
+	for _, fn := range callbacks {
+		fn(err)
 	}
 }
 

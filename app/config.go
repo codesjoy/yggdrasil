@@ -46,6 +46,7 @@ func initConfigChain(opts *options) error {
 			opts.configManager = config.Default()
 		} else {
 			opts.configManager = config.NewManager()
+			opts.configManagerOwned = true
 		}
 	}
 	if err := loadBootstrapConfigSources(opts); err != nil {
@@ -246,6 +247,9 @@ func loadConfigLayer(
 		scope,
 		index,
 	); err != nil {
+		if item != nil {
+			err = errors.Join(err, item.Close())
+		}
 		return err
 	}
 	addManagedConfigSource(opts, item)
@@ -278,6 +282,13 @@ func registerConfigSourceCleanup(opts *options) {
 }
 
 func closeManagedConfigSources(opts *options) error {
+	if opts == nil {
+		return nil
+	}
+	if opts.configManagerOwned && opts.configManager != nil {
+		opts.managedConfigSourcesClosed = true
+		return nil
+	}
 	if opts.managedConfigSourcesClosed {
 		return nil
 	}
@@ -286,6 +297,19 @@ func closeManagedConfigSources(opts *options) error {
 	}
 	opts.managedConfigSourcesClosed = true
 	return nil
+}
+
+func closeManagedConfigManager(opts *options) error {
+	if opts == nil || !opts.configManagerOwned || opts.configManager == nil {
+		return nil
+	}
+	if opts.managedConfigManagerClosed {
+		return nil
+	}
+	err := opts.configManager.Close()
+	opts.managedConfigManagerClosed = true
+	opts.managedConfigSourcesClosed = true
+	return err
 }
 
 func refreshResolvedSettings(opts *options) error {

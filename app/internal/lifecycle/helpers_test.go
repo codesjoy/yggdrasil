@@ -17,6 +17,7 @@ package lifecycle
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"github.com/stretchr/testify/mock"
 
@@ -150,6 +151,20 @@ func (f *failingInternalServer) Serve() error {
 func (f *failingInternalServer) Stop(ctx context.Context) error {
 	f.stopCtx = ctx
 	return nil
+}
+
+type failingStopInternalServer struct {
+	err   error
+	stops atomic.Int32
+}
+
+func (f *failingStopInternalServer) Serve() error {
+	return nil
+}
+
+func (f *failingStopInternalServer) Stop(context.Context) error {
+	f.stops.Add(1)
+	return f.err
 }
 
 type stubEndpoint struct {

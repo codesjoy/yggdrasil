@@ -22,7 +22,9 @@ import (
 	"os"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -89,6 +91,15 @@ func TestRestartUnsupportedAfterStop(t *testing.T) {
 	require.ErrorIs(t, err, errRestartUnsupported)
 }
 
+func TestStopBeforeStartBlocksRestartAndClientInitialization(t *testing.T) {
+	app := newTestApp(t, "stop-before-start")
+	require.NoError(t, app.Stop(context.Background()))
+	require.ErrorIs(t, app.Start(context.Background()), errRestartUnsupported)
+
+	_, err := app.NewClient(context.Background(), "svc")
+	require.ErrorIs(t, err, errRestartUnsupported)
+}
+
 type testExtraModule struct {
 	name string
 }
@@ -109,6 +120,49 @@ func (m testExtraModule) Capabilities() []module.Capability {
 	}
 }
 
+type lifecycleTestModule struct {
+	name    string
+	stopped atomic.Int32
+}
+
+func (m *lifecycleTestModule) Name() string { return m.name }
+func (m *lifecycleTestModule) Init(context.Context, config.View) error {
+	return nil
+}
+
+func (m *lifecycleTestModule) Stop(context.Context) error {
+	m.stopped.Add(1)
+	return nil
+}
+
+type blockingReloadTestModule struct {
+	name    string
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (m *blockingReloadTestModule) Name() string { return m.name }
+func (m *blockingReloadTestModule) ConfigPath() string {
+	return "test"
+}
+
+func (m *blockingReloadTestModule) PrepareReload(
+	context.Context,
+	config.View,
+) (module.ReloadCommitter, error) {
+	select {
+	case m.entered <- struct{}{}:
+	default:
+	}
+	<-m.release
+	return noOpReloadCommitter{}, nil
+}
+
+type noOpReloadCommitter struct{}
+
+func (noOpReloadCommitter) Commit(context.Context) error   { return nil }
+func (noOpReloadCommitter) Rollback(context.Context) error { return nil }
+
 func TestWithModulesRegistersBusinessModules(t *testing.T) {
 	app := newInitializedApp(
 		t,
@@ -119,6 +173,66 @@ func TestWithModulesRegistersBusinessModules(t *testing.T) {
 	names := make([]string, 0, len(diag.Topology))
 	names = append(names, diag.Topology...)
 	require.Contains(t, names, "test.extra.module")
+}
+
+func TestPrepareThenStopRunsModuleCleanup(t *testing.T) {
+	mod := &lifecycleTestModule{name: "prepare-stop.module"}
+	app := newInitializedApp(t, "prepare-stop-cleanup", WithModules(mod))
+
+	require.NoError(t, app.Stop(context.Background()))
+	require.Equal(t, int32(1), mod.stopped.Load())
+}
+
+func TestStopWaitsForInFlightReload(t *testing.T) {
+	mod := &blockingReloadTestModule{
+		name:    "blocking.reload",
+		entered: make(chan struct{}, 1),
+		release: make(chan struct{}),
+	}
+	configData := assemblyTestConfig(false)
+	configData["test"] = map[string]any{"value": "one"}
+	app, manager := newInitializedAppWithConfig(
+		t,
+		"reload-stop-serial",
+		configData,
+		WithModules(mod, testTransportModule{recorder: newTransportRecorder()}),
+	)
+	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+
+	app.mu.Lock()
+	app.state = lifecycleStateRunning
+	app.mu.Unlock()
+	require.NoError(t, manager.LoadLayer(
+		"reload",
+		config.PriorityOverride,
+		memory.NewSource("reload", map[string]any{
+			"test": map[string]any{"value": "two"},
+		}),
+	))
+
+	reloadDone := make(chan error, 1)
+	go func() {
+		reloadDone <- app.Reload(context.Background())
+	}()
+	select {
+	case <-mod.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("reload did not reach prepare")
+	}
+
+	stopDone := make(chan error, 1)
+	go func() {
+		stopDone <- app.Stop(context.Background())
+	}()
+	select {
+	case err := <-stopDone:
+		t.Fatalf("Stop returned before in-flight reload completed: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(mod.release)
+	require.NoError(t, <-reloadDone)
+	require.NoError(t, <-stopDone)
 }
 
 func TestModuleHubEndpointIncludesBindings(t *testing.T) {

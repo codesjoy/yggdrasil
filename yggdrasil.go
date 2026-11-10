@@ -71,6 +71,10 @@ type BundleDiag = yapp.BundleDiag
 // BusinessInstallable is one extension install item.
 type BusinessInstallable = yapp.BusinessInstallable
 
+// BusinessInstallRollback optionally compensates an extension after a later
+// installation step fails.
+type BusinessInstallRollback = yapp.BusinessInstallRollback
+
 // InstallContext is passed to BusinessInstallable implementations.
 type InstallContext = yapp.InstallContext
 
@@ -244,23 +248,28 @@ func Run(ctx context.Context, appName string, fn ComposeFunc, opts ...Option) er
 		return err
 	}
 	if err := app.ComposeAndInstall(runCtx, fn); err != nil {
-		_ = app.Stop(context.Background())
-		return err
+		stopErr := app.Stop(context.Background())
+		return errors.Join(err, stopErr)
 	}
 	if err := app.Start(runCtx); err != nil {
-		_ = app.Stop(context.Background())
-		return err
+		stopErr := app.Stop(context.Background())
+		return errors.Join(err, stopErr)
 	}
 	done := make(chan struct{})
-	defer close(done)
+	watchDone := make(chan struct{})
 	go func() {
+		defer close(watchDone)
 		select {
 		case <-runCtx.Done():
 			_ = app.Stop(context.WithoutCancel(runCtx))
 		case <-done:
 		}
 	}()
-	return app.Wait()
+	waitErr := app.Wait()
+	close(done)
+	<-watchDone
+	stopErr := app.Stop(context.Background())
+	return errors.Join(waitErr, stopErr)
 }
 
 // ComposeAndInstall composes a business bundle and installs it in one step.

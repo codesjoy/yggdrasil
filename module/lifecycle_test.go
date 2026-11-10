@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -136,6 +137,51 @@ func TestInit_ModuleInitError(t *testing.T) {
 	err := h.Init(context.Background(), config.NewSnapshot(map[string]any{}))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "init failed")
+}
+
+type compensatingInitModule struct {
+	name    string
+	initErr error
+	stopErr error
+	stops   atomic.Int32
+	deps    []string
+}
+
+func (m *compensatingInitModule) Name() string { return m.name }
+func (m *compensatingInitModule) DependsOn() []string {
+	return m.deps
+}
+
+func (m *compensatingInitModule) Init(context.Context, config.View) error {
+	return m.initErr
+}
+
+func (m *compensatingInitModule) Stop(context.Context) error {
+	m.stops.Add(1)
+	return m.stopErr
+}
+
+func TestInitCompensatesSuccessfullyInitializedModules(t *testing.T) {
+	firstStopErr := errors.New("first stop")
+	first := &compensatingInitModule{name: "first", stopErr: firstStopErr}
+	second := &compensatingInitModule{name: "second", deps: []string{"first"}}
+	failing := &compensatingInitModule{
+		name:    "failing",
+		deps:    []string{"second"},
+		initErr: errors.New("init failed"),
+	}
+
+	h := NewHub()
+	require.NoError(t, h.Use(first, second, failing))
+	require.NoError(t, h.Seal())
+
+	err := h.Init(context.Background(), config.NewSnapshot(map[string]any{}))
+	require.Error(t, err)
+	require.ErrorContains(t, err, "init failed")
+	require.ErrorIs(t, err, firstStopErr)
+	require.Equal(t, int32(1), first.stops.Load())
+	require.Equal(t, int32(1), second.stops.Load())
+	require.Zero(t, failing.stops.Load())
 }
 
 // ---------------------------------------------------------------------------

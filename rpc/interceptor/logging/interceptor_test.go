@@ -23,6 +23,7 @@ import (
 
 	"github.com/codesjoy/pkg/basic/xerror"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
 	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
@@ -826,4 +827,16 @@ func TestBuiltinProvidersWithConfig(t *testing.T) {
 			assert.NotNil(t, ic)
 		}
 	})
+}
+
+func TestBuiltinProvidersWithConfigEReportsConfigErrors(t *testing.T) {
+	invalid := []string{"not a config object"}
+	_, err := BuiltinUnaryClientProvidersWithConfigE(invalid)
+	require.Error(t, err)
+	_, err = BuiltinStreamClientProvidersWithConfigE(invalid)
+	require.Error(t, err)
+	_, err = BuiltinUnaryServerProvidersWithConfigE(invalid)
+	require.Error(t, err)
+	_, err = BuiltinStreamServerProvidersWithConfigE(invalid)
+	require.Error(t, err)
 }

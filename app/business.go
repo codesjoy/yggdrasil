@@ -113,6 +113,12 @@ type BusinessInstallable interface {
 	Install(ctx *InstallContext) error
 }
 
+// BusinessInstallRollback optionally compensates an extension after a later
+// installation step fails.
+type BusinessInstallRollback interface {
+	RollbackInstall(ctx *InstallContext) error
+}
+
 // BusinessBundle is the prepared business graph installation payload.
 type BusinessBundle struct {
 	RPCBindings  []RPCBinding
@@ -216,14 +222,6 @@ func newRuntimeSurface(app *App) Runtime {
 		rt.lookups[reflect.TypeOf((*config.Manager)(nil))] = app.opts.configManager
 		rt.lookups[reflect.TypeOf(settings.Catalog{})] = settings.NewCatalog(app.opts.configManager)
 	}
-	if app != nil {
-		if snapshot := app.currentRuntimeSnapshot(); snapshot != nil {
-			rt.lookups[reflect.TypeOf((*slog.Logger)(nil))] = snapshot.Logger
-			rt.lookups[reflect.TypeOf((*trace.TracerProvider)(nil)).Elem()] = snapshot.TracerProvider
-			rt.lookups[reflect.TypeOf((*metric.MeterProvider)(nil)).Elem()] = snapshot.MeterProvider
-			rt.lookups[reflect.TypeOf(Identity{})] = snapshot.Identity
-		}
-	}
 	return rt
 }
 
@@ -280,9 +278,18 @@ func (r *runtimeSurface) Lookup(target any) error {
 		return errors.New("lookup target must be a non-nil pointer")
 	}
 	typ := rv.Elem().Type()
-	if typ == reflect.TypeOf(Identity{}) {
-		rv.Elem().Set(reflect.ValueOf(r.Identity()))
-		return nil
+	if snapshot := r.snapshot(); snapshot != nil {
+		switch typ {
+		case reflect.TypeOf(Identity{}):
+			rv.Elem().Set(reflect.ValueOf(r.Identity()))
+			return nil
+		case reflect.TypeOf((*slog.Logger)(nil)):
+			return setRuntimeLookup(rv, snapshot.Logger)
+		case reflect.TypeOf((*trace.TracerProvider)(nil)).Elem():
+			return setRuntimeLookup(rv, snapshot.TracerProvider)
+		case reflect.TypeOf((*metric.MeterProvider)(nil)).Elem():
+			return setRuntimeLookup(rv, snapshot.MeterProvider)
+		}
 	}
 	value, ok := r.lookups[typ]
 	if !ok {
@@ -300,6 +307,23 @@ func (r *runtimeSurface) Lookup(target any) error {
 		return errors.New("runtime capability type mismatch")
 	}
 	rv.Elem().Set(v)
+	return nil
+}
+
+func setRuntimeLookup(target reflect.Value, value any) error {
+	if value == nil {
+		return errors.New("runtime capability is invalid")
+	}
+	source := reflect.ValueOf(value)
+	targetType := target.Elem().Type()
+	if !source.Type().AssignableTo(targetType) {
+		if targetType.Kind() == reflect.Interface && source.Type().Implements(targetType) {
+			target.Elem().Set(source)
+			return nil
+		}
+		return errors.New("runtime capability type mismatch")
+	}
+	target.Elem().Set(source)
 	return nil
 }
 

@@ -63,6 +63,18 @@ func (s *watchableTestSource) Watch() (<-chan source.Data, error) {
 	return s.watchCh, nil
 }
 
+type blockingReadSource struct {
+	*testSource
+	started chan struct{}
+	release chan struct{}
+}
+
+func (s *blockingReadSource) Read() (source.Data, error) {
+	close(s.started)
+	<-s.release
+	return s.testSource.Read()
+}
+
 func waitFor(t *testing.T, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -178,6 +190,29 @@ func TestManagerLoadLayerValidationAndErrors(t *testing.T) {
 	require.ErrorIs(t, err, watchErr)
 }
 
+func TestManagerCloseDuringLoadLayerRejectsLateLayer(t *testing.T) {
+	manager := NewManager()
+	src := &blockingReadSource{
+		testSource: &testSource{
+			name: "blocking",
+			kind: "test",
+			data: source.NewMapData(map[string]any{"app": map[string]any{"enabled": true}}),
+		},
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+
+	loadDone := make(chan error, 1)
+	go func() {
+		loadDone <- manager.LoadLayer("blocking", PriorityFile, src)
+	}()
+	<-src.started
+	require.NoError(t, manager.Close())
+	close(src.release)
+
+	require.ErrorIs(t, <-loadDone, errManagerClosed)
+}
+
 func TestManagerLoadLayerReplaceClosesPreviousSourceAndSkipsNotifyOnUnchanged(t *testing.T) {
 	manager := NewManager()
 	defer func() { require.NoError(t, manager.Close()) }()
@@ -259,6 +294,46 @@ func TestManagerWatchLayerUpdatesAndIgnoresInvalidPayload(t *testing.T) {
 	changeCh <- source.NewBytesData([]byte(`not-json`), json.Unmarshal)
 	time.Sleep(50 * time.Millisecond)
 	require.True(t, last.Load())
+}
+
+func TestManagerWatchWithErrorReportsInvalidPayload(t *testing.T) {
+	manager := NewManager()
+	defer func() { require.NoError(t, manager.Close()) }()
+
+	changeCh := make(chan source.Data, 1)
+	src := &watchableTestSource{
+		testSource: &testSource{
+			name: "watch-error",
+			kind: "test",
+			data: source.NewMapData(map[string]any{
+				"app": map[string]any{"enabled": true},
+			}),
+		},
+		watchCh: changeCh,
+	}
+	require.NoError(t, manager.LoadLayer("watch-error", PriorityFile, src))
+
+	errorsCh := make(chan error, 1)
+	cancel := manager.WatchWithError(
+		nil,
+		func(Snapshot) {},
+		func(err error) {
+			select {
+			case errorsCh <- err:
+			default:
+			}
+		},
+	)
+	defer cancel()
+
+	changeCh <- source.NewBytesData([]byte(`not-json`), json.Unmarshal)
+	select {
+	case err := <-errorsCh:
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "watch decode failed")
+	case <-time.After(2 * time.Second):
+		t.Fatal("watch error was not reported")
+	}
 }
 
 func TestManagerCloseIsIdempotentAndJoinsErrors(t *testing.T) {

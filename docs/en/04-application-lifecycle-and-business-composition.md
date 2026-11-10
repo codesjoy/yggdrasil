@@ -158,9 +158,14 @@ type BusinessBundle struct {
 - validates RawHTTP method/path/handler;
 - validates GovernorHTTP method/path/handler;
 - checks service-name and route conflicts;
-- registers tasks and hooks;
-- executes `BusinessInstallable` extensions;
+- stages bindings, tasks, and hooks without mutating the live App;
+- executes `BusinessInstallable` extensions against the staging installer;
+- commits the staged plan only after every extension succeeds;
 - collects diagnostics.
+
+If an extension fails, extensions are compensated in reverse order through the
+optional `BusinessInstallRollback` interface. The staged plan is discarded and
+the prepared runtime is closed.
 
 ### 7.1 RPCBinding
 
@@ -228,7 +233,10 @@ Start
   -> Running
 ```
 
-Servers are started concurrently by the lifecycle runner. If any server fails, async stop is triggered.
+`Start` returns only after the module hub starts, the main server and governor
+complete listener startup, and registry registration succeeds. Serve loops run
+in the background. A later runtime failure triggers shutdown and is surfaced by
+`Wait`.
 
 ## 9. Graceful Shutdown
 
@@ -246,6 +254,10 @@ BeforeStop hooks
 ```
 
 The default shutdown timeout is 30 seconds and can be changed with `WithShutdownTimeout`.
+
+`Stop` transitions the App to stopping before waiting for an in-flight reload.
+Repeated concurrent calls share the first shutdown result. `Wait` returns only
+after all managed serve loops have exited and shutdown cleanup has completed.
 
 The root `yggdrasil.Run` entry installs default OS signal handling and derives the run context from the parent context plus shutdown signals. Use `WithSignalHandling(false)` when the host process owns signal handling, or `WithShutdownSignals(...)` to customize the signal set. The lower-level lifecycle runner receives contexts for both `Run` and `Stop`; `Stop` respects an existing context deadline and otherwise wraps the shutdown sequence with the configured timeout.
 
