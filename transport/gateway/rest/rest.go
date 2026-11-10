@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -43,6 +44,7 @@ import (
 type Config struct {
 	Host              string        `mapstructure:"host"`
 	Port              int           `mapstructure:"port"`
+	AdvertiseAddress  string        `mapstructure:"advertise_address"`
 	ReadHeaderTimeout time.Duration `mapstructure:"read_header_timeout" default:"5s"`
 	ReadTimeout       time.Duration `mapstructure:"read_timeout"        default:"15s"`
 	WriteTimeout      time.Duration `mapstructure:"write_timeout"       default:"30s"`
@@ -65,8 +67,9 @@ type Config struct {
 }
 
 type serverInfo struct {
-	address    string
-	attributes map[string]string
+	address          string
+	advertiseAddress string
+	attributes       map[string]string
 }
 
 func (s *serverInfo) GetAttributes() map[string]string {
@@ -75,6 +78,10 @@ func (s *serverInfo) GetAttributes() map[string]string {
 
 func (s *serverInfo) GetAddress() string {
 	return s.address
+}
+
+func (s *serverInfo) GetAdvertiseAddress() string {
+	return s.advertiseAddress
 }
 
 // ServeMux is a request multiplexer for RPC-gateway.
@@ -99,6 +106,7 @@ type ServeMux struct {
 
 	marshalerRegistry marshaler.Registry
 	middlewareMap     map[string]Provider
+	strictMiddleware  bool
 }
 
 // Option is the option for the server.
@@ -118,17 +126,22 @@ func WithMiddlewareProviders(providers map[string]Provider) Option {
 	}
 }
 
+// WithStrictMiddlewareProviders makes missing REST middleware providers a
+// server construction error.
+func WithStrictMiddlewareProviders() Option {
+	return func(s *ServeMux) {
+		s.strictMiddleware = true
+	}
+}
+
 // NewServer creates a new ServeMux from explicit config.
 func NewServer(cfg *Config, opts ...Option) (Server, error) {
 	if cfg == nil {
 		cfg = &Config{}
 	}
 
-	host, err := listenaddr.NormalizeListenHost(cfg.Host)
-	if err != nil {
-		return nil, err
-	}
-	address := fmt.Sprintf("%s:%d", host, cfg.Port)
+	host := listenaddr.ResolveBindHost(cfg.Host)
+	address := net.JoinHostPort(host, strconv.Itoa(cfg.Port))
 
 	s := &ServeMux{
 		cfg: cfg,
@@ -147,34 +160,47 @@ func NewServer(cfg *Config, opts ...Option) (Server, error) {
 
 	r := chi.NewMux()
 	allMiddlewares := dedupStableStrings(cfg.Middleware.All)
-	if s.middlewareMap != nil {
-		r.Use(BuildWithProviders(s.middlewareMap, allMiddlewares...)...)
-	} else {
-		r.Use(Build(allMiddlewares...)...)
+	allChain, err := buildMiddlewareChain(
+		s.middlewareMap,
+		s.strictMiddleware,
+		allMiddlewares...,
+	)
+	if err != nil {
+		return nil, err
 	}
+	r.Use(allChain...)
 
+	rpcMiddlewaresRaw := cfg.Middleware.RPC
+	if s.marshalerRegistry == nil {
+		rpcMiddlewaresRaw = append([]string{"marshaler"}, rpcMiddlewaresRaw...)
+	}
+	rpcMiddlewares := dedupStableStrings(rpcMiddlewaresRaw)
+	rpcChain, err := buildMiddlewareChain(
+		s.middlewareMap,
+		s.strictMiddleware,
+		rpcMiddlewares...,
+	)
+	if err != nil {
+		return nil, err
+	}
 	rpcRouter := r.Group(func(r chi.Router) {
-		rpcMiddlewaresRaw := cfg.Middleware.RPC
 		if s.marshalerRegistry != nil {
 			r.Use(NewMarshalerMiddleware(s.marshalerRegistry))
-		} else {
-			rpcMiddlewaresRaw = append([]string{"marshaler"}, rpcMiddlewaresRaw...)
 		}
-		rpcMiddlewares := dedupStableStrings(rpcMiddlewaresRaw)
-		if s.middlewareMap != nil {
-			r.Use(BuildWithProviders(s.middlewareMap, rpcMiddlewares...)...)
-		} else {
-			r.Use(Build(rpcMiddlewares...)...)
-		}
+		r.Use(rpcChain...)
 	})
 
 	webMiddlewares := dedupStableStrings(cfg.Middleware.Web)
+	webChain, err := buildMiddlewareChain(
+		s.middlewareMap,
+		s.strictMiddleware,
+		webMiddlewares...,
+	)
+	if err != nil {
+		return nil, err
+	}
 	webRouter := r.Group(func(r chi.Router) {
-		if s.middlewareMap != nil {
-			r.Use(BuildWithProviders(s.middlewareMap, webMiddlewares...)...)
-		} else {
-			r.Use(Build(webMiddlewares...)...)
-		}
+		r.Use(webChain...)
 	})
 
 	s.Router = r
@@ -182,6 +208,23 @@ func NewServer(cfg *Config, opts ...Option) (Server, error) {
 	s.webRouter = webRouter
 
 	return s, nil
+}
+
+func buildMiddlewareChain(
+	providerMap map[string]Provider,
+	strict bool,
+	names ...string,
+) (chi.Middlewares, error) {
+	if providerMap == nil {
+		if strict {
+			return BuildE(names...)
+		}
+		return Build(names...), nil
+	}
+	if strict {
+		return BuildWithProvidersE(providerMap, names...)
+	}
+	return BuildWithProviders(providerMap, names...), nil
 }
 
 // RPCHandle registers a new RPC handler.
@@ -197,8 +240,25 @@ func (s *ServeMux) RPCHandle(meth, path string, f HandlerFunc) {
 			s.errorHandler(w, r, err)
 			return
 		}
-		s.successHandler(w, r, res.(proto.Message))
+		resp, ok := res.(proto.Message)
+		if !ok || isNilProtoMessage(resp) {
+			s.errorHandler(
+				w,
+				r,
+				status.New(code.Code_INTERNAL, "RPC handler returned an invalid response").Err(),
+			)
+			return
+		}
+		s.successHandler(w, r, resp)
 	})
+}
+
+func isNilProtoMessage(message proto.Message) bool {
+	if message == nil {
+		return true
+	}
+	value := reflect.ValueOf(message)
+	return value.Kind() == reflect.Pointer && value.IsNil()
 }
 
 // RawHandle registers a new raw handler.
@@ -226,6 +286,19 @@ func (s *ServeMux) Start() error {
 		return err
 	}
 	s.info.address = lis.Addr().String()
+	advertiseAddress, err := listenaddr.ResolveAdvertiseAddress(
+		"tcp",
+		s.info.address,
+		s.cfg.AdvertiseAddress,
+	)
+	if err != nil {
+		_ = lis.Close()
+		s.started = false
+		s.listener = nil
+		s.info.address = ""
+		return err
+	}
+	s.info.advertiseAddress = advertiseAddress
 	s.listener = lis
 	s.svr = &http.Server{
 		Handler:           s,

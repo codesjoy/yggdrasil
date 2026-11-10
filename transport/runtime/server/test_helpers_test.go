@@ -124,8 +124,9 @@ func (s *testRemoteServer) Stop(context.Context) error { return nil }
 func (s *testRemoteServer) Info() remote.ServerInfo    { return s.info }
 
 type mockRestServer struct {
-	address string
-	attr    map[string]string
+	address          string
+	advertiseAddress string
+	attr             map[string]string
 }
 
 func (m *mockRestServer) RPCHandle(string, string, rest.HandlerFunc) {}
@@ -135,6 +136,7 @@ func (m *mockRestServer) Serve() error                               { return ni
 func (m *mockRestServer) Stop(context.Context) error                 { return nil }
 func (m *mockRestServer) Info() rest.ServerInfo                      { return m }
 func (m *mockRestServer) GetAddress() string                         { return m.address }
+func (m *mockRestServer) GetAdvertiseAddress() string                { return m.advertiseAddress }
 func (m *mockRestServer) GetAttributes() map[string]string           { return m.attr }
 
 type rpcHandleCall struct {

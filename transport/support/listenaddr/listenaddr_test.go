@@ -54,3 +54,62 @@ func TestNormalizeListenHost_TrimSpace(t *testing.T) {
 	assert.Equal(t, "localhost", host)
 	assert.Equal(t, strings.TrimSpace(" localhost "), host)
 }
+
+func TestResolveBindHostPreservesWildcard(t *testing.T) {
+	assert.Equal(t, "", ResolveBindHost(""))
+	assert.Equal(t, "0.0.0.0", ResolveBindHost(" 0.0.0.0 "))
+	assert.Equal(t, "::", ResolveBindHost("[::]"))
+	assert.Equal(t, "localhost", ResolveBindHost(" localhost "))
+}
+
+func TestResolveAdvertiseAddress(t *testing.T) {
+	previous := selectAdvertiseHost
+	selectAdvertiseHost = func() string { return "10.20.30.40" }
+	t.Cleanup(func() { selectAdvertiseHost = previous })
+
+	tests := []struct {
+		name       string
+		network    string
+		bound      string
+		configured string
+		want       string
+	}{
+		{
+			name:    "wildcard uses primary host and actual port",
+			network: "tcp",
+			bound:   "0.0.0.0:8123",
+			want:    "10.20.30.40:8123",
+		},
+		{
+			name:    "loopback remains loopback",
+			network: "tcp",
+			bound:   "127.0.0.1:8123",
+			want:    "127.0.0.1:8123",
+		},
+		{
+			name:       "explicit advertise address wins",
+			network:    "tcp",
+			bound:      "0.0.0.0:8123",
+			configured: "service.example:9443",
+			want:       "service.example:9443",
+		},
+		{
+			name:    "unix is unchanged",
+			network: "unix",
+			bound:   "/tmp/service.sock",
+			want:    "/tmp/service.sock",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ResolveAdvertiseAddress(tc.network, tc.bound, tc.configured)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestResolveAdvertiseAddressRejectsInvalidOverride(t *testing.T) {
+	_, err := ResolveAdvertiseAddress("tcp", "127.0.0.1:8123", "missing-port")
+	require.Error(t, err)
+}

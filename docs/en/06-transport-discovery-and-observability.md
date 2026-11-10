@@ -75,6 +75,14 @@ Business code may register:
 
 REST and Raw HTTP route conflicts must be checked during installation, typically by method + path.
 
+REST RPC handlers must return a non-nil `proto.Message`; nil or a mismatched
+type is an Internal error rather than an unchecked assertion. The HTTP client
+stream uses one shared response path for `Header` and `RecvMsg`. `Header` before
+send returns `FAILED_PRECONDITION`, and a waiting `Header` observes context
+cancellation. When a non-200 response body cannot be decoded as an RPC status,
+the client exposes only the HTTP status and generic status text, never the raw
+response body.
+
 ## 4. Security Profiles
 
 Security follows a Provider -> Profile -> Material pipeline:
@@ -209,7 +217,9 @@ Governor should expose:
 - transport server info;
 - registry / resolver / balancer status summary.
 
-The governor listener binds `yggdrasil.admin.governor.bind`. When `bind` is unset it resolves to the host's primary routable IPv4 address (falling back to loopback), so other machines on the intranet can probe it; an explicit wildcard (`0.0.0.0` / `::`) listens on every interface while still advertising a routable address. `yggdrasil.admin.governor.host` is a deprecated alias for `bind` and takes lower precedence.
+The governor listener binds `yggdrasil.admin.governor.bind`. When `bind` is unset it uses loopback. Non-loopback and wildcard binds require `governor.auth.token` or basic authentication; startup fails without it. The `/configs` route always returns a redacted copy, with sensitive key names, URL passwords, and `governor.redact_paths` entries replaced by `[REDACTED]`. `yggdrasil.admin.governor.host` is a deprecated alias for `bind` and takes lower precedence.
+
+RPC and REST listeners keep the configured bind address. When their bind host is empty or a wildcard, the actual bound port is preserved and only the address published to registry is resolved to the primary routable IPv4 address. Set the transport's `advertise_address` when service discovery must publish a fixed host, port, proxy, or NAT address.
 
 ## 11. Custom Transport Module Example
 

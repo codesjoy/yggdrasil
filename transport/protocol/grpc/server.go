@@ -31,6 +31,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	remote "github.com/codesjoy/yggdrasil/v3/transport"
 	"github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc/encoding"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/listenaddr"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
 )
 
@@ -79,6 +80,7 @@ const (
 type ServerConfig struct {
 	Network               string                       `mapstructure:"network"`
 	Address               string                       `mapstructure:"address"`
+	AdvertiseAddress      string                       `mapstructure:"advertise_address"`
 	SecurityProfile       string                       `mapstructure:"security_profile"`
 	CodeProto             string                       `mapstructure:"code_proto"`
 	MaxConcurrentStreams  uint32                       `mapstructure:"max_concurrent_streams"`
@@ -156,14 +158,15 @@ func (opts *ServerConfig) SetDefaultWithProfiles(profiles map[string]security.Pr
 }
 
 type server struct {
-	ctx       context.Context
-	cancel    context.CancelFunc
-	mu        sync.Mutex
-	address   string
-	lis       net.Listener
-	serve     bool
-	stopped   bool
-	stoppedCh chan struct{}
+	ctx              context.Context
+	cancel           context.CancelFunc
+	mu               sync.Mutex
+	address          string
+	advertiseAddress string
+	lis              net.Listener
+	serve            bool
+	stopped          bool
+	stoppedCh        chan struct{}
 
 	opts         ServerConfig
 	handle       remote.MethodHandle
@@ -293,9 +296,10 @@ func (s *server) Stop(ctx context.Context) error {
 
 func (s *server) Info() remote.ServerInfo {
 	return remote.ServerInfo{
-		Address:    s.address,
-		Protocol:   Protocol,
-		Attributes: s.opts.Attr,
+		Address:          s.address,
+		AdvertiseAddress: s.advertiseAddress,
+		Protocol:         Protocol,
+		Attributes:       s.opts.Attr,
 	}
 }
 
@@ -314,8 +318,18 @@ func (s *server) Start() error {
 	if err != nil {
 		return err
 	}
+	advertiseAddress, err := listenaddr.ResolveAdvertiseAddress(
+		s.opts.Network,
+		lis.Addr().String(),
+		s.opts.AdvertiseAddress,
+	)
+	if err != nil {
+		_ = lis.Close()
+		return err
+	}
 	s.lis = lis
 	s.address = lis.Addr().String()
+	s.advertiseAddress = advertiseAddress
 	s.serve = true
 	return nil
 }

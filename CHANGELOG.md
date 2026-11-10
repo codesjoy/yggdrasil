@@ -1,3 +1,26 @@
+## Unreleased
+
+### Features
+- **app:** synchronize startup and stop, add transactional business installation
+- **config:** add `WatchWithError` and single-worker hot reload application
+- **governor:** add configurable redaction paths and safe loopback default
+- **transport:** separate bind and advertised addresses
+- **module:** add staged reload finalization and full reverse rollback
+
+### Fixes
+- **config:** close file watchers and surface fsnotify add failures
+- **discovery:** make multi-registry fail-fast and best-effort semantics explicit
+- **rpc:** use strict interceptor, middleware, and logging-provider builders
+- **transport:** harden HTTP error handling, stream response reuse, and REST responses
+
+### Behavior Changes
+- Governor binds to `127.0.0.1` by default. Non-loopback or wildcard binds now
+  require token or basic authentication.
+- Capabilities without an explicit `Type` now fail `Hub.Seal`.
+- `Stop` and `Wait` propagate shutdown failures, and `Start` waits for listeners
+  and registry registration to complete.
+- HTTP clients no longer expose undecodable non-200 response bodies.
+
 <a name="v3.0.0-rc.5"></a>
 ## [v3.0.0-rc.5](https://github.com/codesjoy/yggdrasil/compare/v3.0.0-rc.4...v3.0.0-rc.5) (2026-09-28)
 

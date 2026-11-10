@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime/debug"
 	"slices"
@@ -153,7 +154,12 @@ func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
 		respSuccess(w, r, json.RawMessage([]byte("{}")))
 		return
 	}
-	respSuccess(w, r, json.RawMessage(s.manager.Bytes()))
+	redacted, err := redactConfig(s.manager.Bytes(), s.cfg.RedactPaths)
+	if err != nil {
+		respErr(w, http.StatusInternalServerError, errors.New("encode redacted configuration"))
+		return
+	}
+	respSuccess(w, r, redacted)
 }
 
 func (s *Server) configHandle(w http.ResponseWriter, r *http.Request) {
@@ -267,4 +273,151 @@ func secureEqual(a, b string) bool {
 		return false
 	}
 	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
+const redactedValue = "[REDACTED]"
+
+var sensitiveConfigKeys = map[string]struct{}{
+	"authorization":     {},
+	"connection_string": {},
+	"credential":        {},
+	"credentials":       {},
+	"dsn":               {},
+	"password":          {},
+	"passwd":            {},
+	"private_key":       {},
+	"secret":            {},
+	"token":             {},
+}
+
+func redactConfig(raw []byte, paths []string) (any, error) {
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, err
+	}
+	value = redactConfigValue(value)
+	for _, path := range paths {
+		redactConfigPath(value, splitRedactPath(path))
+	}
+	return value, nil
+}
+
+func redactConfigValue(value any) any {
+	switch item := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(item))
+		for key, child := range item {
+			if isSensitiveConfigKey(key) {
+				out[key] = redactedValue
+				continue
+			}
+			out[key] = redactConfigValue(child)
+		}
+		return out
+	case []any:
+		out := make([]any, len(item))
+		for i, child := range item {
+			out[i] = redactConfigValue(child)
+		}
+		return out
+	case string:
+		return redactURLPassword(item)
+	default:
+		return value
+	}
+}
+
+func redactConfigPath(value any, path []string) {
+	if len(path) == 0 {
+		return
+	}
+	current, ok := value.(map[string]any)
+	if !ok {
+		return
+	}
+	if len(path) == 1 {
+		if _, exists := current[path[0]]; exists {
+			current[path[0]] = redactedValue
+		}
+		return
+	}
+	redactConfigPath(current[path[0]], path[1:])
+}
+
+func splitRedactPath(path string) []string {
+	raw := strings.Split(path, ".")
+	out := make([]string, 0, len(raw))
+	for _, item := range raw {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func isSensitiveConfigKey(key string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	normalized = strings.NewReplacer("-", "_", ".", "_", " ", "_").Replace(normalized)
+	if _, ok := sensitiveConfigKeys[normalized]; ok {
+		return true
+	}
+	for _, suffix := range []string{
+		"_authorization",
+		"_connection_string",
+		"_credential",
+		"_credentials",
+		"_dsn",
+		"_password",
+		"_passwd",
+		"_private_key",
+		"_secret",
+		"_token",
+	} {
+		if strings.HasSuffix(normalized, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+func redactURLPassword(value string) string {
+	if !strings.Contains(value, "://") {
+		return value
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return redactURLPasswordFallback(value)
+	}
+	if parsed.User == nil {
+		return value
+	}
+	username := parsed.User.Username()
+	if _, ok := parsed.User.Password(); !ok {
+		return value
+	}
+	parsed.User = url.UserPassword(username, redactedValue)
+	return parsed.String()
+}
+
+func redactURLPasswordFallback(value string) string {
+	scheme := strings.Index(value, "://")
+	if scheme < 0 {
+		return value
+	}
+	authorityStart := scheme + len("://")
+	authorityEnd := len(value)
+	if offset := strings.IndexAny(value[authorityStart:], "/?#"); offset >= 0 {
+		authorityEnd = authorityStart + offset
+	}
+	authority := value[authorityStart:authorityEnd]
+	at := strings.LastIndex(authority, "@")
+	if at < 0 {
+		return value
+	}
+	colon := strings.Index(authority[:at], ":")
+	if colon < 0 {
+		return value
+	}
+	return value[:authorityStart+colon+1] + redactedValue + value[authorityStart+at:]
 }

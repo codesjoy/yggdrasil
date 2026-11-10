@@ -84,6 +84,8 @@ func GetProvider(name string) Provider {
 }
 
 // Build resolves middleware providers by name and builds the chain.
+//
+// Deprecated: use BuildE to observe missing providers.
 func Build(names ...string) chi.Middlewares {
 	mu.RLock()
 	providerCopy := make(map[string]Provider, len(providers))
@@ -92,6 +94,17 @@ func Build(names ...string) chi.Middlewares {
 	}
 	mu.RUnlock()
 	return BuildWithProviders(providerCopy, names...)
+}
+
+// BuildE resolves middleware providers and rejects missing providers.
+func BuildE(names ...string) (chi.Middlewares, error) {
+	mu.RLock()
+	providerCopy := make(map[string]Provider, len(providers))
+	for name, provider := range providers {
+		providerCopy[name] = provider
+	}
+	mu.RUnlock()
+	return BuildWithProvidersE(providerCopy, names...)
 }
 
 // BuildWithProviders resolves middleware providers from an explicit provider map.
@@ -104,6 +117,27 @@ func BuildWithProviders(providerMap map[string]Provider, names ...string) chi.Mi
 		}
 	}
 	return handlers
+}
+
+// BuildWithProvidersE resolves middleware providers from an explicit provider
+// map and rejects missing providers.
+func BuildWithProvidersE(
+	providerMap map[string]Provider,
+	names ...string,
+) (chi.Middlewares, error) {
+	handlers := make(chi.Middlewares, 0, len(names))
+	for _, item := range names {
+		provider := providerMap[item]
+		if provider == nil {
+			return nil, fmt.Errorf("rest middleware provider %q not found", item)
+		}
+		handler := provider.Build()
+		if handler == nil {
+			return nil, fmt.Errorf("rest middleware provider %q returned nil", item)
+		}
+		handlers = append(handlers, handler)
+	}
+	return handlers, nil
 }
 
 func defaultProviders() map[string]Provider {

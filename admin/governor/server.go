@@ -30,6 +30,11 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/internal/netaddr"
 )
 
+// resolvePrimaryHost resolves the wildcard advertisement host.
+var resolvePrimaryHost = func() string {
+	return netaddr.SelectPrimaryIPv4(context.Background())
+}
+
 // ServerInfo contains server info.
 type ServerInfo struct {
 	Address string
@@ -126,13 +131,6 @@ func (s *Server) Serve() error {
 	advertisedHost := host
 	if netaddr.IsWildcard(host) {
 		advertisedHost = resolvePrimaryHost()
-		if !s.cfg.Auth.Enabled() {
-			slog.Warn(
-				"governor is listening on all interfaces without authentication",
-				"bind",
-				host,
-			)
-		}
 	}
 
 	s.mu.Lock()

@@ -697,6 +697,25 @@ func TestNewServer_WithConfig(t *testing.T) {
 	assert.Equal(t, "127.0.0.1:9090", mux.info.address)
 }
 
+func TestServeMux_AdvertiseAddress(t *testing.T) {
+	s, err := NewServer(&Config{
+		Host:             "127.0.0.1",
+		Port:             0,
+		AdvertiseAddress: "service.example:8443",
+	})
+	require.NoError(t, err)
+	require.NoError(t, s.Start())
+	t.Cleanup(func() {
+		require.NoError(t, s.Stop(context.Background()))
+	})
+
+	info := s.Info()
+	require.Contains(t, info.GetAddress(), "127.0.0.1:")
+	provider, ok := info.(AdvertiseAddressProvider)
+	require.True(t, ok)
+	assert.Equal(t, "service.example:8443", provider.GetAdvertiseAddress())
+}
+
 func TestNewServer_WithMarshalerRegistry(t *testing.T) {
 	reg := marshaler.BuildMarshalerRegistry("jsonpb")
 	s, err := NewServer(nil, WithMarshalerRegistry(reg))
@@ -876,4 +895,53 @@ func TestServeMux_SuccessHandler_MarshalError(t *testing.T) {
 
 	mux.successHandler(w, r, wrapperspb.String("data"))
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestBuildWithProvidersE_RejectsMissingMiddleware(t *testing.T) {
+	_, err := BuildWithProvidersE(nil, "missing")
+	require.Error(t, err)
+}
+
+func TestNewServer_StrictMiddlewareRejectsMissingProvider(t *testing.T) {
+	cfg := &Config{}
+	cfg.Middleware.All = []string{"missing"}
+	_, err := NewServer(
+		cfg,
+		WithMiddlewareProviders(map[string]Provider{}),
+		WithStrictMiddlewareProviders(),
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing")
+}
+
+func TestServeMux_RPCHandle_InvalidResponse(t *testing.T) {
+	tests := []struct {
+		name string
+		resp any
+	}{
+		{name: "nil", resp: nil},
+		{name: "typed nil", resp: (*wrapperspb.StringValue)(nil)},
+		{name: "wrong type", resp: "not a proto"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, err := NewServer(nil)
+			require.NoError(t, err)
+			mux := s.(*ServeMux)
+			mux.RPCHandle(
+				http.MethodPost,
+				"/invalid",
+				func(http.ResponseWriter, *http.Request) (interface{}, error) {
+					return tt.resp, nil
+				},
+			)
+			ts := httptest.NewServer(mux)
+			defer ts.Close()
+
+			resp, err := http.Post(ts.URL+"/invalid", "application/json", nil)
+			require.NoError(t, err)
+			defer func() { _ = resp.Body.Close() }()
+			assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+		})
+	}
 }

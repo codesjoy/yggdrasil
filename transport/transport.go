@@ -49,9 +49,10 @@ type TransportClientProvider interface { //nolint:revive // stutter is acceptabl
 
 // ServerInfo is the information of the server.
 type ServerInfo struct {
-	Protocol   string
-	Address    string
-	Attributes map[string]string
+	Protocol         string
+	Address          string
+	AdvertiseAddress string
+	Attributes       map[string]string
 }
 
 // ServerBuilder is the interface that wraps the Build method.

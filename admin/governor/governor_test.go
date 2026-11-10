@@ -21,6 +21,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -31,6 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codesjoy/yggdrasil/v3/config"
+	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
 )
 
 // TestMain pins host resolution to loopback so tests bind predictably instead
@@ -57,7 +59,7 @@ func TestConfig_SetDefault(t *testing.T) {
 }
 
 func TestConfig_SetDefault_ExplicitBind(t *testing.T) {
-	cfg := Config{Bind: " 10.1.2.3 "}
+	cfg := Config{Bind: " 10.1.2.3 ", Auth: AuthConfig{Token: "secret"}}
 	require.NoError(t, cfg.SetDefault())
 	assert.Equal(t, "10.1.2.3", cfg.Bind)
 }
@@ -65,9 +67,28 @@ func TestConfig_SetDefault_ExplicitBind(t *testing.T) {
 func TestConfig_SetDefault_WildcardPreserved(t *testing.T) {
 	for _, bind := range []string{"0.0.0.0", "::", "[::]"} {
 		t.Run(bind, func(t *testing.T) {
-			cfg := Config{Bind: bind}
+			cfg := Config{Bind: bind, Auth: AuthConfig{Token: "secret"}}
 			require.NoError(t, cfg.SetDefault())
 			assert.Equal(t, bind, cfg.Bind)
+		})
+	}
+}
+
+func TestConfig_SetDefault_NonLoopbackRequiresAuth(t *testing.T) {
+	for _, bind := range []string{"10.1.2.3", "0.0.0.0", "::", "example.com"} {
+		t.Run(bind, func(t *testing.T) {
+			cfg := Config{Bind: bind}
+			err := cfg.SetDefault()
+			require.ErrorIs(t, err, ErrInsecureExposure)
+		})
+	}
+}
+
+func TestConfig_SetDefault_LoopbackWithoutAuth(t *testing.T) {
+	for _, bind := range []string{"127.0.0.1", "::1", "[::1]", "localhost"} {
+		t.Run(bind, func(t *testing.T) {
+			cfg := Config{Bind: bind}
+			require.NoError(t, cfg.SetDefault())
 		})
 	}
 }
@@ -75,7 +96,7 @@ func TestConfig_SetDefault_WildcardPreserved(t *testing.T) {
 func TestConfig_SetDefault_DeprecatedHostWarns(t *testing.T) {
 	t.Run("host used as bind", func(t *testing.T) {
 		logOutput := captureWarnLogs(t)
-		cfg := Config{Host: "10.0.0.5"}
+		cfg := Config{Host: "10.0.0.5", Auth: AuthConfig{Token: "secret"}}
 		require.NoError(t, cfg.SetDefault())
 		assert.Equal(t, "10.0.0.5", cfg.Bind)
 		assert.Contains(t, logOutput(), "governor.host is deprecated")
@@ -83,14 +104,22 @@ func TestConfig_SetDefault_DeprecatedHostWarns(t *testing.T) {
 
 	t.Run("bind takes precedence", func(t *testing.T) {
 		logOutput := captureWarnLogs(t)
-		cfg := Config{Bind: "10.0.0.1", Host: "10.0.0.2"}
+		cfg := Config{
+			Bind: "10.0.0.1",
+			Host: "10.0.0.2",
+			Auth: AuthConfig{Token: "secret"},
+		}
 		require.NoError(t, cfg.SetDefault())
 		assert.Equal(t, "10.0.0.1", cfg.Bind)
 		assert.Contains(t, logOutput(), "governor.bind takes precedence")
 	})
 
 	t.Run("setdefault is idempotent", func(t *testing.T) {
-		cfg := Config{Bind: "10.0.0.1", Host: "10.0.0.2"}
+		cfg := Config{
+			Bind: "10.0.0.1",
+			Host: "10.0.0.2",
+			Auth: AuthConfig{Token: "secret"},
+		}
 		require.NoError(t, cfg.SetDefault())
 		logOutput := captureWarnLogs(t)
 		require.NoError(t, cfg.SetDefault())
@@ -236,6 +265,50 @@ func TestConfigPatchSuccess(t *testing.T) {
 	assert.Equal(t, map[string]any{"flag": true}, payload["app"])
 }
 
+func TestConfigGetRedactsSensitiveValues(t *testing.T) {
+	manager := config.NewManager()
+	require.NoError(t, manager.LoadLayer(
+		"test",
+		config.PriorityOverride,
+		memory.NewSource("test", map[string]any{ //nolint:gosec // synthetic redaction fixture
+			"auth": map[string]any{
+				"token":    "token-value",
+				"password": "password-value",
+			},
+			"database": map[string]any{ //nolint:gosec // synthetic redaction fixture
+				"dsn":       "postgres://user:password@example.com/db",
+				"secondary": "keep-me",
+			},
+			"endpoint":      "https://user:password@example.com/path",
+			"malformed":     "postgres://user:pa%zz@example.com/db",
+			"custom":        map[string]any{"value": "custom-secret"},
+			"normal_config": "visible",
+		}),
+	))
+	s := startGovernor(t, Config{RedactPaths: []string{"custom.value"}}, manager)
+
+	resp, err := http.Get("http://" + s.Info().Address + "/configs")
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var payload map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
+	assert.Equal(t, redactedValue, payload["auth"].(map[string]any)["token"])
+	assert.Equal(t, redactedValue, payload["auth"].(map[string]any)["password"])
+	assert.Equal(t, redactedValue, payload["database"].(map[string]any)["dsn"])
+	assert.Equal(t, "keep-me", payload["database"].(map[string]any)["secondary"])
+	assert.Equal(t, redactedValue, payload["custom"].(map[string]any)["value"])
+	assert.Equal(t, "visible", payload["normal_config"])
+
+	endpoint, err := url.Parse(payload["endpoint"].(string))
+	require.NoError(t, err)
+	_, hasPassword := endpoint.User.Password()
+	require.True(t, hasPassword)
+	assert.NotContains(t, payload["endpoint"], "password")
+	assert.Equal(t, "postgres://user:"+redactedValue+"@example.com/db", payload["malformed"])
+}
+
 func TestAuthToken(t *testing.T) {
 	s := startGovernor(t, Config{Auth: AuthConfig{Token: "secret"}}, config.NewManager())
 
@@ -312,14 +385,25 @@ func TestWarnOnExposedRoutesWithoutAuth(t *testing.T) {
 }
 
 func TestServe_AdvertiseResolvesWildcard(t *testing.T) {
-	s := startGovernor(t, Config{Bind: "0.0.0.0"}, config.NewManager())
+	s := startGovernor(
+		t,
+		Config{Bind: "0.0.0.0", Auth: AuthConfig{Token: "secret"}},
+		config.NewManager(),
+	)
 
 	host, _, err := net.SplitHostPort(s.Info().Address)
 	require.NoError(t, err)
 	assert.Equal(t, "127.0.0.1", host, "wildcard listeners must advertise a routable host")
 
 	// The listener still accepts connections on the advertised address.
-	assertStatus(t, "GET", "http://"+s.Info().Address+"/routes", "", nil, http.StatusOK)
+	assertStatus(
+		t,
+		"GET",
+		"http://"+s.Info().Address+"/routes",
+		"",
+		map[string]string{"Authorization": "Bearer secret"},
+		http.StatusOK,
+	)
 }
 
 func TestHandle_MethodScope(t *testing.T) {
@@ -365,7 +449,10 @@ func captureWarnLogs(t *testing.T) func() string {
 }
 
 func TestWaitStartedReturnsServeError(t *testing.T) {
-	s, err := NewServerWithConfig(Config{Bind: "999.999.999.999"}, config.NewManager())
+	s, err := NewServerWithConfig(
+		Config{Bind: "999.999.999.999", Auth: AuthConfig{Token: "secret"}},
+		config.NewManager(),
+	)
 	require.NoError(t, err)
 
 	done := make(chan error, 1)

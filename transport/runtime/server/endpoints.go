@@ -14,6 +14,8 @@
 
 package server
 
+import restserver "github.com/codesjoy/yggdrasil/v3/transport/gateway/rest"
+
 func (si *serverInfo) Address() string {
 	return si.address
 }
@@ -34,18 +36,29 @@ func (s *server) Endpoints() []Endpoint {
 	endpoints := make([]Endpoint, len(s.servers))
 	for i, item := range s.servers {
 		e := item.Info()
+		address := e.AdvertiseAddress
+		if address == "" {
+			address = e.Address
+		}
 		endpoints[i] = &serverInfo{
 			protocol: e.Protocol,
-			address:  e.Address,
+			address:  address,
 			metadata: e.Attributes,
 			svrKind:  EndpointKindRPC,
 		}
 	}
 	if s.restEnable {
+		info := s.restSvr.Info()
+		address := info.GetAddress()
+		if provider, ok := info.(restserver.AdvertiseAddressProvider); ok {
+			if advertised := provider.GetAdvertiseAddress(); advertised != "" {
+				address = advertised
+			}
+		}
 		endpoints = append(endpoints, &serverInfo{
 			protocol: "http",
-			address:  s.restSvr.Info().GetAddress(),
-			metadata: s.restSvr.Info().GetAttributes(),
+			address:  address,
+			metadata: info.GetAttributes(),
 			svrKind:  EndpointKindRest,
 		})
 	}

@@ -15,19 +15,16 @@
 package governor
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"strings"
 	"time"
-
-	"github.com/codesjoy/yggdrasil/v3/internal/netaddr"
 )
 
 const (
-	// defaultGovernorBind is the loopback fallback used when no routable local
-	// address can be resolved. It is not the default listener bind.
+	// defaultGovernorBind keeps the admin surface local by default.
 	defaultGovernorBind              = "127.0.0.1"
 	defaultGovernorReadHeaderTimeout = 5 * time.Second
 	defaultGovernorReadTimeout       = 15 * time.Second
@@ -35,12 +32,11 @@ const (
 	defaultGovernorIdleTimeout       = time.Minute
 )
 
-// resolvePrimaryHost resolves the host's primary routable IPv4 address. It
-// backs both the unset-bind default and wildcard advertisement, and is
-// overridable in tests.
-var resolvePrimaryHost = func() string {
-	return netaddr.SelectPrimaryIPv4(context.Background())
-}
+// ErrInsecureExposure is returned when governor exposes a non-loopback listener
+// without authentication.
+var ErrInsecureExposure = errors.New(
+	"governor non-loopback bind requires token or basic authentication",
+)
 
 // BasicAuthConfig holds HTTP basic auth credentials for governor routes.
 type BasicAuthConfig struct {
@@ -82,9 +78,8 @@ type Config struct {
 	// Enabled controls whether governor serve loop is active.
 	// Nil means enabled for backward compatibility.
 	Enabled *bool `mapstructure:"enabled"`
-	// Bind is the preferred bind host for governor. When unset it resolves to
-	// the host's primary routable IPv4 address; an explicit wildcard is kept so
-	// the listener accepts connections on every interface.
+	// Bind is the preferred bind host for governor. When unset it defaults to
+	// loopback. Non-loopback and wildcard binds require authentication.
 	Bind string `mapstructure:"bind"`
 	// Host is a deprecated alias for Bind. Bind takes precedence when both are set.
 	Host              string        `mapstructure:"host"`
@@ -99,6 +94,7 @@ type Config struct {
 	AllowConfigPatch bool       `mapstructure:"allow_config_patch"`
 	Advertise        bool       `mapstructure:"advertise"`
 	Auth             AuthConfig `mapstructure:"auth"`
+	RedactPaths      []string   `mapstructure:"redact_paths"`
 }
 
 // Address returns address.
@@ -123,10 +119,7 @@ func (c *Config) SetDefault() error {
 	warnDeprecatedHost(c.Bind, c.Host)
 	c.Bind = normalizeGovernorBind(c.Bind, c.Host)
 	if c.Bind == "" {
-		c.Bind = resolvePrimaryHost()
-		if c.Bind == "" {
-			c.Bind = defaultGovernorBind
-		}
+		c.Bind = defaultGovernorBind
 	}
 	c.Host = c.Bind
 	if c.ReadHeaderTimeout <= 0 {
@@ -144,7 +137,14 @@ func (c *Config) SetDefault() error {
 	c.Auth.Token = strings.TrimSpace(c.Auth.Token)
 	c.Auth.Basic.Username = strings.TrimSpace(c.Auth.Basic.Username)
 	c.Auth.Basic.Password = strings.TrimSpace(c.Auth.Basic.Password)
-	return c.Auth.Validate()
+	c.RedactPaths = normalizeRedactPaths(c.RedactPaths)
+	if err := c.Auth.Validate(); err != nil {
+		return err
+	}
+	if c.IsEnabled() && !isLoopbackBind(c.Bind) && !c.Auth.Enabled() {
+		return fmt.Errorf("%w: bind=%s", ErrInsecureExposure, c.Bind)
+	}
+	return nil
 }
 
 // normalizeGovernorBind resolves the configured bind host.
@@ -158,6 +158,32 @@ func normalizeGovernorBind(bind, host string) string {
 		next = strings.TrimSpace(host)
 	}
 	return next
+}
+
+func normalizeRedactPaths(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	seen := make(map[string]struct{}, len(paths))
+	for _, item := range paths {
+		item = strings.Trim(strings.TrimSpace(item), ".")
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		out = append(out, item)
+	}
+	return out
+}
+
+func isLoopbackBind(bind string) bool {
+	bind = strings.TrimSpace(strings.Trim(bind, "[]"))
+	if strings.EqualFold(bind, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(bind)
+	return ip != nil && ip.IsLoopback()
 }
 
 func warnDeprecatedHost(bind, host string) {

@@ -553,7 +553,10 @@ func TestServer_ServerOptions_NoOptional(t *testing.T) {
 
 func TestServer_Start_Success(t *testing.T) {
 	ConfigureBuiltinCodecs()
-	cfg := ServerConfig{}
+	cfg := ServerConfig{
+		Address:          "127.0.0.1:0",
+		AdvertiseAddress: "service.example:9443",
+	}
 	require.NoError(t, cfg.SetDefault())
 
 	s := &server{
@@ -571,6 +574,7 @@ func TestServer_Start_Success(t *testing.T) {
 	err := s.Start()
 	require.NoError(t, err)
 	assert.NotEmpty(t, s.address)
+	assert.Equal(t, "service.example:9443", s.Info().AdvertiseAddress)
 	assert.True(t, s.serve)
 }
 
@@ -676,7 +680,7 @@ func TestServer_Stop_ContextExpiry(t *testing.T) {
 
 func TestServer_HandleUnknown_UnarySuccess(t *testing.T) {
 	ConfigureBuiltinCodecs()
-	cfg := ServerConfig{}
+	cfg := ServerConfig{Address: "127.0.0.1:0"}
 	require.NoError(t, cfg.SetDefault())
 
 	handler := func(ss remote.ServerStream) {
@@ -711,7 +715,7 @@ func TestServer_HandleUnknown_UnarySuccess(t *testing.T) {
 
 func TestServer_HandleUnknown_HandlerError(t *testing.T) {
 	ConfigureBuiltinCodecs()
-	cfg := ServerConfig{}
+	cfg := ServerConfig{Address: "127.0.0.1:0"}
 	require.NoError(t, cfg.SetDefault())
 
 	handler := func(ss remote.ServerStream) {

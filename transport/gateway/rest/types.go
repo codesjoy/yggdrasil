@@ -28,6 +28,12 @@ type ServerInfo interface {
 	GetAttributes() map[string]string
 }
 
+// AdvertiseAddressProvider optionally exposes the address published to
+// service discovery.
+type AdvertiseAddressProvider interface {
+	GetAdvertiseAddress() string
+}
+
 // Server is the interface that wraps the Serve method.
 type Server interface {
 	RPCHandle(method, path string, f HandlerFunc)

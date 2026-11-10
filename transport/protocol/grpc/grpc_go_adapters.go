@@ -532,9 +532,6 @@ func normalizeListenAddress(network, address string) (string, error) {
 		}
 		_ = network
 	}
-	host, err := listenaddr.NormalizeListenHost(host)
-	if err != nil {
-		return "", err
-	}
+	host = listenaddr.ResolveBindHost(host)
 	return net.JoinHostPort(host, port), nil
 }

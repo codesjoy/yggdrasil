@@ -40,26 +40,28 @@ func TestServerInfoAndEndpoints(t *testing.T) {
 	s.servers = []remote.Server{
 		&testRemoteServer{
 			info: remote.ServerInfo{
-				Protocol:   "grpc",
-				Address:    "127.0.0.1:9000",
-				Attributes: map[string]string{"k": "v"},
+				Protocol:         "grpc",
+				Address:          "0.0.0.0:9000",
+				AdvertiseAddress: "10.0.0.10:9000",
+				Attributes:       map[string]string{"k": "v"},
 			},
 		},
 	}
 	s.restEnable = true
 	s.restSvr = &mockRestServer{
-		address: "127.0.0.1:8080",
-		attr:    map[string]string{"kind": "rest"},
+		address:          "0.0.0.0:8080",
+		advertiseAddress: "10.0.0.10:8080",
+		attr:             map[string]string{"kind": "rest"},
 	}
 
 	endpoints := s.Endpoints()
 	require.Len(t, endpoints, 2)
 	require.Equal(t, "grpc", endpoints[0].Protocol())
-	require.Equal(t, "127.0.0.1:9000", endpoints[0].Address())
+	require.Equal(t, "10.0.0.10:9000", endpoints[0].Address())
 	require.Equal(t, "v", endpoints[0].Metadata()["k"])
 	require.Equal(t, EndpointKindRPC, endpoints[0].Kind())
 	require.Equal(t, "http", endpoints[1].Protocol())
-	require.Equal(t, "127.0.0.1:8080", endpoints[1].Address())
+	require.Equal(t, "10.0.0.10:8080", endpoints[1].Address())
 	require.Equal(t, "rest", endpoints[1].Metadata()["kind"])
 	require.Equal(t, EndpointKindRest, endpoints[1].Kind())
 }
