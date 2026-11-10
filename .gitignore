@@ -46,3 +46,6 @@ _output
 
 # Changelog scratch output used by `task changelog:verify`
 .chglog/CHANGELOG.generated.md
+
+.openidea
+.claude
