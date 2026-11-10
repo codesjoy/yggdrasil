@@ -25,6 +25,7 @@ import (
 	"runtime/debug"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
@@ -357,8 +358,7 @@ func splitRedactPath(path string) []string {
 }
 
 func isSensitiveConfigKey(key string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(key))
-	normalized = strings.NewReplacer("-", "_", ".", "_", " ", "_").Replace(normalized)
+	normalized := normalizeSensitiveKey(key)
 	if _, ok := sensitiveConfigKeys[normalized]; ok {
 		return true
 	}
@@ -378,7 +378,45 @@ func isSensitiveConfigKey(key string) bool {
 			return true
 		}
 	}
+	for _, prefix := range []string{
+		"authorization_",
+		"connection_string_",
+		"credential_",
+		"credentials_",
+		"dsn_",
+		"password_",
+		"passwd_",
+		"private_key_",
+		"secret_",
+		"token_",
+	} {
+		if strings.HasPrefix(normalized, prefix) {
+			return true
+		}
+	}
 	return false
+}
+
+func normalizeSensitiveKey(key string) string {
+	raw := strings.TrimSpace(key)
+	var normalized strings.Builder
+	var previous rune
+	for index, current := range raw {
+		switch {
+		case unicode.IsUpper(current):
+			if index > 0 && previous != '_' && previous != '-' && previous != '.' &&
+				previous != ' ' {
+				normalized.WriteByte('_')
+			}
+			normalized.WriteRune(unicode.ToLower(current))
+		case current == '-', current == '.', current == ' ':
+			normalized.WriteByte('_')
+		default:
+			normalized.WriteRune(unicode.ToLower(current))
+		}
+		previous = current
+	}
+	return strings.Trim(normalized.String(), "_")
 }
 
 func redactURLPassword(value string) string {

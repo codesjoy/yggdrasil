@@ -20,6 +20,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -175,9 +176,13 @@ type SpecDiff struct {
 	AffectedDomains []string          `json:"affected_domains,omitempty" yaml:"affected_domains,omitempty"`
 	Mode            *ValueDiffEntry   `json:"mode,omitempty"             yaml:"mode,omitempty"`
 	Modules         []ModuleDiffEntry `json:"modules,omitempty"          yaml:"modules,omitempty"`
+	Identity        []ValueDiffEntry  `json:"identity,omitempty"         yaml:"identity,omitempty"`
 	Defaults        []ValueDiffEntry  `json:"defaults,omitempty"         yaml:"defaults,omitempty"`
 	Chains          []ChainDiffEntry  `json:"chains,omitempty"           yaml:"chains,omitempty"`
 	Overrides       []ValueDiffEntry  `json:"overrides,omitempty"        yaml:"overrides,omitempty"`
+	Decisions       []ValueDiffEntry  `json:"decisions,omitempty"        yaml:"decisions,omitempty"`
+	Warnings        []ValueDiffEntry  `json:"warnings,omitempty"         yaml:"warnings,omitempty"`
+	Conflicts       []ValueDiffEntry  `json:"conflicts,omitempty"        yaml:"conflicts,omitempty"`
 }
 
 type canonicalKV struct {
@@ -232,6 +237,14 @@ func Diff(oldSpec, newSpec *Spec) (*SpecDiff, error) {
 			New:    newCanonical.Mode.Name,
 		}
 		domains["mode"] = struct{}{}
+	}
+
+	diff.Identity = diffStringMaps(
+		identityDiffMap(oldCanonical.Identity),
+		identityDiffMap(newCanonical.Identity),
+	)
+	if len(diff.Identity) > 0 {
+		domains["identity"] = struct{}{}
 	}
 
 	oldModules := make(map[string]ModuleRef, len(oldCanonical.Modules))
@@ -328,11 +341,39 @@ func Diff(oldSpec, newSpec *Spec) (*SpecDiff, error) {
 		domains["overrides"] = struct{}{}
 	}
 
+	diff.Decisions = diffValueSets(
+		decisionDiffMap(oldCanonical.Decisions),
+		decisionDiffMap(newCanonical.Decisions),
+	)
+	if len(diff.Decisions) > 0 {
+		domains["decisions"] = struct{}{}
+	}
+
+	diff.Warnings = diffValueSets(
+		warningDiffMap(oldCanonical.Warnings),
+		warningDiffMap(newCanonical.Warnings),
+	)
+	if len(diff.Warnings) > 0 {
+		domains["warnings"] = struct{}{}
+	}
+
+	diff.Conflicts = diffValueSets(
+		conflictDiffMap(oldCanonical.Conflicts),
+		conflictDiffMap(newCanonical.Conflicts),
+	)
+	if len(diff.Conflicts) > 0 {
+		domains["conflicts"] = struct{}{}
+	}
+
 	diff.HasChanges = diff.Mode != nil ||
 		len(diff.Modules) > 0 ||
+		len(diff.Identity) > 0 ||
 		len(diff.Defaults) > 0 ||
 		len(diff.Chains) > 0 ||
-		len(diff.Overrides) > 0
+		len(diff.Overrides) > 0 ||
+		len(diff.Decisions) > 0 ||
+		len(diff.Warnings) > 0 ||
+		len(diff.Conflicts) > 0
 	diff.AffectedDomains = unionKeys(domains, map[string]struct{}{})
 
 	oldHash, err := Hash(oldSpec)
@@ -364,6 +405,90 @@ func Diff(oldSpec, newSpec *Spec) (*SpecDiff, error) {
 	return diff, nil
 }
 
+func identityDiffMap(identity IdentitySpec) map[string]string {
+	metadata, _ := json.Marshal(identity.Metadata)
+	return map[string]string{
+		"app_name":  identity.AppName,
+		"namespace": identity.Namespace,
+		"version":   identity.Version,
+		"region":    identity.Region,
+		"zone":      identity.Zone,
+		"campus":    identity.Campus,
+		"metadata":  string(metadata),
+	}
+}
+
+func decisionDiffMap(decisions []Decision) map[string]string {
+	out := make(map[string]string, len(decisions))
+	occurrences := make(map[string]int, len(decisions))
+	for _, item := range decisions {
+		base := strings.Join(
+			[]string{item.Kind, item.Target, item.Source, item.Stage},
+			"\x00",
+		)
+		value, _ := json.Marshal(item)
+		key := indexedValueKey(base, occurrences[base])
+		occurrences[base]++
+		out[key] = string(value)
+	}
+	return out
+}
+
+func warningDiffMap(warnings []Warning) map[string]string {
+	out := make(map[string]string, len(warnings))
+	occurrences := make(map[string]int, len(warnings))
+	for _, item := range warnings {
+		base := item.Code
+		value, _ := json.Marshal(item)
+		key := indexedValueKey(base, occurrences[base])
+		occurrences[base]++
+		out[key] = string(value)
+	}
+	return out
+}
+
+func conflictDiffMap(conflicts []Conflict) map[string]string {
+	out := make(map[string]string, len(conflicts))
+	occurrences := make(map[string]int, len(conflicts))
+	for _, item := range conflicts {
+		base := item.Code
+		value, _ := json.Marshal(item)
+		key := indexedValueKey(base, occurrences[base])
+		occurrences[base]++
+		out[key] = string(value)
+	}
+	return out
+}
+
+func indexedValueKey(base string, occurrence int) string {
+	if occurrence == 0 {
+		return base
+	}
+	return fmt.Sprintf("%s#%d", base, occurrence+1)
+}
+
+func diffStringMaps(oldValues, newValues map[string]string) []ValueDiffEntry {
+	return diffValueSets(oldValues, newValues)
+}
+
+func diffValueSets(oldValues, newValues map[string]string) []ValueDiffEntry {
+	keys := unionKeys(oldValues, newValues)
+	out := make([]ValueDiffEntry, 0, len(keys))
+	for _, key := range keys {
+		oldValue := oldValues[key]
+		newValue := newValues[key]
+		if oldValue == newValue {
+			continue
+		}
+		out = append(out, ValueDiffEntry{
+			Target: strings.ReplaceAll(key, "\x00", ":"),
+			Old:    oldValue,
+			New:    newValue,
+		})
+	}
+	return out
+}
+
 func toCanonicalSpec(spec *Spec) canonicalSpec {
 	if spec == nil {
 		return canonicalSpec{}
@@ -390,7 +515,13 @@ func toCanonicalSpec(spec *Spec) canonicalSpec {
 		if out.Decisions[i].Source != out.Decisions[j].Source {
 			return out.Decisions[i].Source < out.Decisions[j].Source
 		}
-		return out.Decisions[i].Value < out.Decisions[j].Value
+		if out.Decisions[i].Value != out.Decisions[j].Value {
+			return out.Decisions[i].Value < out.Decisions[j].Value
+		}
+		if out.Decisions[i].Reason != out.Decisions[j].Reason {
+			return out.Decisions[i].Reason < out.Decisions[j].Reason
+		}
+		return out.Decisions[i].Stage < out.Decisions[j].Stage
 	})
 	sort.Slice(out.Warnings, func(i, j int) bool {
 		if out.Warnings[i].Code != out.Warnings[j].Code {

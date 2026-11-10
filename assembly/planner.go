@@ -187,7 +187,10 @@ func (p *planner) resolveMode() error {
 }
 
 func (p *planner) validateBindings(bindings map[string][]string) error {
-	for capability, names := range bindings {
+	capabilities := sortedKeys(bindings)
+	for _, capability := range capabilities {
+		names := append([]string(nil), bindings[capability]...)
+		sort.Strings(names)
 		for _, name := range names {
 			if err := p.requireProvider(capability, name, ErrUnknownExplicitBinding); err != nil {
 				return err
@@ -234,7 +237,13 @@ func (p *planner) buildSpec() *Spec {
 		if spec.Decisions[i].Source != spec.Decisions[j].Source {
 			return spec.Decisions[i].Source < spec.Decisions[j].Source
 		}
-		return spec.Decisions[i].Value < spec.Decisions[j].Value
+		if spec.Decisions[i].Value != spec.Decisions[j].Value {
+			return spec.Decisions[i].Value < spec.Decisions[j].Value
+		}
+		if spec.Decisions[i].Reason != spec.Decisions[j].Reason {
+			return spec.Decisions[i].Reason < spec.Decisions[j].Reason
+		}
+		return spec.Decisions[i].Stage < spec.Decisions[j].Stage
 	})
 	return spec
 }

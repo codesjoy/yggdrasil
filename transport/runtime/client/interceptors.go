@@ -16,21 +16,48 @@ package client
 
 import (
 	"slices"
+
+	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
 )
 
-func (c *client) initInterceptor() {
+func (c *client) initInterceptor() error {
 	cfg := c.runtime.ClientSettings(c.appName)
 	unaryNames := append([]string(nil), cfg.Interceptors.Unary...)
 	unaryNames = dedupStableStrings(
 		slices.DeleteFunc(unaryNames, func(s string) bool { return s == "" }),
 	)
-	c.unaryInterceptor = c.runtime.BuildUnaryClientInterceptor(c.appName, unaryNames)
-
 	streamNames := append([]string(nil), cfg.Interceptors.Stream...)
 	streamNames = dedupStableStrings(
 		slices.DeleteFunc(streamNames, func(s string) bool { return s == "" }),
 	)
+	if strict, ok := c.runtime.(interface {
+		BuildUnaryClientInterceptorE(
+			string,
+			[]string,
+		) (interceptor.UnaryClientInterceptor, error)
+		BuildStreamClientInterceptorE(
+			string,
+			[]string,
+		) (interceptor.StreamClientInterceptor, error)
+	}); ok {
+		unary, err := strict.BuildUnaryClientInterceptorE(c.appName, unaryNames)
+		if err != nil {
+			return err
+		}
+		streamInterceptor, err := strict.BuildStreamClientInterceptorE(
+			c.appName,
+			streamNames,
+		)
+		if err != nil {
+			return err
+		}
+		c.unaryInterceptor = unary
+		c.streamInterceptor = streamInterceptor
+		return nil
+	}
+	c.unaryInterceptor = c.runtime.BuildUnaryClientInterceptor(c.appName, unaryNames)
 	c.streamInterceptor = c.runtime.BuildStreamClientInterceptor(c.appName, streamNames)
+	return nil
 }
 
 func dedupStableStrings(values []string) []string {

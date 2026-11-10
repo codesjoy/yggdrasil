@@ -38,6 +38,7 @@ type Module interface {
 | `Startable` | 启动服务行为或后台过程 |
 | `Stoppable` | 停止资源，必须幂等 |
 | `Reloadable` | 支持 staged reload |
+| `ReloadFinalizer` | 所有 reload commit 成功后释放旧资源 |
 | `CapabilityProvider` | 暴露 capability |
 | `AutoDescribed` | 参与自动装配 |
 | `Scoped` | 声明生命周期作用域 |
@@ -168,6 +169,7 @@ type Capability struct {
 
 - spec name 非空；
 - capability value 非 nil；
+- capability spec type 非 nil；
 - 同名 capability 的基数一致；
 - 类型声明一致；
 - value 类型实现或可赋值给 spec type；
@@ -186,6 +188,10 @@ func ResolveOrdered[T any](h *Hub, spec CapabilitySpec, names []string) ([]T, er
 ```
 
 `ResolveOrdered` 还需要校验配置列表中的重复、缺失名称和类型不匹配。
+
+`PrepareReload` 可以准备新的 runtime 对象，但不能提前发布。Hub 会先提交所有
+受影响模块，且仅在全部 commit 成功后调用 `ReloadFinalizer`。任一 commit 失败时，
+会逆序回滚已提交或已 prepare 的 committer，失败模块本身也包含在回滚集合中。
 
 ## 6. Scope 边界
 

@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/codesjoy/yggdrasil/v3/admin/governor"
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
@@ -232,6 +233,87 @@ func TestSnapshot_RESTConfig(t *testing.T) {
 		s.Resolved.Transports.Rest = &rest.Config{}
 		assert.NotNil(t, s.RESTConfig())
 	})
+}
+
+func TestSnapshotCopyDeepCopiesResolvedData(t *testing.T) {
+	snapshot := &Snapshot{
+		Resolved: settings.Resolved{
+			Server: server.Settings{Transports: []string{"grpc"}},
+			Transports: settings.ResolvedTransports{
+				Rest: &rest.Config{Host: "127.0.0.1", Port: 8080},
+			},
+			Clients: client.Settings{
+				Services: map[string]client.ServiceSettings{
+					"svc": {
+						Remote: client.RemoteSettings{
+							Attributes: map[string]any{
+								"nested": map[string]any{"value": "original"},
+							},
+						},
+					},
+				},
+			},
+			Discovery: settings.Discovery{
+				Registry: registry.Spec{
+					Type:   "multi_registry",
+					Config: map[string]any{"registries": []any{"original"}},
+				},
+			},
+			Admin: settings.Admin{
+				Governor: governor.Config{RedactPaths: []string{"custom.secret"}},
+			},
+			CapabilityBindings: map[string][]string{
+				"transport.server.provider": {"grpc"},
+			},
+		},
+	}
+
+	copied := snapshot.Copy()
+	copied.Resolved.Server.Transports[0] = "http"
+	copied.Resolved.Transports.Rest.Port = 9090
+	copiedAttributes := copied.Resolved.Clients.Services["svc"].Remote.Attributes
+	nested := copiedAttributes["nested"].(map[string]any)
+	nested["value"] = "changed"
+	copied.Resolved.Discovery.Registry.Config["registries"].([]any)[0] = "changed"
+	copied.Resolved.Admin.Governor.RedactPaths[0] = "changed"
+	copied.Resolved.CapabilityBindings["transport.server.provider"][0] = "http"
+
+	assert.Equal(t, []string{"grpc"}, snapshot.Resolved.Server.Transports)
+	assert.Equal(t, 8080, snapshot.Resolved.Transports.Rest.Port)
+	originalAttributes := snapshot.Resolved.Clients.Services["svc"].Remote.Attributes
+	originalNested := originalAttributes["nested"].(map[string]any)
+	assert.Equal(t, "original", originalNested["value"])
+	assert.Equal(
+		t,
+		"original",
+		snapshot.Resolved.Discovery.Registry.Config["registries"].([]any)[0],
+	)
+	assert.Equal(t, []string{"custom.secret"}, snapshot.Resolved.Admin.Governor.RedactPaths)
+	assert.Equal(
+		t,
+		[]string{"grpc"},
+		snapshot.Resolved.CapabilityBindings["transport.server.provider"],
+	)
+}
+
+func TestSnapshotRESTConfigReturnsCopy(t *testing.T) {
+	snapshot := &Snapshot{
+		Resolved: settings.Resolved{
+			Transports: settings.ResolvedTransports{
+				Rest: &rest.Config{
+					Host:      "127.0.0.1",
+					OutHeader: []string{"x-original"},
+				},
+			},
+		},
+	}
+	first := snapshot.RESTConfig()
+	first.Host = "0.0.0.0"
+	first.OutHeader[0] = "x-changed"
+
+	second := snapshot.RESTConfig()
+	assert.Equal(t, "127.0.0.1", second.Host)
+	assert.Equal(t, []string{"x-original"}, second.OutHeader)
 }
 
 // --- cloneMap ---

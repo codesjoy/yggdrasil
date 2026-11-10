@@ -34,6 +34,7 @@ Every other behavior is expressed through optional interfaces:
 | `Startable` | Starts serving behavior or background processes |
 | `Stoppable` | Stops resources; must be idempotent |
 | `Reloadable` | Supports staged reload |
+| `ReloadFinalizer` | Releases old resources after every reload commit succeeds |
 | `CapabilityProvider` | Exposes capabilities |
 | `AutoDescribed` | Participates in auto assembly |
 | `Scoped` | Declares runtime lifetime scope |
@@ -167,6 +168,7 @@ During `Seal()`, the Hub validates:
 
 - spec name is non-empty;
 - capability value is non-nil;
+- capability spec type is non-nil;
 - cardinality is consistent for the same capability name;
 - type declaration is consistent;
 - value type implements or is assignable to the spec type;
@@ -185,6 +187,11 @@ func ResolveOrdered[T any](h *Hub, spec CapabilitySpec, names []string) ([]T, er
 ```
 
 `ResolveOrdered` must also reject duplicates, missing provider names, and type mismatches in the configured list.
+
+`PrepareReload` may stage new runtime objects but must not publish them. The Hub
+commits every affected module first and invokes `ReloadFinalizer` only after all
+commits succeed. If any commit fails, every committed or prepared committer is
+rolled back in reverse order, including the failing module.
 
 ## 6. Scope Boundary
 

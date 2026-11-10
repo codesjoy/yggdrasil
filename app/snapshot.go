@@ -17,6 +17,7 @@ package app
 import (
 	"fmt"
 	"log/slog"
+	"reflect"
 
 	"github.com/go-chi/chi/v5"
 	"go.opentelemetry.io/otel/metric"
@@ -90,6 +91,83 @@ func cloneMap[K comparable, V any](in map[K]V) map[K]V {
 	return out
 }
 
+func cloneResolvedSettings(in settings.Resolved) settings.Resolved {
+	cloned := cloneReflectValue(reflect.ValueOf(in))
+	if !cloned.IsValid() {
+		return settings.Resolved{}
+	}
+	return cloned.Interface().(settings.Resolved)
+}
+
+func cloneReflectValue(value reflect.Value) reflect.Value {
+	if !value.IsValid() {
+		return value
+	}
+	switch value.Kind() {
+	case reflect.Interface:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		cloned := cloneReflectValue(value.Elem())
+		out := reflect.New(value.Type()).Elem()
+		out.Set(cloned)
+		return out
+	case reflect.Pointer:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		out := reflect.New(value.Type().Elem())
+		out.Elem().Set(cloneReflectValue(value.Elem()))
+		return out
+	case reflect.Map:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		out := reflect.MakeMapWithSize(value.Type(), value.Len())
+		iter := value.MapRange()
+		for iter.Next() {
+			out.SetMapIndex(
+				cloneReflectValue(iter.Key()),
+				cloneReflectValue(iter.Value()),
+			)
+		}
+		return out
+	case reflect.Slice:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		out := reflect.MakeSlice(value.Type(), value.Len(), value.Cap())
+		for index := 0; index < value.Len(); index++ {
+			out.Index(index).Set(cloneReflectValue(value.Index(index)))
+		}
+		return out
+	case reflect.Array:
+		out := reflect.New(value.Type()).Elem()
+		for index := 0; index < value.Len(); index++ {
+			out.Index(index).Set(cloneReflectValue(value.Index(index)))
+		}
+		return out
+	case reflect.Struct:
+		out := reflect.New(value.Type()).Elem()
+		if value.CanInterface() {
+			out.Set(value)
+		}
+		for index := 0; index < value.NumField(); index++ {
+			field := out.Field(index)
+			if !field.CanSet() {
+				continue
+			}
+			cloned := cloneReflectValue(value.Field(index))
+			if cloned.IsValid() {
+				field.Set(cloned)
+			}
+		}
+		return out
+	default:
+		return value
+	}
+}
+
 // Copy returns a detached snapshot copy.
 func (s *Snapshot) Copy() *Snapshot {
 	if s == nil {
@@ -99,7 +177,7 @@ func (s *Snapshot) Copy() *Snapshot {
 	identity.Metadata = identity.metadataCopy()
 	return &Snapshot{
 		Identity:                        identity,
-		Resolved:                        s.Resolved,
+		Resolved:                        cloneResolvedSettings(s.Resolved),
 		Logger:                          s.Logger,
 		RemoteLogger:                    s.RemoteLogger,
 		TracerProvider:                  s.TracerProvider,
@@ -169,7 +247,16 @@ func (s *Snapshot) RESTConfig() *rest.Config {
 	if s == nil {
 		return nil
 	}
-	return s.Resolved.Transports.Rest
+	return cloneRESTConfig(s.Resolved.Transports.Rest)
+}
+
+func cloneRESTConfig(config *rest.Config) *rest.Config {
+	if config == nil {
+		return nil
+	}
+	cloned := cloneReflectValue(reflect.ValueOf(config))
+	out, _ := cloned.Interface().(*rest.Config)
+	return out
 }
 
 // RESTMiddlewareProviders returns the App-scoped REST middleware providers.
@@ -212,11 +299,31 @@ func (s *Snapshot) BuildUnaryServerInterceptor(names []string) interceptor.Unary
 	)
 }
 
+// BuildUnaryServerInterceptorE builds a strict unary server interceptor chain.
+func (s *Snapshot) BuildUnaryServerInterceptorE(
+	names []string,
+) (interceptor.UnaryServerInterceptor, error) {
+	return interceptor.ChainUnaryServerInterceptorsWithProvidersE(
+		names,
+		s.UnaryServerInterceptorProviders,
+	)
+}
+
 // BuildStreamServerInterceptor builds one stream server interceptor chain from the explicit provider map.
 func (s *Snapshot) BuildStreamServerInterceptor(
 	names []string,
 ) interceptor.StreamServerInterceptor {
 	return interceptor.ChainStreamServerInterceptorsWithProviders(
+		names,
+		s.StreamServerInterceptorProviders,
+	)
+}
+
+// BuildStreamServerInterceptorE builds a strict stream server interceptor chain.
+func (s *Snapshot) BuildStreamServerInterceptorE(
+	names []string,
+) (interceptor.StreamServerInterceptor, error) {
+	return interceptor.ChainStreamServerInterceptorsWithProvidersE(
 		names,
 		s.StreamServerInterceptorProviders,
 	)
@@ -228,6 +335,18 @@ func (s *Snapshot) BuildUnaryClientInterceptor(
 	names []string,
 ) interceptor.UnaryClientInterceptor {
 	return interceptor.ChainUnaryClientInterceptorsWithProviders(
+		serviceName,
+		names,
+		s.UnaryClientInterceptorProviders,
+	)
+}
+
+// BuildUnaryClientInterceptorE builds a strict unary client interceptor chain.
+func (s *Snapshot) BuildUnaryClientInterceptorE(
+	serviceName string,
+	names []string,
+) (interceptor.UnaryClientInterceptor, error) {
+	return interceptor.ChainUnaryClientInterceptorsWithProvidersE(
 		serviceName,
 		names,
 		s.UnaryClientInterceptorProviders,
@@ -246,9 +365,27 @@ func (s *Snapshot) BuildStreamClientInterceptor(
 	)
 }
 
+// BuildStreamClientInterceptorE builds a strict stream client interceptor chain.
+func (s *Snapshot) BuildStreamClientInterceptorE(
+	serviceName string,
+	names []string,
+) (interceptor.StreamClientInterceptor, error) {
+	return interceptor.ChainStreamClientInterceptorsWithProvidersE(
+		serviceName,
+		names,
+		s.StreamClientInterceptorProviders,
+	)
+}
+
 // BuildRESTMiddlewares builds one REST middleware chain from the explicit provider map.
 func (s *Snapshot) BuildRESTMiddlewares(names ...string) chi.Middlewares {
 	return rest.BuildWithProviders(s.RESTMiddlewareProviderMap, names...)
+}
+
+// StrictRESTMiddlewares reports that runtime construction must reject missing
+// REST middleware providers.
+func (*Snapshot) StrictRESTMiddlewares() bool {
+	return true
 }
 
 // NewRegistry builds the configured default registry.

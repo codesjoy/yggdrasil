@@ -365,10 +365,18 @@ func (a *App) Wait() error {
 	a.mu.Lock()
 	done := a.waitDone
 	err := a.waitErr
+	stopping := a.stopping.Load()
+	stopDone := a.stopDone
 	a.mu.Unlock()
 
 	if done == nil {
-		return err
+		if !stopping {
+			return err
+		}
+		<-stopDone
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return a.stopErr
 	}
 	<-done
 
@@ -379,8 +387,8 @@ func (a *App) Wait() error {
 
 // Stop stops the application.
 func (a *App) Stop(ctx context.Context) error {
-	a.stopping.Store(true)
 	a.mu.Lock()
+	a.stopping.Store(true)
 	if a.state != lifecycleStateNew {
 		a.state = lifecycleStateStopping
 	}

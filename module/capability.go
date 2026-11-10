@@ -124,6 +124,13 @@ func collectCapabilities(modules []Module) (capabilityCollectResult, error) {
 					cap.Spec.Name,
 				)
 			}
+			if cap.Spec.Type == nil {
+				return capabilityCollectResult{}, fmt.Errorf(
+					"module %q capability %q has empty type",
+					mod.Name(),
+					cap.Spec.Name,
+				)
+			}
 			if cap.Name == "" {
 				cap.Name = mod.Name()
 			}
@@ -143,8 +150,7 @@ func collectCapabilities(modules []Module) (capabilityCollectResult, error) {
 						moduleConflicts: normalizeModuleConflicts(moduleConflicts),
 					}, errors.New(message)
 				}
-				if currentSpec.Type != nil && cap.Spec.Type != nil &&
-					currentSpec.Type != cap.Spec.Type {
+				if currentSpec.Type != cap.Spec.Type {
 					message := fmt.Sprintf(
 						"capability %q type mismatch: %v vs %v",
 						cap.Spec.Name,
@@ -158,12 +164,6 @@ func collectCapabilities(modules []Module) (capabilityCollectResult, error) {
 						moduleConflicts: normalizeModuleConflicts(moduleConflicts),
 					}, errors.New(message)
 				}
-				if currentSpec.Type != nil && cap.Spec.Type == nil {
-					cap.Spec.Type = currentSpec.Type
-				}
-			}
-			if cap.Spec.Type == nil {
-				cap.Spec.Type = reflect.TypeOf(cap.Value)
 			}
 			if !typeMatches(cap.Spec.Type, reflect.TypeOf(cap.Value)) {
 				message := fmt.Sprintf(

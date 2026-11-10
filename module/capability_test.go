@@ -586,22 +586,11 @@ func TestCollectCapabilities_OptionalOneViolation(t *testing.T) {
 	require.Contains(t, err.Error(), "at most one provider")
 }
 
-func TestCollectCapabilities_NilTypeInferredFromValue(t *testing.T) {
+func TestCollectCapabilities_NilTypeIsHardError(t *testing.T) {
 	p := &nilTypeProvider{}
-	result, err := collectCapabilities([]Module{p})
-	require.NoError(t, err)
-	entries := result.index["infer.cap"]
-	require.Len(t, entries, 1)
-	require.Equal(t, reflect.TypeOf(namedStringer("")), entries[0].spec.Type)
-}
-
-func TestCollectCapabilities_NilTypeInheritsFromPrevious(t *testing.T) {
-	p1 := &nilTypeProvider{}       // first provider, Type=nil, value is namedStringer
-	p2 := &nilTypeSecondProvider{} // second provider, Type=nil, value is namedStringer
-	result, err := collectCapabilities([]Module{p1, p2})
-	require.NoError(t, err)
-	entries := result.index["infer.cap"]
-	require.Len(t, entries, 2)
+	_, err := collectCapabilities([]Module{p})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "empty type")
 }
 
 // ---------------------------------------------------------------------------
@@ -686,19 +675,5 @@ func (m *nilTypeProvider) Capabilities() []Capability {
 			Type:        nil,
 		},
 		Value: namedStringer("v"),
-	}}
-}
-
-type nilTypeSecondProvider struct{}
-
-func (m *nilTypeSecondProvider) Name() string { return "nil-type-2" }
-func (m *nilTypeSecondProvider) Capabilities() []Capability {
-	return []Capability{{
-		Spec: CapabilitySpec{
-			Name:        "infer.cap",
-			Cardinality: Many,
-			Type:        nil,
-		},
-		Value: namedStringer("v2"),
 	}}
 }

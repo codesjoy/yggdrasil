@@ -100,6 +100,53 @@ func TestStopBeforeStartBlocksRestartAndClientInitialization(t *testing.T) {
 	require.ErrorIs(t, err, errRestartUnsupported)
 }
 
+func TestWaitWaitsForStopBeforeStart(t *testing.T) {
+	app := newTestApp(t, "wait-stop-before-start")
+	cleanupEntered := make(chan struct{})
+	releaseCleanup := make(chan struct{})
+	require.NoError(
+		t,
+		app.lifecycle.Init(withLifecycleCleanup("blocking", func(ctx context.Context) error {
+			close(cleanupEntered)
+			select {
+			case <-releaseCleanup:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		})),
+	)
+
+	stopDone := make(chan error, 1)
+	go func() {
+		stopDone <- app.Stop(context.Background())
+	}()
+	select {
+	case <-cleanupEntered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not reach cleanup")
+	}
+
+	waitDone := make(chan error, 1)
+	go func() {
+		waitDone <- app.Wait()
+	}()
+	select {
+	case err := <-waitDone:
+		t.Fatalf("Wait returned before Stop completed: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(releaseCleanup)
+	require.NoError(t, <-stopDone)
+	select {
+	case err := <-waitDone:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Wait did not return after Stop completed")
+	}
+}
+
 type testExtraModule struct {
 	name string
 }

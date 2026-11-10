@@ -199,7 +199,9 @@ func New(ctx context.Context, appName string, runtimeSnapshot Runtime) (_ Client
 	if err = cli.initResolverAndBalancer(cfg); err != nil {
 		return nil, err
 	}
-	cli.initInterceptor()
+	if err = cli.initInterceptor(); err != nil {
+		return nil, err
+	}
 	if cli.resolver != nil {
 		if err = cli.resolver.AddWatch(cli.appName, cli); err != nil {
 			return nil, err

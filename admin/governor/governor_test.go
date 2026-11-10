@@ -272,8 +272,11 @@ func TestConfigGetRedactsSensitiveValues(t *testing.T) {
 		config.PriorityOverride,
 		memory.NewSource("test", map[string]any{ //nolint:gosec // synthetic redaction fixture
 			"auth": map[string]any{
-				"token":    "token-value",
-				"password": "password-value",
+				"token":            "token-value",
+				"password":         "password-value",
+				"privateKey":       "private-key-value",
+				"connectionString": "connection-string-value",
+				"passwordHash":     "hash-value",
 			},
 			"database": map[string]any{ //nolint:gosec // synthetic redaction fixture
 				"dsn":       "postgres://user:password@example.com/db",
@@ -296,6 +299,9 @@ func TestConfigGetRedactsSensitiveValues(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
 	assert.Equal(t, redactedValue, payload["auth"].(map[string]any)["token"])
 	assert.Equal(t, redactedValue, payload["auth"].(map[string]any)["password"])
+	assert.Equal(t, redactedValue, payload["auth"].(map[string]any)["privateKey"])
+	assert.Equal(t, redactedValue, payload["auth"].(map[string]any)["connectionString"])
+	assert.Equal(t, redactedValue, payload["auth"].(map[string]any)["passwordHash"])
 	assert.Equal(t, redactedValue, payload["database"].(map[string]any)["dsn"])
 	assert.Equal(t, "keep-me", payload["database"].(map[string]any)["secondary"])
 	assert.Equal(t, redactedValue, payload["custom"].(map[string]any)["value"])

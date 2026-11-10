@@ -389,6 +389,7 @@ func TestHTTPClientStream_Trailer_Empty(t *testing.T) {
 func TestHTTPClientStream_Header_AlreadyReceived(t *testing.T) {
 	cs := &httpClientStream{
 		ctx:      context.Background(),
+		reqSent:  true,
 		respRecv: true,
 		header:   metadata.Pairs("key1", "val1"),
 	}
@@ -401,6 +402,7 @@ func TestHTTPClientStream_Header_AlreadyReceivedWithErr(t *testing.T) {
 	testErr := errors.New("connection refused")
 	cs := &httpClientStream{
 		ctx:      context.Background(),
+		reqSent:  true,
 		respRecv: true,
 		header:   metadata.Pairs("key1", "val1"),
 		respErr:  testErr,
@@ -412,7 +414,10 @@ func TestHTTPClientStream_Header_AlreadyReceivedWithErr(t *testing.T) {
 
 func TestHTTPClientStream_Header_WaitForResponse(t *testing.T) {
 	cs := &httpClientStream{
-		ctx: context.Background(),
+		ctx:             context.Background(),
+		reqSent:         true,
+		responseStarted: true,
+		headersReady:    make(chan struct{}),
 	}
 
 	done := make(chan struct{})
@@ -432,7 +437,10 @@ func TestHTTPClientStream_Header_WaitForResponse(t *testing.T) {
 
 func TestHTTPClientStream_Header_WaitNilHeader(t *testing.T) {
 	cs := &httpClientStream{
-		ctx: context.Background(),
+		ctx:             context.Background(),
+		reqSent:         true,
+		responseStarted: true,
+		headersReady:    make(chan struct{}),
 	}
 
 	done := make(chan struct{})
@@ -617,7 +625,43 @@ func TestHTTPClientStream_RecvMsg_Non200_RawBody(t *testing.T) {
 	var msg testMessage
 	err = cs.RecvMsg(&msg)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "internal server error body")
+	assert.NotContains(t, err.Error(), "internal server error body")
+	assert.Contains(t, err.Error(), "500")
+}
+
+func TestHTTPClientStream_RecvMsg_Non200EmptyBody(t *testing.T) {
+	cs, _ := newTestClientStream(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+
+	err := cs.SendMsg(&testMessage{Value: "req"})
+	require.NoError(t, err)
+
+	var msg testMessage
+	err = cs.RecvMsg(&msg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "404")
+}
+
+func TestHTTPClientStream_HeaderBeforeSendIsFailedPrecondition(t *testing.T) {
+	cs := &httpClientStream{ctx: context.Background()}
+	_, err := cs.Header()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "request not sent")
+}
+
+func TestHTTPClientStream_HeaderHonorsContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cs := &httpClientStream{
+		ctx:             ctx,
+		reqSent:         true,
+		responseStarted: true,
+		headersReady:    make(chan struct{}),
+	}
+	cancel()
+
+	_, err := cs.Header()
+	require.ErrorIs(t, err, context.Canceled)
 }
 
 func TestHTTPClientStream_RecvMsg_InvalidJSON(t *testing.T) {

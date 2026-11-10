@@ -17,6 +17,7 @@ package server
 import (
 	"fmt"
 
+	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
 	"github.com/codesjoy/yggdrasil/v3/transport/gateway/rest"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
 )
@@ -27,6 +28,10 @@ func newServer(runtimeSnapshot Runtime) (Server, error) {
 	restCfg := runtimeSnapshot.RESTConfig()
 	opts := []rest.Option{
 		rest.WithMiddlewareProviders(runtimeSnapshot.RESTMiddlewareProviders()),
+	}
+	if strict, ok := runtimeSnapshot.(interface{ StrictRESTMiddlewares() bool }); ok &&
+		strict.StrictRESTMiddlewares() {
+		opts = append(opts, rest.WithStrictMiddlewareProviders())
 	}
 	s := &server{
 		services:       map[string]*ServiceInfo{},
@@ -55,21 +60,40 @@ func newServer(runtimeSnapshot Runtime) (Server, error) {
 			return nil, err
 		}
 	}
-	s.initInterceptor()
+	if err := s.initInterceptor(); err != nil {
+		return nil, err
+	}
 	if err := s.initRemoteServer(); err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
-func (s *server) initInterceptor() {
+func (s *server) initInterceptor() error {
 	cfg := s.runtime.ServerSettings()
 	unaryNames := append([]string(nil), cfg.Interceptors.Unary...)
 	unaryNames = dedupStableStrings(unaryNames)
-	s.unaryInterceptor = s.runtime.BuildUnaryServerInterceptor(unaryNames)
 	streamNames := append([]string(nil), cfg.Interceptors.Stream...)
 	streamNames = dedupStableStrings(streamNames)
+	if strict, ok := s.runtime.(interface {
+		BuildUnaryServerInterceptorE([]string) (interceptor.UnaryServerInterceptor, error)
+		BuildStreamServerInterceptorE([]string) (interceptor.StreamServerInterceptor, error)
+	}); ok {
+		unary, err := strict.BuildUnaryServerInterceptorE(unaryNames)
+		if err != nil {
+			return err
+		}
+		streamInterceptor, err := strict.BuildStreamServerInterceptorE(streamNames)
+		if err != nil {
+			return err
+		}
+		s.unaryInterceptor = unary
+		s.streamInterceptor = streamInterceptor
+		return nil
+	}
+	s.unaryInterceptor = s.runtime.BuildUnaryServerInterceptor(unaryNames)
 	s.streamInterceptor = s.runtime.BuildStreamServerInterceptor(streamNames)
+	return nil
 }
 
 func (s *server) initRemoteServer() error {

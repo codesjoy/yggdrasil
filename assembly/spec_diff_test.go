@@ -84,6 +84,89 @@ func TestDiff_ModeChange(t *testing.T) {
 	require.Contains(t, diff.AffectedDomains, "mode")
 }
 
+func TestDiffCoversCanonicalHashFields(t *testing.T) {
+	old := &Spec{
+		Identity: IdentitySpec{
+			AppName:  "old",
+			Metadata: map[string]string{"team": "a"},
+		},
+		Decisions: []Decision{{
+			Kind:   "default",
+			Target: "logger",
+			Value:  "text",
+			Source: "config",
+			Reason: "old",
+			Stage:  "plan",
+		}},
+		Warnings:  []Warning{{Code: "old", Message: "old warning"}},
+		Conflicts: []Conflict{{Code: "old", Message: "old conflict"}},
+	}
+	newSpec := &Spec{
+		Identity: IdentitySpec{
+			AppName:  "new",
+			Metadata: map[string]string{"team": "b"},
+		},
+		Decisions: []Decision{{
+			Kind:   "default",
+			Target: "logger",
+			Value:  "json",
+			Source: "config",
+			Reason: "new",
+			Stage:  "plan",
+		}},
+		Warnings:  []Warning{{Code: "new", Message: "new warning"}},
+		Conflicts: []Conflict{{Code: "new", Message: "new conflict"}},
+	}
+
+	diff, err := Diff(old, newSpec)
+	require.NoError(t, err)
+	require.True(t, diff.HasChanges)
+	require.NotEmpty(t, diff.Identity)
+	require.NotEmpty(t, diff.Decisions)
+	require.NotEmpty(t, diff.Warnings)
+	require.NotEmpty(t, diff.Conflicts)
+	require.Contains(t, diff.AffectedDomains, "identity")
+	require.Contains(t, diff.AffectedDomains, "decisions")
+	require.Contains(t, diff.AffectedDomains, "warnings")
+	require.Contains(t, diff.AffectedDomains, "conflicts")
+}
+
+func TestDiffDetectsDuplicateCanonicalEntries(t *testing.T) {
+	old := &Spec{
+		Decisions: []Decision{{
+			Kind:   "default",
+			Target: "logger",
+			Value:  "text",
+			Source: "config",
+			Reason: "first",
+			Stage:  "plan",
+		}},
+		Warnings: []Warning{{Code: "same", Message: "warning"}},
+	}
+	withDuplicates := &Spec{
+		Decisions: append(
+			append([]Decision(nil), old.Decisions...),
+			old.Decisions[0],
+		),
+		Warnings: append(
+			append([]Warning(nil), old.Warnings...),
+			old.Warnings[0],
+		),
+	}
+
+	diff, err := Diff(old, withDuplicates)
+	require.NoError(t, err)
+	require.True(t, diff.HasChanges)
+	require.NotEmpty(t, diff.Decisions)
+	require.NotEmpty(t, diff.Warnings)
+
+	reverse, err := Diff(withDuplicates, old)
+	require.NoError(t, err)
+	require.True(t, reverse.HasChanges)
+	require.NotEmpty(t, reverse.Decisions)
+	require.NotEmpty(t, reverse.Warnings)
+}
+
 func TestHash_NilSpec(t *testing.T) {
 	hash, err := Hash(nil)
 	require.NoError(t, err)

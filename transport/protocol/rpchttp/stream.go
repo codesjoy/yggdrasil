@@ -17,6 +17,7 @@ package rpchttp
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -54,7 +55,8 @@ type httpClientStream struct {
 	defaultScheme string
 	httpClient    *http.Client
 
-	mu sync.Mutex
+	mu     sync.Mutex
+	recvMu sync.Mutex
 
 	reqMarshaler  marshaler.Marshaler
 	respMarshaler marshaler.Marshaler
@@ -64,23 +66,28 @@ type httpClientStream struct {
 	reqBytes   []byte
 	reqSent    bool
 
-	respRecv           bool
-	header             metadata.MD
-	trailer            metadata.MD
-	respErr            error
-	headersReady       chan struct{}
-	statsHandler       stats.Handler
+	respRecv        bool
+	responseStarted bool
+	responseReady   bool
+	responseStatus  int
+	responseBody    []byte
+	header          metadata.MD
+	trailer         metadata.MD
+	respErr         error
+	headersReady    chan struct{}
+	statsHandler    stats.Handler
+
 	configuredInbound  marshaler.Marshaler
 	configuredOutbound marshaler.Marshaler
 }
 
 func (cs *httpClientStream) Header() (metadata.MD, error) {
 	cs.mu.Lock()
-	if cs.headersReady == nil {
-		cs.headersReady = make(chan struct{})
+	if !cs.reqSent {
+		cs.mu.Unlock()
+		return nil, xerror.New(code.Code_FAILED_PRECONDITION, "request not sent")
 	}
-	ch := cs.headersReady
-	already := cs.respRecv
+	already := cs.respRecv || cs.responseReady
 	err := cs.respErr
 	h := cs.header
 	cs.mu.Unlock()
@@ -88,7 +95,15 @@ func (cs *httpClientStream) Header() (metadata.MD, error) {
 	if already {
 		return h.Copy(), err
 	}
-	<-ch
+	if err := cs.ensureResponse(); err != nil {
+		cs.mu.Lock()
+		header := cs.header
+		cs.mu.Unlock()
+		if header == nil {
+			header = metadata.MD{}
+		}
+		return header.Copy(), err
+	}
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	if cs.header == nil {
@@ -134,6 +149,9 @@ func (cs *httpClientStream) SendMsg(m interface{}) error {
 }
 
 func (cs *httpClientStream) RecvMsg(m interface{}) error {
+	cs.recvMu.Lock()
+	defer cs.recvMu.Unlock()
+
 	cs.mu.Lock()
 	if cs.respRecv {
 		err := cs.respErr
@@ -144,16 +162,123 @@ func (cs *httpClientStream) RecvMsg(m interface{}) error {
 		cs.mu.Unlock()
 		return xerror.New(code.Code_FAILED_PRECONDITION, "request not sent")
 	}
-	if cs.headersReady == nil {
-		cs.headersReady = make(chan struct{})
-	}
 	cs.respMarshaler = cs.configuredInbound
 	if cs.respMarshaler == nil {
 		cs.respMarshaler = marshaler.MarshalerForValue(m)
 	}
-	reqBytes := cs.reqBytes
-	reqMarshaler := cs.reqMarshaler
 	respMarshaler := cs.respMarshaler
+	cs.mu.Unlock()
+
+	if err := cs.ensureResponse(); err != nil {
+		cs.mu.Lock()
+		cs.respRecv = true
+		cs.mu.Unlock()
+		return err
+	}
+
+	cs.mu.Lock()
+	if cs.respRecv {
+		err := cs.respErr
+		cs.mu.Unlock()
+		return err
+	}
+	body := append([]byte(nil), cs.responseBody...)
+	ctx := cs.ctx
+	beginTime := cs.beginTime
+	statsHandler := cs.statsHandler
+	cs.mu.Unlock()
+
+	if statsHandler == nil {
+		statsHandler = stats.NoOpHandler
+	}
+	if beginTime.IsZero() {
+		beginTime = time.Now()
+	}
+	statsHandler.HandleRPC(ctx, &stats.RPCInPayloadBase{
+		Client:        true,
+		Payload:       nil,
+		Data:          body,
+		TransportSize: len(body),
+		RecvTime:      time.Now(),
+		Protocol:      Protocol,
+	})
+
+	if umErr := respMarshaler.Unmarshal(body, m); umErr != nil {
+		cs.mu.Lock()
+		cs.respErr = umErr
+		cs.respRecv = true
+		cs.mu.Unlock()
+		statsHandler.HandleRPC(
+			ctx,
+			&stats.RPCEndBase{
+				Client:    true,
+				BeginTime: beginTime,
+				EndTime:   time.Now(),
+				Err:       umErr,
+				Protocol:  Protocol,
+			},
+		)
+		return umErr
+	}
+
+	cs.mu.Lock()
+	cs.respErr = nil
+	cs.respRecv = true
+	cs.mu.Unlock()
+	statsHandler.HandleRPC(
+		ctx,
+		&stats.RPCEndBase{
+			Client:    true,
+			BeginTime: beginTime,
+			EndTime:   time.Now(),
+			Err:       nil,
+			Protocol:  Protocol,
+		},
+	)
+	return nil
+}
+
+func (cs *httpClientStream) ensureResponse() error {
+	cs.mu.Lock()
+	if !cs.reqSent {
+		cs.mu.Unlock()
+		return xerror.New(code.Code_FAILED_PRECONDITION, "request not sent")
+	}
+	if cs.responseReady {
+		err := cs.respErr
+		cs.mu.Unlock()
+		return err
+	}
+	if cs.headersReady == nil {
+		cs.headersReady = make(chan struct{})
+	}
+	if !cs.responseStarted {
+		cs.responseStarted = true
+		go cs.executeResponse()
+	}
+	ready := cs.headersReady
+	ctx := cs.ctx
+	cs.mu.Unlock()
+
+	select {
+	case <-ready:
+		cs.mu.Lock()
+		err := cs.respErr
+		cs.mu.Unlock()
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (cs *httpClientStream) executeResponse() {
+	cs.mu.Lock()
+	reqBytes := append([]byte(nil), cs.reqBytes...)
+	reqMarshaler := cs.reqMarshaler
+	respMarshaler := cs.configuredInbound
+	if respMarshaler == nil {
+		respMarshaler = marshaler.MarshalerForValue(&stpb.Status{})
+	}
 	endpointAddr := cs.endpointAddr
 	method := cs.method
 	hc := cs.httpClient
@@ -163,8 +288,12 @@ func (cs *httpClientStream) RecvMsg(m interface{}) error {
 	statsHandler := cs.statsHandler
 	outMD, _ := metadata.FromOutContext(ctx)
 	reqPayload := cs.reqPayload
+	defaultScheme := cs.defaultScheme
 	cs.mu.Unlock()
 
+	if statsHandler == nil {
+		statsHandler = stats.NoOpHandler
+	}
 	if beginTime.IsZero() {
 		beginTime = time.Now()
 	}
@@ -178,7 +307,7 @@ func (cs *httpClientStream) RecvMsg(m interface{}) error {
 
 	url := endpointAddr
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-		scheme := cs.defaultScheme
+		scheme := defaultScheme
 		if scheme == "" {
 			scheme = "http"
 		}
@@ -190,16 +319,15 @@ func (cs *httpClientStream) RecvMsg(m interface{}) error {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBytes))
 	if err != nil {
-		cs.finish(nil, nil, err, ch)
-		return err
+		cs.finishResponse(nil, nil, http.StatusInternalServerError, nil, err, ch)
+		return
 	}
 	req.Header.Set("Content-Type", reqMarshaler.ContentType(nil))
 	req.Header.Set("Accept", respMarshaler.ContentType(nil))
 	req.Header.Set("TE", "trailers")
-
-	for k, vs := range outMD {
-		for _, v := range vs {
-			req.Header.Add(MetadataHeaderPrefix+k, v)
+	for key, values := range outMD {
+		for _, value := range values {
+			req.Header.Add(MetadataHeaderPrefix+key, value)
 		}
 	}
 
@@ -221,122 +349,58 @@ func (cs *httpClientStream) RecvMsg(m interface{}) error {
 
 	resp, err := hc.Do(req)
 	if err != nil {
-		cs.finish(nil, nil, err, ch)
-		return err
+		cs.finishResponse(nil, nil, 0, nil, err, ch)
+		return
 	}
-	defer resp.Body.Close() // nolint
+	defer resp.Body.Close() //nolint:errcheck
 
 	headerMD := extractMetadataWithPrefix(resp.Header, MetadataHeaderPrefix)
-	statsHandler.HandleRPC(ctx, &stats.RPCClientInHeaderBase{
-		RPCInHeaderBase: stats.RPCInHeaderBase{
-			Header:   headerMD,
-			Protocol: Protocol,
-		},
-	})
-
 	body, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
-		cs.finish(headerMD, nil, readErr, ch)
-		statsHandler.HandleRPC(
-			ctx,
-			&stats.RPCEndBase{
-				Client:    true,
-				BeginTime: beginTime,
-				EndTime:   time.Now(),
-				Err:       readErr,
-				Protocol:  Protocol,
-			},
-		)
-		return readErr
+		cs.finishResponse(headerMD, nil, resp.StatusCode, nil, readErr, ch)
+		return
 	}
-
 	trailerMD := extractMetadataWithPrefix(resp.Trailer, MetadataTrailerPrefix)
-	if trailerMD.Len() > 0 {
-		statsHandler.HandleRPC(ctx, &stats.RPCInTrailerBase{
-			Client:        true,
-			Trailer:       trailerMD,
-			TransportSize: 0,
-			Protocol:      Protocol,
-		})
-	}
-
 	if resp.StatusCode != http.StatusOK {
 		var pb stpb.Status
-		if umErr := respMarshaler.Unmarshal(body, &pb); umErr != nil {
-			err = xerror.New(status.HTTPCodeToStuCode(int32(resp.StatusCode)), string(body))
-			cs.finish(headerMD, trailerMD, err, ch)
-			statsHandler.HandleRPC(
-				ctx,
-				&stats.RPCEndBase{
-					Client:    true,
-					BeginTime: beginTime,
-					EndTime:   time.Now(),
-					Err:       err,
-					Protocol:  Protocol,
-				},
+		unmarshalErr := respMarshaler.Unmarshal(body, &pb)
+		if unmarshalErr != nil || pb.Code == int32(code.Code_OK) {
+			err = xerror.New(
+				status.HTTPCodeToStuCode(int32(resp.StatusCode)),
+				fmt.Sprintf("http status %d %s", resp.StatusCode, http.StatusText(resp.StatusCode)),
 			)
-			return err
+		} else {
+			err = status.FromProto(&pb).Err()
 		}
-		err = status.FromProto(&pb).Err()
-		cs.finish(headerMD, trailerMD, err, ch)
-		statsHandler.HandleRPC(
-			ctx,
-			&stats.RPCEndBase{
-				Client:    true,
-				BeginTime: beginTime,
-				EndTime:   time.Now(),
-				Err:       err,
-				Protocol:  Protocol,
-			},
-		)
-		return err
-	}
-
-	statsHandler.HandleRPC(ctx, &stats.RPCInPayloadBase{
-		Client:        true,
-		Payload:       nil,
-		Data:          body,
-		TransportSize: len(body),
-		RecvTime:      time.Now(),
-		Protocol:      Protocol,
-	})
-
-	if umErr := respMarshaler.Unmarshal(body, m); umErr != nil {
-		cs.finish(headerMD, trailerMD, umErr, ch)
-		statsHandler.HandleRPC(
-			ctx,
-			&stats.RPCEndBase{
-				Client:    true,
-				BeginTime: beginTime,
-				EndTime:   time.Now(),
-				Err:       umErr,
-				Protocol:  Protocol,
-			},
-		)
-		return umErr
-	}
-
-	cs.finish(headerMD, trailerMD, nil, ch)
-	statsHandler.HandleRPC(
-		ctx,
-		&stats.RPCEndBase{
+		cs.finishResponse(headerMD, trailerMD, resp.StatusCode, nil, err, ch)
+		statsHandler.HandleRPC(ctx, &stats.RPCEndBase{
 			Client:    true,
 			BeginTime: beginTime,
 			EndTime:   time.Now(),
-			Err:       nil,
+			Err:       err,
 			Protocol:  Protocol,
-		},
-	)
-	return nil
+		})
+		return
+	}
+	cs.finishResponse(headerMD, trailerMD, resp.StatusCode, body, nil, ch)
 }
 
-func (cs *httpClientStream) finish(h, t metadata.MD, err error, ch chan struct{}) {
+func (cs *httpClientStream) finishResponse(
+	h metadata.MD,
+	t metadata.MD,
+	statusCode int,
+	body []byte,
+	err error,
+	ch chan struct{},
+) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	cs.header = h
 	cs.trailer = t
+	cs.responseStatus = statusCode
+	cs.responseBody = append([]byte(nil), body...)
 	cs.respErr = err
-	cs.respRecv = true
+	cs.responseReady = true
 	if ch != nil {
 		select {
 		case <-ch:
@@ -344,6 +408,13 @@ func (cs *httpClientStream) finish(h, t metadata.MD, err error, ch chan struct{}
 			close(ch)
 		}
 	}
+}
+
+func (cs *httpClientStream) finish(h, t metadata.MD, err error, ch chan struct{}) {
+	cs.finishResponse(h, t, http.StatusOK, nil, err, ch)
+	cs.mu.Lock()
+	cs.respRecv = true
+	cs.mu.Unlock()
 }
 
 type httpServerStream struct {

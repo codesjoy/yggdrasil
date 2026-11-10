@@ -30,7 +30,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
+	internalidentity "github.com/codesjoy/yggdrasil/v3/internal/identity"
 	"github.com/codesjoy/yggdrasil/v3/internal/remotelog"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 	"github.com/codesjoy/yggdrasil/v3/module"
@@ -273,6 +275,51 @@ func TestApplyRuntimeAdapters_ShutsDownPreviousTracerAndMeterProviders(t *testin
 	require.Equal(t, int32(2), atomic.LoadInt32(&meterShutdowns))
 }
 
+func TestRollbackRuntimeAdaptersRestoresOldProviders(t *testing.T) {
+	var oldTracerShutdowns int32
+	var oldMeterShutdowns int32
+	var newTracerShutdowns int32
+	var newMeterShutdowns int32
+
+	oldSnapshot := &Snapshot{Resolved: settings.Resolved{Mode: "old"}}
+	newSnapshot := &Snapshot{Resolved: settings.Resolved{Mode: "new"}}
+	app := &App{
+		runtimeSnapshot: oldSnapshot,
+		tracerShutdown: func(context.Context) error {
+			atomic.AddInt32(&oldTracerShutdowns, 1)
+			return nil
+		},
+		meterShutdown: func(context.Context) error {
+			atomic.AddInt32(&oldMeterShutdowns, 1)
+			return nil
+		},
+	}
+	prepared := &preparedRuntimeAdapters{
+		snapshot: newSnapshot,
+		tracerShutdown: func(context.Context) error {
+			atomic.AddInt32(&newTracerShutdowns, 1)
+			return nil
+		},
+		meterShutdown: func(context.Context) error {
+			atomic.AddInt32(&newMeterShutdowns, 1)
+			return nil
+		},
+	}
+
+	require.NoError(t, app.activateRuntimeAdapters(prepared))
+	require.Same(t, newSnapshot, app.currentRuntimeSnapshot())
+	require.NoError(t, app.rollbackRuntimeAdapters(prepared))
+	require.Same(t, oldSnapshot, app.currentRuntimeSnapshot())
+	require.Equal(t, int32(1), atomic.LoadInt32(&newTracerShutdowns))
+	require.Equal(t, int32(1), atomic.LoadInt32(&newMeterShutdowns))
+	require.Zero(t, atomic.LoadInt32(&oldTracerShutdowns))
+	require.Zero(t, atomic.LoadInt32(&oldMeterShutdowns))
+
+	require.NoError(t, app.shutdownRuntimeAdapters(context.Background()))
+	require.Equal(t, int32(1), atomic.LoadInt32(&oldTracerShutdowns))
+	require.Equal(t, int32(1), atomic.LoadInt32(&oldMeterShutdowns))
+}
+
 func TestSnapshotReturnsDetachedCopy(t *testing.T) {
 	app, _ := newInitializedAppWithConfig(t, "snapshot-copy", minimalV3Config("grpc"))
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })
@@ -285,6 +332,52 @@ func TestSnapshotReturnsDetachedCopy(t *testing.T) {
 	require.NotNil(t, second)
 	require.NotSame(t, first, second)
 	require.NotContains(t, second.TransportClientProviders, "detached")
+}
+
+func TestRuntimeLookupReadsCurrentSnapshot(t *testing.T) {
+	app := newTestApp(t, "dynamic-runtime-lookup")
+	rt := newRuntimeSurface(app)
+	loggerA := slog.New(slog.NewTextHandler(io.Discard, nil))
+	loggerB := slog.New(slog.NewTextHandler(io.Discard, nil))
+	tracerA := tracenoop.NewTracerProvider()
+	tracerB := tracenoop.NewTracerProvider()
+	meterA := metricnoop.NewMeterProvider()
+	meterB := metricnoop.NewMeterProvider()
+
+	app.setRuntimeSnapshot(&Snapshot{
+		Identity:       publicIdentity(internalidentity.Identity{AppName: "a"}),
+		Logger:         loggerA,
+		TracerProvider: tracerA,
+		MeterProvider:  meterA,
+	})
+
+	var gotLogger *slog.Logger
+	require.NoError(t, rt.Lookup(&gotLogger))
+	require.Same(t, loggerA, gotLogger)
+	var gotTracer trace.TracerProvider
+	require.NoError(t, rt.Lookup(&gotTracer))
+	require.Equal(t, tracerA, gotTracer)
+	var gotMeter metric.MeterProvider
+	require.NoError(t, rt.Lookup(&gotMeter))
+	require.Equal(t, meterA, gotMeter)
+	var gotIdentity Identity
+	require.NoError(t, rt.Lookup(&gotIdentity))
+	require.Equal(t, "a", gotIdentity.AppName)
+
+	app.setRuntimeSnapshot(&Snapshot{
+		Identity:       publicIdentity(internalidentity.Identity{AppName: "b"}),
+		Logger:         loggerB,
+		TracerProvider: tracerB,
+		MeterProvider:  meterB,
+	})
+	require.NoError(t, rt.Lookup(&gotLogger))
+	require.Same(t, loggerB, gotLogger)
+	require.NoError(t, rt.Lookup(&gotTracer))
+	require.Equal(t, tracerB, gotTracer)
+	require.NoError(t, rt.Lookup(&gotMeter))
+	require.Equal(t, meterB, gotMeter)
+	require.NoError(t, rt.Lookup(&gotIdentity))
+	require.Equal(t, "b", gotIdentity.AppName)
 }
 
 // --- runtimeShutdown ---
@@ -413,8 +506,57 @@ func TestApp_InitRegistry(t *testing.T) {
 
 	t.Run("nil snapshot returns without panic", func(t *testing.T) {
 		app := newTestApp(t, "test")
-		app.initRegistry()
+		require.NoError(t, app.initRegistry())
 	})
+
+	t.Run("configured missing provider returns error", func(t *testing.T) {
+		app := newTestApp(t, "test")
+		app.setRuntimeSnapshot(&Snapshot{
+			Resolved: settings.Resolved{
+				Discovery: settings.Discovery{
+					Registry: registry.Spec{Type: "missing"},
+				},
+			},
+		})
+		err := app.initRegistry()
+		require.Error(t, err)
+	})
+}
+
+func TestPrepareFailsForMissingServerInterceptor(t *testing.T) {
+	configData := minimalV3Config("grpc")
+	configData["yggdrasil"].(map[string]any)["server"].(map[string]any)["interceptors"] = map[string]any{
+		"unary": []any{"missing"},
+	}
+	app, err := New(
+		"missing-server-interceptor",
+		WithConfigManager(newTestManager(t, configData)),
+	)
+	require.NoError(t, err)
+	err = app.Prepare(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing")
+}
+
+func TestPrepareFailsForMissingRESTMiddleware(t *testing.T) {
+	configData := minimalV3Config("grpc")
+	configData["yggdrasil"].(map[string]any)["transports"].(map[string]any)["http"] = map[string]any{
+		"rest": map[string]any{
+			"host": "127.0.0.1",
+			"port": 0,
+			"middleware": map[string]any{
+				"all": []any{"missing"},
+			},
+		},
+	}
+	app, err := New(
+		"missing-rest-middleware",
+		WithConfigManager(newTestManager(t, configData)),
+	)
+	require.NoError(t, err)
+	err = app.Prepare(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing")
 }
 
 // --- foundationSnapshotForRuntime ---
