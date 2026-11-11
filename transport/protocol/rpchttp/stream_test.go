@@ -18,11 +18,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,6 +41,42 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/peer"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return fn(request)
+}
+
+type countingStatsHandler struct {
+	begins      atomic.Int32
+	ends        atomic.Int32
+	inPayloads  atomic.Int32
+	outPayloads atomic.Int32
+}
+
+func (h *countingStatsHandler) TagRPC(ctx context.Context, _ stats.RPCTagInfo) context.Context {
+	return ctx
+}
+
+func (h *countingStatsHandler) HandleRPC(_ context.Context, item stats.RPCStats) {
+	switch item.(type) {
+	case *stats.RPCBeginBase:
+		h.begins.Add(1)
+	case *stats.RPCEndBase:
+		h.ends.Add(1)
+	case *stats.RPCInPayloadBase:
+		h.inPayloads.Add(1)
+	case *stats.RPCOutPayloadBase:
+		h.outPayloads.Add(1)
+	}
+}
+
+func (*countingStatsHandler) TagChannel(ctx context.Context, _ stats.ChanTagInfo) context.Context {
+	return ctx
+}
+
+func (*countingStatsHandler) HandleChannel(context.Context, stats.ChanStats) {}
 
 func newTestServerStream(req *http.Request, w http.ResponseWriter) *httpServerStream {
 	return &httpServerStream{
@@ -708,6 +748,153 @@ func TestHTTPClientStream_RecvMsg_AlreadyReceived(t *testing.T) {
 	err := cs.RecvMsg(&msg)
 	require.NoError(t, nil)
 	_ = err
+}
+
+func newRoundTripClientStream(
+	transport http.RoundTripper,
+	statsHandler stats.Handler,
+) *httpClientStream {
+	return &httpClientStream{
+		ctx:                context.Background(),
+		method:             "/test.Service/Method",
+		endpointAddr:       "http://example.test",
+		httpClient:         &http.Client{Transport: transport},
+		statsHandler:       statsHandler,
+		configuredOutbound: marshaler.NewJSONPbMarshalerWithConfig(nil),
+		configuredInbound:  marshaler.NewJSONPbMarshalerWithConfig(nil),
+	}
+}
+
+func successfulRoundTrip(responseBody string) roundTripFunc {
+	return func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{MetadataHeaderPrefix + "X-Custom": {"custom-value"}},
+			Body:       io.NopCloser(strings.NewReader(responseBody)),
+		}, nil
+	}
+}
+
+func TestHTTPClientStream_HeaderExecutesResponseOnce(t *testing.T) {
+	var requests atomic.Int32
+	statsHandler := &countingStatsHandler{}
+	transport := successfulRoundTrip(`{"value":"resp"}`)
+	cs := newRoundTripClientStream(
+		roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			requests.Add(1)
+			return transport(request)
+		}),
+		statsHandler,
+	)
+
+	require.NoError(t, cs.SendMsg(&testMessage{Value: "req"}))
+	header, err := cs.Header()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"custom-value"}, header.Get("X-Custom"))
+
+	var response testMessage
+	require.NoError(t, cs.RecvMsg(&response))
+	assert.Equal(t, "resp", response.Value)
+	assert.Equal(t, int32(1), requests.Load())
+	assert.Equal(t, int32(1), statsHandler.begins.Load())
+	assert.Equal(t, int32(1), statsHandler.outPayloads.Load())
+	assert.Equal(t, int32(1), statsHandler.inPayloads.Load())
+	assert.Equal(t, int32(1), statsHandler.ends.Load())
+}
+
+func TestHTTPClientStream_HeaderAndRecvShareResponse(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var requests atomic.Int32
+	transport := successfulRoundTrip(`{"value":"shared"}`)
+	cs := newRoundTripClientStream(
+		roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			if requests.Add(1) == 1 {
+				close(started)
+			}
+			<-release
+			return transport(request)
+		}),
+		stats.NoOpHandler,
+	)
+
+	require.NoError(t, cs.SendMsg(&testMessage{Value: "req"}))
+
+	headerResult := make(chan error, 1)
+	go func() {
+		_, err := cs.Header()
+		headerResult <- err
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("response request did not start")
+	}
+
+	var response testMessage
+	recvResult := make(chan error, 1)
+	go func() {
+		recvResult <- cs.RecvMsg(&response)
+	}()
+	close(release)
+
+	select {
+	case err := <-headerResult:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Header did not complete")
+	}
+	select {
+	case err := <-recvResult:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("RecvMsg did not complete")
+	}
+	assert.Equal(t, "shared", response.Value)
+	assert.Equal(t, int32(1), requests.Load())
+}
+
+func BenchmarkHTTPClientStreamUnary(b *testing.B) {
+	for _, size := range []int{1 << 10, 64 << 10, 1 << 20} {
+		responseBody := []byte(fmt.Sprintf(`{"value":"%s"}`, strings.Repeat("x", size)))
+		b.Run(fmt.Sprintf("bytes=%d/recv", size), func(b *testing.B) {
+			benchmarkHTTPClientStreamUnary(b, responseBody, false)
+		})
+		b.Run(fmt.Sprintf("bytes=%d/header-then-recv", size), func(b *testing.B) {
+			benchmarkHTTPClientStreamUnary(b, responseBody, true)
+		})
+	}
+}
+
+func benchmarkHTTPClientStreamUnary(b *testing.B, responseBody []byte, headerFirst bool) {
+	transport := roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(responseBody)),
+		}, nil
+	})
+	request := &testMessage{Value: "req"}
+	target := &testMessage{}
+
+	b.ReportAllocs()
+	b.SetBytes(int64(len(responseBody)))
+	b.ResetTimer()
+	for range b.N {
+		cs := newRoundTripClientStream(transport, stats.NoOpHandler)
+		if err := cs.SendMsg(request); err != nil {
+			b.Fatal(err)
+		}
+		if headerFirst {
+			if _, err := cs.Header(); err != nil {
+				b.Fatal(err)
+			}
+		}
+		if err := cs.RecvMsg(target); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
 
 func TestAttachPeer_InvalidRemoteAddr(t *testing.T) {

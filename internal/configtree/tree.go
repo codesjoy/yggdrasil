@@ -23,8 +23,15 @@ import (
 
 // NormalizeValue recursively normalizes nested map types and deep-clones structured values.
 func NormalizeValue(v any) any {
-	if v == nil {
-		return nil
+	switch v.(type) {
+	case nil,
+		bool,
+		string,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64, uintptr,
+		float32, float64,
+		complex64, complex128:
+		return v
 	}
 	return newCloneState().normalize(reflect.ValueOf(v)).Interface()
 }

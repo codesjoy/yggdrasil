@@ -440,7 +440,7 @@ func TestServeMux_GetPeer_XForwardedFor(t *testing.T) {
 
 	trusted, err := parseTrustedProxyCIDRs([]string{"192.168.1.1"})
 	require.NoError(t, err)
-	mux := &ServeMux{listener: lis, trustedProxies: trusted}
+	mux := &ServeMux{listener: lis, localAddr: lis.Addr(), trustedProxies: trusted}
 
 	r := httptest.NewRequest("GET", "/", nil)
 	r.RemoteAddr = "192.168.1.1:12345"
@@ -529,6 +529,27 @@ func TestServeMux_GetPeer_RemoteAddr(t *testing.T) {
 	assert.Equal(t, "192.168.1.100", p.Addr.(*net.TCPAddr).IP.String())
 	assert.Equal(t, 54321, p.Addr.(*net.TCPAddr).Port)
 	assert.Nil(t, p.LocalAddr)
+}
+
+func BenchmarkServeMuxGetPeer(b *testing.B) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(b, err)
+	b.Cleanup(func() { _ = listener.Close() })
+
+	mux := &ServeMux{listener: listener, localAddr: listener.Addr()}
+	request := httptest.NewRequest(http.MethodPost, "/test.Service/Method", nil)
+	request.RemoteAddr = "192.0.2.10:54321"
+
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			peerInfo := mux.getPeer(request)
+			if peerInfo == nil {
+				b.Error("getPeer returned nil")
+				return
+			}
+		}
+	})
 }
 
 func TestServeMux_OutgoingHeaderMatcher(t *testing.T) {
@@ -821,8 +842,14 @@ func TestServeMux_Start_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, mux.started)
 	assert.NotNil(t, mux.listener)
+	assert.Equal(t, mux.listener.Addr(), mux.localAddr)
 	assert.NotEqual(t, "0.0.0.0:0", mux.info.address)
+	request := httptest.NewRequest(http.MethodPost, "/test.Service/Method", nil)
+	request.RemoteAddr = "192.0.2.10:54321"
+	assert.Equal(t, mux.localAddr, mux.getPeer(request).LocalAddr)
 	_ = mux.Stop(context.Background())
+	assert.Equal(t, mux.listener.Addr(), mux.localAddr)
+	assert.Equal(t, mux.localAddr, mux.getPeer(request).LocalAddr)
 }
 
 func TestServeMux_StartFailurePreservesConfiguredAddressForRetry(t *testing.T) {

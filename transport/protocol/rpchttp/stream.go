@@ -177,7 +177,7 @@ func (cs *httpClientStream) RecvMsg(m interface{}) error {
 		cs.mu.Unlock()
 		return err
 	}
-	body := append([]byte(nil), cs.responseBody...)
+	body := cs.responseBody
 	ctx := cs.ctx
 	beginTime := cs.beginTime
 	statsHandler := cs.statsHandler
@@ -260,7 +260,13 @@ func (cs *httpClientStream) ensureResponse() error {
 	}
 	if !cs.responseStarted {
 		cs.responseStarted = true
-		go cs.executeResponse()
+		execution := cs.responseExecutionLocked()
+		cs.mu.Unlock()
+		cs.executeResponse(execution)
+		cs.mu.Lock()
+		err := cs.respErr
+		cs.mu.Unlock()
+		return err
 	}
 	ready := cs.headersReady
 	ctx := cs.ctx
@@ -277,8 +283,7 @@ func (cs *httpClientStream) ensureResponse() error {
 	}
 }
 
-func (cs *httpClientStream) executeResponse() {
-	execution := cs.responseExecution()
+func (cs *httpClientStream) executeResponse(execution responseExecution) {
 	execution.statsHandler.HandleRPC(execution.ctx, &stats.RPCBeginBase{
 		Client:       true,
 		BeginTime:    execution.beginTime,
@@ -317,9 +322,8 @@ type responseExecution struct {
 	headersReady  chan struct{}
 }
 
-func (cs *httpClientStream) responseExecution() responseExecution {
-	cs.mu.Lock()
-	reqBytes := append([]byte(nil), cs.reqBytes...)
+func (cs *httpClientStream) responseExecutionLocked() responseExecution {
+	reqBytes := cs.reqBytes
 	reqMarshaler := cs.reqMarshaler
 	respMarshaler := cs.configuredInbound
 	if respMarshaler == nil {
@@ -335,7 +339,6 @@ func (cs *httpClientStream) responseExecution() responseExecution {
 	outMD, _ := metadata.FromOutContext(ctx)
 	reqPayload := cs.reqPayload
 	defaultScheme := cs.defaultScheme
-	cs.mu.Unlock()
 
 	if statsHandler == nil {
 		statsHandler = stats.NoOpHandler
@@ -460,7 +463,7 @@ func (cs *httpClientStream) finishResponse(
 	defer cs.mu.Unlock()
 	cs.header = h
 	cs.trailer = t
-	cs.responseBody = append([]byte(nil), body...)
+	cs.responseBody = body
 	cs.respErr = err
 	cs.responseReady = true
 	if ch != nil {

@@ -21,6 +21,42 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var benchmarkSnapshotSink any
+
+type benchmarkSnapshotConfig struct {
+	Name    string
+	Port    int
+	Labels  map[string]string
+	Enabled bool
+	Child   *benchmarkSnapshotChild
+}
+
+type benchmarkSnapshotChild struct {
+	Values []string
+}
+
+func BenchmarkSnapshotDecode(b *testing.B) {
+	payload := map[string]any{
+		"name":    "benchmark",
+		"port":    8080,
+		"labels":  map[string]any{"env": "test", "region": "local"},
+		"enabled": true,
+		"child": map[string]any{
+			"values": []any{"one", "two", "three"},
+		},
+	}
+	snapshot := NewSnapshot(payload)
+
+	b.ReportAllocs()
+	for range b.N {
+		var target benchmarkSnapshotConfig
+		if err := snapshot.Decode(&target); err != nil {
+			b.Fatal(err)
+		}
+		benchmarkSnapshotSink = target
+	}
+}
+
 func TestSnapshotSectionAndDecode(t *testing.T) {
 	snapshot := NewSnapshot(map[string]any{
 		"clients": map[string]any{

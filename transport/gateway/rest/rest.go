@@ -97,6 +97,7 @@ type ServeMux struct {
 	svr       *http.Server
 	mu        sync.Mutex
 	listener  net.Listener
+	localAddr net.Addr
 	stopped   bool
 	started   bool
 
@@ -317,6 +318,7 @@ func (s *ServeMux) Start() error {
 	s.info.address = boundAddress
 	s.info.advertiseAddress = advertiseAddress
 	s.listener = lis
+	s.localAddr = lis.Addr()
 	s.svr = &http.Server{
 		Handler:           s,
 		ReadHeaderTimeout: s.cfg.ReadHeaderTimeout,
@@ -424,12 +426,6 @@ func (s *ServeMux) getPeer(r *http.Request) *peer.Peer {
 			port = 0
 		}
 	}
-	var localAddr net.Addr
-	s.mu.Lock()
-	if s.listener != nil {
-		localAddr = s.listener.Addr()
-	}
-	s.mu.Unlock()
 	var tcpIP net.IP
 	if clientIP.IsValid() {
 		tcpIP = net.IP(clientIP.Unmap().AsSlice())
@@ -439,7 +435,7 @@ func (s *ServeMux) getPeer(r *http.Request) *peer.Peer {
 			IP:   tcpIP,
 			Port: port,
 		},
-		LocalAddr: localAddr,
+		LocalAddr: s.localAddr,
 		Protocol:  "http",
 	}
 }

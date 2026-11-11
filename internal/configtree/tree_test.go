@@ -15,10 +15,19 @@
 package configtree
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+var benchmarkNormalizeSink any
+
+type benchmarkConfigNode struct {
+	Values []string
+	Labels map[string]string
+	Child  *benchmarkConfigNode
+}
 
 func TestNormalizeValueDeepCloneAndMapAnyAny(t *testing.T) {
 	src := map[any]any{
@@ -56,4 +65,36 @@ func TestMergeMapsMergesAndReplacesOnTypeMismatch(t *testing.T) {
 		"a": map[string]any{"x": 2, "y": 3, "keep": true},
 		"b": map[string]any{"nested": "v"},
 	}, merged)
+}
+
+func BenchmarkNormalizeValue(b *testing.B) {
+	nestedMap := make(map[string]any, 100)
+	for index := 0; index < 100; index++ {
+		nestedMap[strconv.Itoa(index)] = []any{index, map[string]any{"enabled": true}}
+	}
+	typed := benchmarkConfigNode{
+		Values: []string{"one", "two", "three"},
+		Labels: map[string]string{"env": "benchmark", "region": "local"},
+		Child: &benchmarkConfigNode{
+			Values: []string{"child"},
+			Labels: map[string]string{"kind": "nested"},
+		},
+	}
+	tests := []struct {
+		name  string
+		value any
+	}{
+		{name: "scalar", value: 42},
+		{name: "nested-map", value: nestedMap},
+		{name: "typed-struct", value: typed},
+	}
+
+	for _, test := range tests {
+		b.Run(test.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				benchmarkNormalizeSink = NormalizeValue(test.value)
+			}
+		})
+	}
 }
