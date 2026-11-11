@@ -26,6 +26,7 @@ const (
 	ErrUnknownTemplate                  ErrorCode = "UnknownTemplate"
 	ErrTemplateVersionNotFound          ErrorCode = "TemplateVersionNotFound"
 	ErrAmbiguousDefault                 ErrorCode = "AmbiguousDefault"
+	ErrAmbiguousModuleActivation        ErrorCode = "AmbiguousModuleActivation"
 	ErrConflictingOverride              ErrorCode = "ConflictingOverride"
 	ErrUnknownExplicitBinding           ErrorCode = "UnknownExplicitBinding"
 	ErrComposeFailed                    ErrorCode = "ComposeFailed"

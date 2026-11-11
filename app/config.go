@@ -106,6 +106,9 @@ func loadConfigFileWithLogger(
 	if err != nil {
 		return false, err
 	}
+	if err := recordDeclarativeConfigSourceKinds(opts); err != nil {
+		return false, err
+	}
 	for _, item := range sources {
 		addManagedConfigSource(opts, item)
 	}
@@ -162,6 +165,7 @@ func loadConfigSourcesFromSpec(opts *options, value string, scope string) error 
 		if err := loadConfigLayer(opts, name, priority, src, scope, i); err != nil {
 			return err
 		}
+		recordConfigSourceKind(opts, spec.Kind)
 	}
 	return nil
 }
@@ -237,6 +241,54 @@ func loadLayersAndTrack(opts *options, layers []configLayerSource, scope string)
 		); err != nil {
 			return err
 		}
+		if item.Source != nil {
+			recordConfigSourceKind(opts, item.Source.Kind())
+		}
+	}
+	return nil
+}
+
+func recordConfigSourceKind(opts *options, kind string) {
+	if opts == nil {
+		return
+	}
+	opts.configSourceKinds = appendConfigSourceKind(opts.configSourceKinds, kind)
+}
+
+func recordDirectConfigSourceKind(opts *options, kind string) {
+	if opts == nil {
+		return
+	}
+	opts.directSourceKinds = appendConfigSourceKind(opts.directSourceKinds, kind)
+}
+
+func appendConfigSourceKind(current []string, kind string) []string {
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	if kind == "" {
+		return current
+	}
+	for _, item := range current {
+		if item == kind {
+			return current
+		}
+	}
+	return append(current, kind)
+}
+
+func recordDeclarativeConfigSourceKinds(opts *options) error {
+	if opts == nil || opts.configManager == nil {
+		return nil
+	}
+	var specs []configchain.SourceSpec
+	if err := opts.configManager.Section("yggdrasil", "config", "sources").
+		Decode(&specs); err != nil {
+		return err
+	}
+	for _, spec := range specs {
+		if spec.Enabled != nil && !*spec.Enabled {
+			continue
+		}
+		recordConfigSourceKind(opts, spec.Kind)
 	}
 	return nil
 }

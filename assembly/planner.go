@@ -35,6 +35,7 @@ type planner struct {
 	moduleReasons      map[string][]string
 	availableProviders map[string][]string
 	autoModules        map[string]autoModuleState
+	activationIndex    candidateActivationIndex
 
 	selectedDefaults  map[string]string
 	defaultSources    map[string]string
@@ -96,7 +97,7 @@ func (p *planner) build() (*Result, error) {
 	if err := p.validateModuleIsolation(); err != nil {
 		return nil, err
 	}
-	p.collectProviders()
+	p.collectProviders(p.activationIndex)
 	if err := p.resolveDefaults(); err != nil {
 		return nil, err
 	}

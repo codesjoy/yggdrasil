@@ -86,6 +86,14 @@ func (a *App) assemblyInputWithResolvedLocked(resolved settings.Resolved) yassem
 		Modules:         a.plannedModules(),
 		Overrides:       overrides,
 		ProcessDefaults: a.opts.processDefaults,
+		ConfigSourceKinds: append(
+			[]string(nil),
+			a.opts.configSourceKinds...,
+		),
+		DirectConfigSourceKinds: append(
+			[]string(nil),
+			a.opts.directSourceKinds...,
+		),
 	}
 }
 

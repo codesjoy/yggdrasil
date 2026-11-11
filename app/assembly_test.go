@@ -890,11 +890,15 @@ func TestReloadWithInstalledBusinessMarksRestartRequired(t *testing.T) {
 	requireAssemblyErrorCode(t, err, yassembly.ErrReloadRequiresRestart)
 	require.True(t, app.hub.ReloadState().RestartRequired)
 
+	app.mu.Lock()
 	manager = app.opts.configManager
 	app.opts.configManager = nil
+	app.mu.Unlock()
 	err = app.Reload(context.Background())
 	requireAssemblyErrorCode(t, err, yassembly.ErrReloadRequiresRestart)
+	app.mu.Lock()
 	app.opts.configManager = manager
+	app.mu.Unlock()
 
 	require.NoError(
 		t,

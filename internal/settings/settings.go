@@ -267,9 +267,10 @@ type Resolved struct {
 	Admin      Admin
 	Extensions Extensions
 
-	OrderedExtensions  OrderedExtensions
-	ModuleViews        map[string]string
-	CapabilityBindings map[string][]string
+	OrderedExtensions          OrderedExtensions
+	ModuleViews                map[string]string
+	CapabilityBindings         map[string][]string
+	DeclaredCapabilityBindings map[string][]string
 }
 
 // ResolvedTransports contains normalized transport settings.

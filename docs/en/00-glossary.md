@@ -18,4 +18,5 @@
 | restart-required | Change cannot be safely hot-reloaded | 需要重启 |
 | degraded | Reload rollback failed or runtime diverged | 降级状态 |
 | provider | Object that exposes a capability or factory | provider / 提供者 |
+| explicit reference pull | Planner activation of the unique module owning an explicitly selected capability provider or config-source kind | 显式引用拉取 |
 | resolver watch | Dynamic service-discovery watch owned by client runtime | resolver watch |

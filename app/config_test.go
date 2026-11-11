@@ -328,6 +328,8 @@ func TestInitLoadsModuleConfigSourceBuildersBeforeModuleInit(t *testing.T) {
 	}
 	require.NoError(t, manager.Section("app").Decode(&out))
 	assert.Equal(t, "base:remote", out.StartupOrder)
+	assert.Contains(t, app.opts.configSourceKinds, "module")
+	assert.Contains(t, app.hub.Diagnostics().Topology, "config-source-provider")
 }
 
 func TestInitializeLocked_WithConfigManagerDoesNotChangeDefaultManager(t *testing.T) {

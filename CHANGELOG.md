@@ -31,7 +31,9 @@
   and registry registration to complete.
 - HTTP clients no longer expose undecodable non-200 response bodies.
 - `WithModules` remains a candidate-only option. Modules without an `AutoSpec`
-  must be enabled with `WithPlanOverrides(assembly.EnableModule(name))`.
+  may be pulled into the plan by an explicit capability provider or
+  config-source kind reference, or enabled with
+  `WithPlanOverrides(assembly.EnableModule(name))`.
 - REST forwarded peer headers are ignored unless the socket peer matches
   `trusted_proxy_cidrs`.
 - Restart-required reload results stay sticky until process restart and do not

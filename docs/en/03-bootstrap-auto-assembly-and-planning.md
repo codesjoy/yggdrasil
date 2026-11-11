@@ -150,8 +150,16 @@ Conflict rules:
 - if multiple legal candidates exist at the same source level with the same score, return `AmbiguousDefault`;
 - do not silently choose the lexicographically first module for convenience;
 - `WithModules(...)` affects the candidate set but is not a forced binding;
-- a module without `AutoSpec` remains disabled unless `WithPlanOverrides(assembly.EnableModule(name))`, a framework requirement, or dependency closure selects it;
-- forced binding requires `ForceDefault` or explicit config.
+- an explicit capability or config-source kind reference pulls the unique owning
+  candidate module into the plan;
+- a module without `AutoSpec` remains disabled when nothing explicitly
+  references it, unless `WithPlanOverrides(assembly.EnableModule(name))`, a
+  framework requirement, or dependency closure selects it;
+- `disable_modules` vetoes explicit activation and returns
+  `ConflictingOverride`;
+- multiple candidate owners for one provider return
+  `AmbiguousModuleActivation`;
+- forced binding requires `ForceDefault` or explicit configuration.
 
 ## 7. Default Chain Templates
 
@@ -209,8 +217,9 @@ Computes a SHA-256 hash over canonical JSON. Addresses, interface instances, and
 | `UnknownTemplate` | Chain template does not exist | Check template name |
 | `TemplateVersionNotFound` | Template version does not exist | Use a published version |
 | `AmbiguousDefault` | Default provider conflict | Explicitly choose a provider or disable candidates |
+| `AmbiguousModuleActivation` | Multiple candidate modules own one explicit provider or source kind | Keep one provider owner or correct the configuration |
 | `ConflictingOverride` | Overrides conflict with each other | Merge or remove conflicting configuration |
-| `UnknownExplicitBinding` | Explicit provider does not exist | Check whether the module is enabled and the name is correct |
+| `UnknownExplicitBinding` | Explicit provider does not exist | Check whether the owning module is registered and the name is correct |
 | `InvalidAutoRule` | AutoRule is invalid | Fix purity, affected paths, or matching logic |
 
 ## 10. Recommended High-Level Entry

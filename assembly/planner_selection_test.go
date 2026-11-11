@@ -77,7 +77,7 @@ func TestRequireProvider_AmbiguousMultiple(t *testing.T) {
 	require.Error(t, err)
 	var assemblyErr *Error
 	require.ErrorAs(t, err, &assemblyErr)
-	require.Equal(t, ErrAmbiguousDefault, assemblyErr.Code)
+	require.Equal(t, ErrUnknownExplicitBinding, assemblyErr.Code)
 }
 
 func TestSelectChain_DisableAuto(t *testing.T) {

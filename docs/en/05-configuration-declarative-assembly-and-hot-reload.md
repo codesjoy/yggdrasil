@@ -118,9 +118,12 @@ resolveMode
 
 - handles `DisableModule`;
 - always includes required modules;
-- includes non-auto modules by default;
 - includes auto modules when `AutoRule` matches;
+- pulls modules owning explicitly selected capability providers;
+- pulls modules owning explicitly loaded config-source kinds unless a direct
+  builder satisfies the kind;
 - includes `EnableModule` targets;
+- rejects explicit activation of disabled modules;
 - expands dependency closure.
 
 ### 4.2 resolveDefaults
@@ -319,4 +322,5 @@ yggdrasil:
 - If restart-required is set, check for business graph changes or non-reloadable modules.
 - If degraded, inspect failed module and failed stage.
 - If `AmbiguousDefault` occurs, explicitly configure a provider or disable candidates.
-- If `UnknownExplicitBinding` occurs, check whether the referenced module was enabled.
+- If `UnknownExplicitBinding` occurs, check whether the referenced module was
+  registered and whether the provider name is correct.

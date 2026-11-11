@@ -31,6 +31,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
+	"github.com/codesjoy/yggdrasil/v3/config"
+	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
 	internalidentity "github.com/codesjoy/yggdrasil/v3/internal/identity"
@@ -90,27 +92,53 @@ func (r *moduleResolver) AddWatch(string, resolver.Client) error { return nil }
 func (r *moduleResolver) DelWatch(string, resolver.Client) error { return nil }
 func (r *moduleResolver) Type() string                           { return r.resolverName }
 
+func moduleResolverCapability(provider string) module.Capability {
+	return module.Capability{
+		Spec: module.CapabilitySpec{
+			Name:        "discovery.resolver.provider",
+			Cardinality: module.NamedOne,
+			Type:        reflect.TypeOf((*resolver.Provider)(nil)).Elem(),
+		},
+		Name: provider,
+		Value: resolver.NewProvider(
+			provider,
+			func(name string) (resolver.Resolver, error) {
+				return &moduleResolver{resolverName: name}, nil
+			},
+		),
+	}
+}
+
 type resolverCapabilityModule struct{}
 
 func (resolverCapabilityModule) Name() string { return "test.resolver.capability" }
 
 func (resolverCapabilityModule) Capabilities() []module.Capability {
-	return []module.Capability{
-		{
-			Spec: module.CapabilitySpec{
-				Name:        "discovery.resolver.provider",
-				Cardinality: module.NamedOne,
-				Type:        reflect.TypeOf((*resolver.Provider)(nil)).Elem(),
-			},
-			Name: "module-resolver",
-			Value: resolver.NewProvider(
-				"module-resolver",
-				func(name string) (resolver.Resolver, error) {
-					return &moduleResolver{resolverName: name}, nil
-				},
-			),
-		},
-	}
+	return []module.Capability{moduleResolverCapability("module-resolver")}
+}
+
+type activationLifecycleModule struct {
+	name         string
+	dependencies []string
+	capabilities []module.Capability
+	inits        atomic.Int32
+}
+
+func (m *activationLifecycleModule) Name() string {
+	return m.name
+}
+
+func (m *activationLifecycleModule) DependsOn() []string {
+	return append([]string(nil), m.dependencies...)
+}
+
+func (m *activationLifecycleModule) Capabilities() []module.Capability {
+	return append([]module.Capability(nil), m.capabilities...)
+}
+
+func (m *activationLifecycleModule) Init(context.Context, config.View) error {
+	m.inits.Add(1)
+	return nil
 }
 
 func TestModuleSuppliedResolverProviderIsUsedByRuntimeSnapshotAndClient(t *testing.T) {
@@ -162,6 +190,122 @@ func TestModuleSuppliedResolverProviderIsUsedByRuntimeSnapshotAndClient(t *testi
 	binding := findBindingDiag(t, diag, "discovery.resolver.provider")
 	require.Equal(t, []string{"module-resolver"}, binding.Requested)
 	require.Equal(t, []string{"module-resolver"}, binding.Resolved)
+}
+
+func TestModuleSuppliedResolverProviderIsPulledByExplicitConfig(t *testing.T) {
+	app, _ := newInitializedAppWithConfig(t, "module-resolver-pull", map[string]any{
+		"yggdrasil": map[string]any{
+			"clients": map[string]any{
+				"services": map[string]any{
+					"svc": map[string]any{
+						"resolver": "svc",
+					},
+				},
+			},
+			"discovery": map[string]any{
+				"resolvers": map[string]any{
+					"svc": map[string]any{
+						"type": "module-resolver",
+					},
+				},
+			},
+		},
+	}, WithModules(resolverCapabilityModule{}))
+	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+
+	snapshot := app.currentRuntimeSnapshot()
+	require.NotNil(t, snapshot)
+	resolvedResolver, err := snapshot.NewResolver("svc")
+	require.NoError(t, err)
+	require.NotNil(t, resolvedResolver)
+	require.Equal(t, "svc", resolvedResolver.Type())
+
+	diag := app.hub.Diagnostics()
+	require.Contains(t, diag.Topology, "test.resolver.capability")
+	binding := findBindingDiag(t, diag, "discovery.resolver.provider")
+	require.Equal(t, []string{"module-resolver"}, binding.Requested)
+	require.Equal(t, []string{"module-resolver"}, binding.Resolved)
+}
+
+func TestExplicitActivationInitializesModuleAndDependencyOnly(t *testing.T) {
+	owner := &activationLifecycleModule{
+		name:         "test.resolver.owner",
+		dependencies: []string{"test.resolver.dependency"},
+		capabilities: []module.Capability{moduleResolverCapability("module-resolver")},
+	}
+	dependency := &activationLifecycleModule{name: "test.resolver.dependency"}
+	unreferenced := &activationLifecycleModule{name: "test.resolver.unreferenced"}
+	app, _ := newInitializedAppWithConfig(t, "explicit-activation-lifecycle", map[string]any{
+		"yggdrasil": map[string]any{
+			"discovery": map[string]any{
+				"resolvers": map[string]any{
+					"module": map[string]any{"type": "module-resolver"},
+				},
+			},
+		},
+	}, WithModules(owner, dependency, unreferenced))
+	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+
+	diag := app.hub.Diagnostics()
+	require.Contains(t, diag.Topology, owner.Name())
+	require.Contains(t, diag.Topology, dependency.Name())
+	require.NotContains(t, diag.Topology, unreferenced.Name())
+	require.Equal(t, int32(1), owner.inits.Load())
+	require.Equal(t, int32(1), dependency.inits.Load())
+	require.Equal(t, int32(0), unreferenced.inits.Load())
+}
+
+func TestReloadExplicitActivationChangesModulesAndRequiresRestart(t *testing.T) {
+	activated := &activationLifecycleModule{
+		name:         "test.reload.activated",
+		capabilities: []module.Capability{moduleResolverCapability("reload-resolver")},
+	}
+	app, manager := newInitializedAppWithConfig(
+		t,
+		"reload-explicit-activation",
+		map[string]any{"yggdrasil": map[string]any{}},
+		WithModules(activated),
+	)
+	t.Cleanup(func() { _ = app.Stop(context.Background()) })
+	app.mu.Lock()
+	app.state = lifecycleStateRunning
+	app.mu.Unlock()
+
+	require.NoError(t, manager.LoadLayer(
+		"resolver-activation",
+		config.PriorityOverride,
+		memory.NewSource("resolver-activation", map[string]any{
+			"yggdrasil": map[string]any{
+				"discovery": map[string]any{
+					"resolvers": map[string]any{
+						"reload": map[string]any{"type": "reload-resolver"},
+					},
+				},
+			},
+		}),
+	))
+	requireAssemblyErrorCode(
+		t,
+		app.Reload(context.Background()),
+		yassembly.ErrReloadRequiresRestart,
+	)
+
+	app.mu.Lock()
+	diff := app.lastSpecDiff
+	app.mu.Unlock()
+	require.NotNil(t, diff)
+	require.True(t, diff.HasChanges)
+	require.Contains(t, diff.AffectedDomains, "modules")
+	require.Contains(t, diff.Modules, yassembly.ModuleDiffEntry{
+		Name:   activated.Name(),
+		Action: "added",
+		Reasons: []string{
+			"enabled by explicit_config capability \"discovery.resolver.provider\" provider \"reload-resolver\"",
+		},
+		Kind:   "module",
+		Source: "user",
+	})
+	require.Equal(t, int32(0), activated.inits.Load())
 }
 
 func TestRuntimeAppliesLoggingFromResolvedSettings(t *testing.T) {

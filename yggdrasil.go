@@ -185,8 +185,9 @@ func WithProcessDefaults(enabled bool) Option {
 	}
 }
 
-// WithModules registers additional full lifecycle module candidates. Modules
-// without an AutoSpec must be enabled with WithPlanOverrides and
+// WithModules registers additional full lifecycle module candidates. Explicit
+// configuration may select a candidate provider and pull the owning module into
+// the plan. A module can also be enabled with WithPlanOverrides and
 // assembly.EnableModule.
 func WithModules(mods ...module.Module) Option {
 	return func(opts *options) error {

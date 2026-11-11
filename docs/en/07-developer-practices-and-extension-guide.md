@@ -84,7 +84,10 @@ func Compose(rt yggdrasil.Runtime) (*yggdrasil.BusinessBundle, error) {
 
 - Use `WithCapabilityRegistrations(...)` when you only need to add providers to existing capabilities and do not need `Start/Stop/Reload/DependsOn`.
 - Keep using `WithModules(...)` and full `module.Module` implementations when you need lifecycle hooks, dependency ordering, hot reload, or auto assembly.
-- `WithModules(...)` registers candidates only. Enable a module without `AutoSpec` explicitly with `WithPlanOverrides(assembly.EnableModule(name))`.
+- `WithModules(...)` registers candidates only. An explicit capability provider
+  or config-source kind reference pulls the unique owning module into the plan;
+  use `WithPlanOverrides(assembly.EnableModule(name))` when no such reference
+  exists.
 
 `CapabilityRegistration` is intended for provider-only extensions such as transport providers, logger handlers, resolver/balancer providers, and REST middleware.
 

@@ -76,7 +76,8 @@ func Compile(root Root) (Resolved, error) {
 			"discovery.resolvers":     "yggdrasil.discovery.resolvers",
 			"discovery.balancers":     "yggdrasil.balancers",
 		},
-		CapabilityBindings: map[string][]string{},
+		CapabilityBindings:         map[string][]string{},
+		DeclaredCapabilityBindings: compileDeclaredCapabilityBindings(fw),
 	}
 
 	normalizeLogging(&resolved.Logging)
@@ -354,6 +355,121 @@ func CompileCapabilityBindings(resolved Resolved) map[string][]string {
 	}
 	out["transport.balancer.provider"] = dedupStrings(balancerTypes)
 	return out
+}
+
+func compileDeclaredCapabilityBindings(fw Framework) map[string][]string {
+	out := map[string][]string{}
+	add := func(capability string, values ...string) {
+		for _, value := range values {
+			value = strings.TrimSpace(value)
+			if value == "" {
+				continue
+			}
+			out[capability] = append(out[capability], value)
+		}
+	}
+
+	for _, spec := range fw.Observability.Logging.Handlers {
+		add("observability.logger.handler", normalizedHandlerType(spec.Type))
+	}
+	for _, spec := range fw.Observability.Logging.Writers {
+		add("observability.logger.writer", spec.Type)
+	}
+	add("observability.otel.tracer_provider", fw.Observability.Telemetry.Tracer)
+	add("observability.otel.meter_provider", fw.Observability.Telemetry.Meter)
+	add(
+		"observability.stats.handler",
+		stats.ParseHandlerNames(fw.Observability.Telemetry.Stats.Server)...,
+	)
+	add(
+		"observability.stats.handler",
+		stats.ParseHandlerNames(fw.Observability.Telemetry.Stats.Client)...,
+	)
+	for _, spec := range fw.Transports.Security.Profiles {
+		add("security.profile.provider", spec.Type)
+	}
+	if fw.Transports.HTTP.Rest != nil {
+		add("marshaler.scheme", fw.Transports.HTTP.Rest.Marshaler.Support...)
+		add(
+			"transport.rest.middleware",
+			fw.Transports.HTTP.Rest.Middleware.All...,
+		)
+		add(
+			"transport.rest.middleware",
+			fw.Transports.HTTP.Rest.Middleware.RPC...,
+		)
+		add(
+			"transport.rest.middleware",
+			fw.Transports.HTTP.Rest.Middleware.Web...,
+		)
+	}
+	add("transport.server.provider", fw.Server.Transports...)
+	addClientEndpointProtocols(fw.Clients, add)
+	add("rpc.interceptor.unary_server", fw.Server.Interceptors.Unary...)
+	add("rpc.interceptor.stream_server", fw.Server.Interceptors.Stream...)
+	addClientInterceptorValues(fw.Clients, add)
+	add("discovery.registry.provider", fw.Discovery.Registry.Type)
+	for _, spec := range fw.Discovery.Resolvers {
+		add("discovery.resolver.provider", spec.Type)
+	}
+	for _, spec := range fw.Balancers.Defaults {
+		add("transport.balancer.provider", spec.Type)
+	}
+	for _, specs := range fw.Balancers.Services {
+		for _, spec := range specs {
+			add("transport.balancer.provider", spec.Type)
+		}
+	}
+
+	for capability, values := range out {
+		slices.Sort(values)
+		out[capability] = dedupStrings(values)
+	}
+	return out
+}
+
+func addClientEndpointProtocols(
+	clients Clients,
+	add func(string, ...string),
+) {
+	for _, endpoint := range clients.Defaults.Remote.Endpoints {
+		add("transport.client.provider", endpoint.Protocol)
+	}
+	addEndpoints := func(endpoints *[]resolver.BaseEndpoint) {
+		if endpoints == nil {
+			return
+		}
+		for _, endpoint := range *endpoints {
+			add("transport.client.provider", endpoint.Protocol)
+		}
+	}
+	for _, service := range clients.Services {
+		if service.ServiceSettings.Remote != nil {
+			addEndpoints(service.ServiceSettings.Remote.Endpoints)
+		}
+	}
+}
+
+func addClientInterceptorValues(
+	clients Clients,
+	add func(string, ...string),
+) {
+	add("rpc.interceptor.unary_client", clients.Defaults.Interceptors.Unary...)
+	add("rpc.interceptor.stream_client", clients.Defaults.Interceptors.Stream...)
+	addInterceptors := func(interceptors *interceptorConfigOverlay) {
+		if interceptors == nil {
+			return
+		}
+		if interceptors.Unary != nil {
+			add("rpc.interceptor.unary_client", (*interceptors.Unary)...)
+		}
+		if interceptors.Stream != nil {
+			add("rpc.interceptor.stream_client", (*interceptors.Stream)...)
+		}
+	}
+	for _, service := range clients.Services {
+		addInterceptors(service.ServiceSettings.Interceptors)
+	}
 }
 
 func validateSecurityProfileReferences(resolved Resolved) error {

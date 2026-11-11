@@ -24,6 +24,7 @@ import (
 
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
 	"github.com/codesjoy/yggdrasil/v3/config"
+	configchain "github.com/codesjoy/yggdrasil/v3/config/chain"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
 	"github.com/codesjoy/yggdrasil/v3/config/source/memory"
 	"github.com/codesjoy/yggdrasil/v3/module"
@@ -160,6 +161,7 @@ func TestWithConfigSource(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, opts.configSources, 1)
 		assert.Equal(t, "test", opts.configSources[0].Name)
+		assert.Contains(t, opts.directSourceKinds, "memory")
 	})
 
 	t.Run("nil source skip", func(t *testing.T) {
@@ -178,6 +180,20 @@ func TestWithConfigSource(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, opts.configSources, 1)
 	})
+}
+
+func TestWithConfigSourceBuilder(t *testing.T) {
+	opts := &options{}
+	builder := func(
+		configchain.BuildContext,
+		configchain.SourceSpec,
+	) (source.Source, config.Priority, error) {
+		return memory.NewSource("custom", nil), config.PriorityRemote, nil
+	}
+	err := WithConfigSourceBuilder(" Custom ", builder)(opts)
+	require.NoError(t, err)
+	assert.Contains(t, opts.configBuilders, " Custom ")
+	assert.Contains(t, opts.directSourceKinds, "custom")
 }
 
 // --- WithModules ---

@@ -475,6 +475,14 @@ state machine.
   module's `DefaultPolicy` score, then the framework fallback.
 - `WithModules(...)` **MUST NOT** be treated as a forced binding. Forcing
   **MUST** require an explicit force or explicit configuration.
+- An explicit capability provider or config-source kind reference **MUST**
+  activate the unique non-disabled module candidate that owns it before
+  dependency closure is expanded.
+- Multiple candidate owners for one explicit provider **MUST** fail planning
+  with `assembly.ErrAmbiguousModuleActivation`; registration order and
+  lexicographic preference **MUST NOT** be used.
+- `disable_modules` **MUST** veto explicit activation and fail with
+  `assembly.ErrConflictingOverride`.
 - An explicit provider reference that does not resolve **MUST** fail with
   `assembly.ErrUnknownExplicitBinding`.
 

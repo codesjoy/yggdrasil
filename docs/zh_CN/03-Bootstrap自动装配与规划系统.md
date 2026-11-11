@@ -156,7 +156,10 @@ flowchart LR
 - 同一 capability、同一来源层级、同分且多个合法候选时，返回 `AmbiguousDefault`。
 - 不能为了“方便”隐式选字典序第一个。
 - `WithModules(...)` 只影响候选集，不等于强制绑定。
-- 未实现 `AutoSpec` 的模块只有通过 `WithPlanOverrides(assembly.EnableModule(name))`、框架必需模块或依赖闭包选择后才会启用。
+- 显式 capability 或 config source kind 引用会拉取唯一拥有该 provider 的候选模块。
+- 未被显式引用、且未实现 `AutoSpec` 的模块，只有通过 `WithPlanOverrides(assembly.EnableModule(name))`、框架必需模块或依赖闭包选择后才会启用。
+- `disable_modules` 否决显式激活，并返回 `ConflictingOverride`。
+- 同一 provider 有多个候选 owner 时返回 `AmbiguousModuleActivation`。
 - 真正强制绑定必须使用 `ForceDefault` 或显式配置。
 
 ## 7. 默认链模板
@@ -217,8 +220,9 @@ type ChainTemplate struct {
 | `UnknownTemplate` | 链模板不存在 | 检查模板名 |
 | `TemplateVersionNotFound` | 模板版本不存在 | 使用已发布版本 |
 | `AmbiguousDefault` | 默认实现冲突 | 显式指定 provider 或禁用候选 |
+| `AmbiguousModuleActivation` | 多个候选模块拥有同一显式 provider 或 source kind | 保留唯一 owner 或修正配置 |
 | `ConflictingOverride` | override 互相冲突 | 合并或删除冲突配置 |
-| `UnknownExplicitBinding` | 显式 provider 不存在 | 检查模块是否启用或名称是否正确 |
+| `UnknownExplicitBinding` | 显式 provider 不存在 | 检查模块是否已注册以及名称是否正确 |
 | `InvalidAutoRule` | AutoRule 非法 | 修复纯函数、路径声明或匹配逻辑 |
 
 ## 10. 推荐高层入口

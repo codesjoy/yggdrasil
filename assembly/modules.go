@@ -16,7 +16,6 @@ package assembly
 
 import (
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 
@@ -62,15 +61,21 @@ func (p *planner) resolveModules() error {
 		return err
 	}
 
+	candidates := make([]module.Module, 0, len(order))
+	for _, name := range order {
+		candidates = append(candidates, all[name])
+	}
+	index := newCandidateActivationIndex(candidates)
+	p.activationIndex = index
 	enabled := map[string]module.Module{}
 	for _, name := range order {
 		mod := all[name]
-		if mod == nil || isDisabledModule(name, p.configOverrides, p.codeOverrides) {
+		if mod == nil || p.moduleDisabled(name) {
 			continue
 		}
 		if _, ok := requiredModules[name]; ok {
 			enabled[name] = mod
-			p.moduleReasons[name] = append(p.moduleReasons[name], moduleReason(name))
+			p.addModuleReason(name, moduleReason(name))
 			continue
 		}
 
@@ -82,7 +87,7 @@ func (p *planner) resolveModules() error {
 		)
 		if autoDescribed {
 			autoSpec = auto.AutoSpec()
-			if err := p.validateAutoModule(mod, autoSpec); err != nil {
+			if err := p.validateAutoModule(mod, autoSpec, index); err != nil {
 				return err
 			}
 			matchReasons, matchedRules = p.matchAutoModule(mod, autoSpec)
@@ -104,7 +109,7 @@ func (p *planner) resolveModules() error {
 		}
 		enabled[name] = mod
 		if !autoDescribed {
-			p.moduleReasons[name] = append(p.moduleReasons[name], moduleReason(name))
+			p.addModuleReason(name, moduleReason(name))
 		}
 		if autoDescribed {
 			p.autoModules[name] = autoModuleState{
@@ -113,14 +118,19 @@ func (p *planner) resolveModules() error {
 			}
 			p.matchedAutoRules = append(p.matchedAutoRules, matchedRules...)
 		}
-		p.moduleReasons[name] = append(p.moduleReasons[name], matchReasons...)
+		for _, reason := range matchReasons {
+			p.addModuleReason(name, reason)
+		}
+	}
+	if err := p.activateExplicitReferences(enabled, index); err != nil {
+		return err
 	}
 	p.modules = p.expandModuleDependencies(enabled, all)
 	for _, mod := range p.modules {
 		if _, ok := p.moduleReasons[mod.Name()]; ok {
 			continue
 		}
-		p.moduleReasons[mod.Name()] = append(p.moduleReasons[mod.Name()], "dependency closure")
+		p.addModuleReason(mod.Name(), "dependency closure")
 	}
 	return nil
 }
@@ -162,29 +172,25 @@ func (p *planner) recordDisabledModuleOverrides(
 	return nil
 }
 
-func (p *planner) collectProviders() {
-	index := map[string]map[string]struct{}{}
+func (p *planner) collectProviders(index candidateActivationIndex) {
+	indexed := map[string]map[string]struct{}{}
 	for _, mod := range p.modules {
-		provider, ok := mod.(module.CapabilityProvider)
-		if !ok {
-			continue
-		}
-		for _, cap := range provider.Capabilities() {
-			if cap.Spec.Name == "" {
-				continue
+		for specName, providerNames := range index.capabilityNames[mod.Name()] {
+			if indexed[specName] == nil {
+				indexed[specName] = map[string]struct{}{}
 			}
-			name := cap.Name
-			if name == "" {
-				name = mod.Name()
+			for _, providerName := range providerNames {
+				indexed[specName][providerName] = struct{}{}
 			}
-			if _, ok := index[cap.Spec.Name]; !ok {
-				index[cap.Spec.Name] = map[string]struct{}{}
-			}
-			index[cap.Spec.Name][name] = struct{}{}
 		}
 	}
-	for specName, items := range index {
-		p.availableProviders[specName] = slices.Sorted(maps.Keys(items))
+	for specName, providers := range indexed {
+		names := make([]string, 0, len(providers))
+		for name := range providers {
+			names = append(names, name)
+		}
+		slices.Sort(names)
+		p.availableProviders[specName] = names
 	}
 }
 
@@ -243,7 +249,11 @@ func isDisabledModule(name string, configOverrides, codeOverrides overrideSet) b
 	return false
 }
 
-func (p *planner) validateAutoModule(mod module.Module, autoSpec module.AutoSpec) error {
+func (p *planner) validateAutoModule(
+	mod module.Module,
+	autoSpec module.AutoSpec,
+	index candidateActivationIndex,
+) error {
 	name := mod.Name()
 	declared := map[string]module.CapabilitySpec{}
 	for _, spec := range autoSpec.Provides {
@@ -258,17 +268,11 @@ func (p *planner) validateAutoModule(mod module.Module, autoSpec module.AutoSpec
 		}
 		declared[spec.Name] = spec
 	}
-	provider, ok := mod.(module.CapabilityProvider)
+	_, ok := mod.(module.CapabilityProvider)
 	if !ok {
 		return nil
 	}
-	actual := map[string]module.CapabilitySpec{}
-	for _, cap := range provider.Capabilities() {
-		if cap.Spec.Name == "" {
-			continue
-		}
-		actual[cap.Spec.Name] = cap.Spec
-	}
+	actual := index.capabilitySpecs[name]
 	if len(declared) == 0 {
 		return nil
 	}
@@ -379,7 +383,7 @@ func (p *planner) expandModuleDependencies(
 			}
 		}
 	}
-	for name := range enabled {
+	for _, name := range sortedKeys(enabled) {
 		visit(name)
 	}
 	out := make([]module.Module, 0, len(visited))

@@ -124,12 +124,14 @@ type DefaultCandidate struct {
 
 // Input is the immutable planner input.
 type Input struct {
-	Identity        IdentitySpec
-	Resolved        settings.Resolved
-	Snapshot        config.Snapshot
-	Modules         []module.Module
-	Overrides       []Override
-	ProcessDefaults bool
+	Identity                IdentitySpec
+	Resolved                settings.Resolved
+	Snapshot                config.Snapshot
+	Modules                 []module.Module
+	Overrides               []Override
+	ProcessDefaults         bool
+	ConfigSourceKinds       []string
+	DirectConfigSourceKinds []string
 }
 
 // Result is the executable planner result used by App.Prepare and Reload.

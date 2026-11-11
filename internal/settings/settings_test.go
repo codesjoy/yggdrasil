@@ -342,6 +342,173 @@ func TestCompile_AppliesDefaultsAndMergesOverrides(t *testing.T) {
 	require.Equal(t, "insecure", root.Yggdrasil.Transports.Security.Profiles["base-creds"].Type)
 }
 
+func TestCompile_DeclaredCapabilityBindingsExcludeFrameworkDefaults(t *testing.T) {
+	root := decodeRoot(t, map[string]any{
+		"yggdrasil": map[string]any{
+			"server": map[string]any{
+				"transports": []any{"grpc"},
+				"interceptors": map[string]any{
+					"unary":  []any{"auth"},
+					"stream": []any{"audit"},
+				},
+			},
+			"transports": map[string]any{
+				"security": map[string]any{
+					"profiles": map[string]any{
+						"mesh": map[string]any{"type": "mtls"},
+					},
+				},
+				"http": map[string]any{
+					"rest": map[string]any{
+						"marshaler": map[string]any{
+							"support": []any{"proto"},
+						},
+						"middleware": map[string]any{
+							"all": []any{"trace"},
+						},
+					},
+				},
+			},
+			"clients": map[string]any{
+				"defaults": map[string]any{
+					"interceptors": map[string]any{
+						"unary": []any{"client-auth"},
+					},
+				},
+				"services": map[string]any{
+					"svc": map[string]any{
+						"remote": map[string]any{
+							"endpoints": []any{
+								map[string]any{
+									"address":  "127.0.0.1:1",
+									"protocol": "custom-rpc",
+								},
+							},
+						},
+					},
+				},
+			},
+			"discovery": map[string]any{
+				"registry": map[string]any{"type": "etcd"},
+				"resolvers": map[string]any{
+					"xds": map[string]any{"type": "xds"},
+				},
+			},
+			"balancers": map[string]any{
+				"defaults": map[string]any{
+					"polaris": map[string]any{"type": "polaris"},
+				},
+			},
+			"observability": map[string]any{
+				"logging": map[string]any{
+					"handlers": map[string]any{
+						"default": map[string]any{"type": "custom-log"},
+					},
+					"writers": map[string]any{
+						"default": map[string]any{"type": "custom-writer"},
+					},
+				},
+				"telemetry": map[string]any{
+					"tracer": "otlp-trace",
+					"meter":  "otlp-meter",
+					"stats": map[string]any{
+						"server": "otel",
+					},
+				},
+			},
+		},
+	})
+
+	resolved, err := Compile(root)
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		[]string{"custom-log"},
+		resolved.DeclaredCapabilityBindings["observability.logger.handler"],
+	)
+	require.Equal(
+		t,
+		[]string{"custom-writer"},
+		resolved.DeclaredCapabilityBindings["observability.logger.writer"],
+	)
+	require.Equal(
+		t,
+		[]string{"otlp-meter"},
+		resolved.DeclaredCapabilityBindings["observability.otel.meter_provider"],
+	)
+	require.Equal(
+		t,
+		[]string{"otlp-trace"},
+		resolved.DeclaredCapabilityBindings["observability.otel.tracer_provider"],
+	)
+	require.Equal(
+		t,
+		[]string{"otel"},
+		resolved.DeclaredCapabilityBindings["observability.stats.handler"],
+	)
+	require.Equal(
+		t,
+		[]string{"mtls"},
+		resolved.DeclaredCapabilityBindings["security.profile.provider"],
+	)
+	require.Equal(
+		t,
+		[]string{"proto"},
+		resolved.DeclaredCapabilityBindings["marshaler.scheme"],
+	)
+	require.Equal(
+		t,
+		[]string{"trace"},
+		resolved.DeclaredCapabilityBindings["transport.rest.middleware"],
+	)
+	require.Equal(
+		t,
+		[]string{"grpc"},
+		resolved.DeclaredCapabilityBindings["transport.server.provider"],
+	)
+	require.Equal(
+		t,
+		[]string{"custom-rpc"},
+		resolved.DeclaredCapabilityBindings["transport.client.provider"],
+	)
+	require.Equal(
+		t,
+		[]string{"auth"},
+		resolved.DeclaredCapabilityBindings["rpc.interceptor.unary_server"],
+	)
+	require.Equal(
+		t,
+		[]string{"audit"},
+		resolved.DeclaredCapabilityBindings["rpc.interceptor.stream_server"],
+	)
+	require.Equal(
+		t,
+		[]string{"client-auth"},
+		resolved.DeclaredCapabilityBindings["rpc.interceptor.unary_client"],
+	)
+	require.Equal(
+		t,
+		[]string{"etcd"},
+		resolved.DeclaredCapabilityBindings["discovery.registry.provider"],
+	)
+	require.Equal(
+		t,
+		[]string{"xds"},
+		resolved.DeclaredCapabilityBindings["discovery.resolver.provider"],
+	)
+	require.Equal(
+		t,
+		[]string{"polaris"},
+		resolved.DeclaredCapabilityBindings["transport.balancer.provider"],
+	)
+	require.NotContains(
+		t,
+		resolved.DeclaredCapabilityBindings["observability.logger.writer"],
+		"console",
+	)
+	require.NotContains(t, resolved.DeclaredCapabilityBindings["marshaler.scheme"], "jsonpb")
+}
+
 func TestCompileGRPCStandardServiceSettings(t *testing.T) {
 	root := decodeRoot(t, map[string]any{
 		"yggdrasil": map[string]any{

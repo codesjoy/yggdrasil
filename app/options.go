@@ -55,6 +55,8 @@ type options struct {
 	configPath         string
 	configSources      []configLayerSource
 	configBuilders     map[string]configchain.ContextBuilder
+	configSourceKinds  []string
+	directSourceKinds  []string
 
 	managedConfigSources          []source.Source
 	configSourceCleanupRegistered bool
@@ -192,6 +194,7 @@ func WithConfigSource(name string, priority config.Priority, src source.Source) 
 			Priority: priority,
 			Source:   src,
 		})
+		recordDirectConfigSourceKind(opts, src.Kind())
 		return nil
 	}
 }
@@ -206,12 +209,14 @@ func WithConfigSourceBuilder(kind string, builder configchain.ContextBuilder) Op
 			opts.configBuilders = map[string]configchain.ContextBuilder{}
 		}
 		opts.configBuilders[kind] = builder
+		recordDirectConfigSourceKind(opts, kind)
 		return nil
 	}
 }
 
-// WithModules registers additional module candidates. A candidate that does
-// not implement module.AutoDescribed must be enabled explicitly with
+// WithModules registers additional module candidates. Explicit configuration
+// may select a candidate provider and pull the owning module into the plan. A
+// module can also be enabled explicitly with
 // WithPlanOverrides(assembly.EnableModule(name)).
 func WithModules(mods ...module.Module) Option {
 	return func(opts *options) error {

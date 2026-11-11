@@ -363,7 +363,7 @@ func (p *planner) moduleDefaultCandidates(capability string) []moduleDefaultCand
 			!defaultPolicyMatches(state.spec.DefaultPolicy, p.mode.Profile) {
 			continue
 		}
-		name, ok := uniqueCapabilityProviderName(mod, capability)
+		name, ok := p.uniqueCapabilityProviderName(mod, capability)
 		if !ok || !providerAvailable(p.availableProviders[capability], name) {
 			continue
 		}
@@ -389,23 +389,11 @@ func defaultPolicyMatches(policy *module.DefaultPolicy, profile string) bool {
 	return false
 }
 
-func uniqueCapabilityProviderName(mod module.Module, capability string) (string, bool) {
-	provider, ok := mod.(module.CapabilityProvider)
-	if !ok {
-		return "", false
-	}
-	names := make([]string, 0, 1)
-	for _, cap := range provider.Capabilities() {
-		if cap.Spec.Name != capability {
-			continue
-		}
-		name := cap.Name
-		if name == "" {
-			name = mod.Name()
-		}
-		names = append(names, name)
-	}
-	names = dedupStrings(names)
+func (p *planner) uniqueCapabilityProviderName(
+	mod module.Module,
+	capability string,
+) (string, bool) {
+	names := p.activationIndex.capabilityNames[mod.Name()][capability]
 	if len(names) != 1 {
 		return "", false
 	}
@@ -566,10 +554,28 @@ func (p *planner) expandTemplate(
 	selection templateSelection,
 	source string,
 ) (Chain, string, error) {
+	template, err := p.lookupTemplate(path, selection)
+	if err != nil {
+		return Chain{}, "", err
+	}
+	if err := p.validateChainItems(path, template.Items); err != nil {
+		return Chain{}, "", err
+	}
+	return Chain{
+		Template: template.Name,
+		Version:  template.Version,
+		Items:    append([]string(nil), template.Items...),
+	}, source, nil
+}
+
+func (p *planner) lookupTemplate(
+	path string,
+	selection templateSelection,
+) (Template, error) {
 	template, ok := p.registry.template(selection.Name, selection.Version)
 	if !ok {
 		if selection.Version == "" {
-			return Chain{}, "", newError(
+			return Template{}, newError(
 				ErrTemplateVersionNotFound,
 				stagePlan,
 				fmt.Sprintf("template %q requires one version", selection.Name),
@@ -577,7 +583,7 @@ func (p *planner) expandTemplate(
 				map[string]string{"path": path, "template": selection.Name},
 			)
 		}
-		return Chain{}, "", newError(
+		return Template{}, newError(
 			ErrUnknownTemplate,
 			stagePlan,
 			fmt.Sprintf("template %q version %q not found", selection.Name, selection.Version),
@@ -589,14 +595,7 @@ func (p *planner) expandTemplate(
 			},
 		)
 	}
-	if err := p.validateChainItems(path, template.Items); err != nil {
-		return Chain{}, "", err
-	}
-	return Chain{
-		Template: template.Name,
-		Version:  template.Version,
-		Items:    append([]string(nil), template.Items...),
-	}, source, nil
+	return template, nil
 }
 
 func (p *planner) validateChainItems(path string, items []string) error {

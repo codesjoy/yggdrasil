@@ -25,6 +25,7 @@ func (p *planner) buildEffectiveResolved() (settings.Resolved, error) {
 	if err != nil {
 		return settings.Resolved{}, err
 	}
+	declared := cloneBindings(p.input.Resolved.DeclaredCapabilityBindings)
 
 	if value, ok := p.selectedDefaults[capLoggerHandler]; ok {
 		spec := effective.Logging.Handlers["default"]
@@ -54,6 +55,7 @@ func (p *planner) buildEffectiveResolved() (settings.Resolved, error) {
 	applyRESTChain(&effective, chainRESTRPC, p.selectedChains[chainRESTRPC])
 	applyRESTChain(&effective, chainRESTWeb, p.selectedChains[chainRESTWeb])
 	effective.CapabilityBindings = settings.CompileCapabilityBindings(effective)
+	effective.DeclaredCapabilityBindings = declared
 	return effective, nil
 }
 
