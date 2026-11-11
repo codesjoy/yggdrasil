@@ -17,7 +17,7 @@ package module
 import (
 	"maps"
 	"reflect"
-	"sort"
+	"slices"
 )
 
 // ModuleDiag is one module diagnostic snapshot item.
@@ -174,16 +174,12 @@ func startedModuleNames(state diagnosticsState) []string {
 			startedModules = append(startedModules, name)
 		}
 	}
-	sort.Strings(startedModules)
+	slices.Sort(startedModules)
 	return startedModules
 }
 
 func capabilityDiagnostics(state diagnosticsState) []CapabilityDiag {
-	specNames := make([]string, 0, len(state.capabilityBindings))
-	for specName := range state.capabilityBindings {
-		specNames = append(specNames, specName)
-	}
-	sort.Strings(specNames)
+	specNames := slices.Sorted(maps.Keys(state.capabilityBindings))
 	capabilityItems := make([]CapabilityDiag, 0, len(specNames))
 	for _, specName := range specNames {
 		binding := state.capabilityBindings[specName]
@@ -235,7 +231,7 @@ func capabilityBindingDiagnostics(state diagnosticsState) []CapabilityBindingDia
 		seenBindingName[specName] = struct{}{}
 		bindingNames = append(bindingNames, specName)
 	}
-	sort.Strings(bindingNames)
+	slices.Sort(bindingNames)
 	bindingItems := make([]CapabilityBindingDiag, 0, len(bindingNames))
 	for _, specName := range bindingNames {
 		requested := append([]string(nil), state.requestedBindings[specName]...)
@@ -249,7 +245,7 @@ func capabilityBindingDiagnostics(state diagnosticsState) []CapabilityBindingDia
 			availableSet[entry.name] = struct{}{}
 			available = append(available, entry.name)
 		}
-		sort.Strings(available)
+		slices.Sort(available)
 		resolved := make([]string, 0)
 		missing := make([]string, 0)
 		if len(requested) == 0 {

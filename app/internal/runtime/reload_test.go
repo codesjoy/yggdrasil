@@ -132,23 +132,6 @@ func TestDedupStrings(t *testing.T) {
 	})
 }
 
-// --- sortedKeys ---
-
-func TestSortedKeys(t *testing.T) {
-	t.Run("empty map", func(t *testing.T) {
-		assert.Equal(t, []string{}, sortedKeys(map[string]struct{}{}))
-	})
-
-	t.Run("single key", func(t *testing.T) {
-		assert.Equal(t, []string{"only"}, sortedKeys(map[string]struct{}{"only": {}}))
-	})
-
-	t.Run("multiple keys sorted", func(t *testing.T) {
-		result := sortedKeys(map[string]struct{}{"c": {}, "a": {}, "b": {}})
-		assert.Equal(t, []string{"a", "b", "c"}, result)
-	})
-}
-
 // --- valuesEqual ---
 
 func TestValuesEqual(t *testing.T) {

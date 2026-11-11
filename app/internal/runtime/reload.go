@@ -16,7 +16,8 @@ package runtime
 
 import (
 	"encoding/json"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 
 	yassembly "github.com/codesjoy/yggdrasil/v3/assembly"
@@ -65,7 +66,7 @@ func ChangedConfigPaths(prevPlan, nextPlan *yassembly.Result) []string {
 		lookupRootSection(newValue),
 		changes,
 	)
-	return dedupStrings(sortedKeys(changes))
+	return dedupStrings(slices.Sorted(maps.Keys(changes)))
 }
 
 // CapabilityBindingsEqual reports whether two capability binding maps are equal.
@@ -124,7 +125,7 @@ func collectChangedPaths(prefix string, oldValue, newValue any, changes map[stri
 		if len(seen) == 0 {
 			return
 		}
-		for _, key := range sortedKeys(seen) {
+		for _, key := range slices.Sorted(maps.Keys(seen)) {
 			nextPrefix := prefix + "." + strings.ToLower(key)
 			collectChangedPaths(nextPrefix, oldMap[key], newMap[key], changes)
 		}
@@ -179,14 +180,5 @@ func dedupStrings(values []string) []string {
 		seen[value] = struct{}{}
 		out = append(out, value)
 	}
-	return out
-}
-
-func sortedKeys[T any](items map[string]T) []string {
-	out := make([]string, 0, len(items))
-	for key := range items {
-		out = append(out, key)
-	}
-	sort.Strings(out)
 	return out
 }

@@ -16,6 +16,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -449,4 +450,122 @@ func TestApp_InstallBusiness_Errors(t *testing.T) {
 		assert.ErrorAs(t, err, &assemblyErr)
 		assert.Equal(t, yassembly.ErrRuntimeNotReady, assemblyErr.Code)
 	})
+}
+
+func TestInstallBusiness_GovernorHTTP(t *testing.T) {
+	app := newGovernorBindingTestApp(t, map[string]any{"bind": "127.0.0.1", "port": 0})
+
+	require.NoError(t, app.InstallBusiness(&BusinessBundle{
+		GovernorHTTP: []GovernorHTTPBinding{{
+			Method: http.MethodGet,
+			Path:   "/hello",
+			Handler: func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("hi"))
+			},
+		}},
+	}))
+
+	serveGovernorAsync(t, app.opts.governor)
+	waitGovernorStarted(t, app.opts.governor)
+
+	base := "http://" + app.opts.governor.Info().Address
+
+	resp, err := http.Get(base + "/hello")
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	_ = resp.Body.Close()
+
+	resp, err = http.Get(base + "/routes")
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var routes []string
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&routes))
+	assert.Contains(t, routes, "/hello")
+}
+
+func TestInstallBusiness_GovernorHTTP_DisabledGovernor(t *testing.T) {
+	app := newGovernorBindingTestApp(t, map[string]any{"enabled": false, "bind": "127.0.0.1"})
+
+	require.NoError(t, app.InstallBusiness(&BusinessBundle{
+		GovernorHTTP: []GovernorHTTPBinding{{
+			Method:  http.MethodGet,
+			Path:    "/hello",
+			Handler: func(http.ResponseWriter, *http.Request) {},
+		}},
+	}))
+}
+
+func TestInstallGovernorHTTPBinding_Rejections(t *testing.T) {
+	app := newGovernorBindingTestApp(t, map[string]any{"bind": "127.0.0.1", "port": 0})
+	handler := func(http.ResponseWriter, *http.Request) {}
+
+	t.Run("builtin path rejected", func(t *testing.T) {
+		err := installGovernorBinding(app, GovernorHTTPBinding{
+			Method:  http.MethodGet,
+			Path:    "/configs",
+			Handler: handler,
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "already installed")
+	})
+
+	t.Run("duplicate path rejected", func(t *testing.T) {
+		require.NoError(t, installGovernorBinding(app, GovernorHTTPBinding{
+			Method:  http.MethodGet,
+			Path:    "/dup",
+			Handler: handler,
+		}))
+		err := installGovernorBinding(app, GovernorHTTPBinding{
+			Method:  http.MethodPost,
+			Path:    "/dup",
+			Handler: handler,
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "already installed")
+	})
+
+	t.Run("invalid binding rejected", func(t *testing.T) {
+		err := installGovernorBinding(app, GovernorHTTPBinding{
+			Method:  http.MethodGet,
+			Path:    "no-slash",
+			Handler: handler,
+		})
+		require.Error(t, err)
+	})
+}
+
+func installGovernorBinding(app *App, binding GovernorHTTPBinding) error {
+	staged := newStagedInstall(app)
+	if err := staged.installGovernorHTTPBinding(binding); err != nil {
+		return err
+	}
+	return staged.commit()
+}
+
+func newGovernorBindingTestApp(t *testing.T, governorCfg map[string]any) *App {
+	t.Helper()
+
+	manager := newTestManager(t, map[string]any{
+		"yggdrasil": map[string]any{
+			"mode":   "prod-http-gateway",
+			"admin":  map[string]any{"governor": governorCfg},
+			"server": map[string]any{"transports": []any{"test"}},
+		},
+	})
+	app, err := New(
+		"governor-binding",
+		WithConfigManager(manager),
+		WithModules(testTransportModule{recorder: newTransportRecorder()}),
+		WithPlanOverrides(yassembly.ForceDefault("observability.logger.handler", "text")),
+	)
+	require.NoError(t, err)
+	require.NoError(t, app.Prepare(t.Context()))
+
+	t.Cleanup(func() {
+		_ = app.opts.governor.Stop()
+		_ = app.Stop(context.Background())
+	})
+	return app
 }

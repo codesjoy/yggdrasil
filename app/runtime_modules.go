@@ -16,7 +16,8 @@ package app
 
 import (
 	"context"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 
@@ -94,12 +95,7 @@ func appendSortedCapabilities(
 	spec module.CapabilitySpec,
 	providers map[string]any,
 ) []module.Capability {
-	names := make([]string, 0, len(providers))
-	for name := range providers {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
+	for _, name := range slices.Sorted(maps.Keys(providers)) {
 		out = append(out, module.Capability{
 			Spec:  spec,
 			Name:  name,

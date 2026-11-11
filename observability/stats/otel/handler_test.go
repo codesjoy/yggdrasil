@@ -185,90 +185,74 @@ func TestHandleWithMetrics(t *testing.T) {
 
 func TestHandleWithMetrics_RequestResponseSemantics(t *testing.T) {
 	t.Run("server side payload direction", func(t *testing.T) {
-		h := newHandler(true)
-		h.cfg = &Config{EnableMetrics: true}
-		reqSize := &spyInt64Histogram{}
-		respSize := &spyInt64Histogram{}
-		reqPerRPC := &spyInt64Histogram{}
-		respPerRPC := &spyInt64Histogram{}
-		dur := &spyFloat64Histogram{}
-		h.rpcRequestSize = reqSize
-		h.rpcResponseSize = respSize
-		h.rpcRequestsPerRPC = reqPerRPC
-		h.rpcResponsesPerRPC = respPerRPC
-		h.rpcDuration = dur
-
-		ctx, span := h.tracer.Start(context.Background(), "server")
-		defer span.End()
-		ctx = context.WithValue(ctx, rpcContextKey{}, &rpcContext{})
-
-		h.handleRPC(ctx, &stats.RPCInPayloadBase{
-			Client:        false,
-			TransportSize: 12,
-			Protocol:      "grpc",
-		}, true)
-		h.handleRPC(ctx, &stats.RPCOutPayloadBase{
-			Client:        false,
-			TransportSize: 34,
-			Protocol:      "grpc",
-		}, true)
-		begin := time.Now()
-		h.handleRPC(ctx, &stats.RPCEndBase{
-			Client:    false,
-			BeginTime: begin,
-			EndTime:   begin.Add(25 * time.Millisecond),
-			Protocol:  "grpc",
-		}, true)
-
-		assert.Equal(t, []int64{12}, reqSize.values)
-		assert.Equal(t, []int64{34}, respSize.values)
-		assert.Equal(t, []int64{1}, reqPerRPC.values)
-		assert.Equal(t, []int64{1}, respPerRPC.values)
-		assert.Len(t, dur.values, 1)
+		testPayloadDirection(t, true, 12, 34)
 	})
 
 	t.Run("client side payload direction", func(t *testing.T) {
-		h := newHandler(false)
-		h.cfg = &Config{EnableMetrics: true}
-		reqSize := &spyInt64Histogram{}
-		respSize := &spyInt64Histogram{}
-		reqPerRPC := &spyInt64Histogram{}
-		respPerRPC := &spyInt64Histogram{}
-		dur := &spyFloat64Histogram{}
-		h.rpcRequestSize = reqSize
-		h.rpcResponseSize = respSize
-		h.rpcRequestsPerRPC = reqPerRPC
-		h.rpcResponsesPerRPC = respPerRPC
-		h.rpcDuration = dur
-
-		ctx, span := h.tracer.Start(context.Background(), "client")
-		defer span.End()
-		ctx = context.WithValue(ctx, rpcContextKey{}, &rpcContext{})
-
-		h.handleRPC(ctx, &stats.RPCOutPayloadBase{
-			Client:        true,
-			TransportSize: 56,
-			Protocol:      "grpc",
-		}, false)
-		h.handleRPC(ctx, &stats.RPCInPayloadBase{
-			Client:        true,
-			TransportSize: 78,
-			Protocol:      "grpc",
-		}, false)
-		begin := time.Now()
-		h.handleRPC(ctx, &stats.RPCEndBase{
-			Client:    true,
-			BeginTime: begin,
-			EndTime:   begin.Add(25 * time.Millisecond),
-			Protocol:  "grpc",
-		}, false)
-
-		assert.Equal(t, []int64{56}, reqSize.values)
-		assert.Equal(t, []int64{78}, respSize.values)
-		assert.Equal(t, []int64{1}, reqPerRPC.values)
-		assert.Equal(t, []int64{1}, respPerRPC.values)
-		assert.Len(t, dur.values, 1)
+		testPayloadDirection(t, false, 56, 78)
 	})
+}
+
+func testPayloadDirection(t *testing.T, server bool, requestSize, responseSize int) {
+	t.Helper()
+
+	h := newHandler(server)
+	h.cfg = &Config{EnableMetrics: true}
+	reqSize := &spyInt64Histogram{}
+	respSize := &spyInt64Histogram{}
+	reqPerRPC := &spyInt64Histogram{}
+	respPerRPC := &spyInt64Histogram{}
+	dur := &spyFloat64Histogram{}
+	h.rpcRequestSize = reqSize
+	h.rpcResponseSize = respSize
+	h.rpcRequestsPerRPC = reqPerRPC
+	h.rpcResponsesPerRPC = respPerRPC
+	h.rpcDuration = dur
+
+	spanName := "client"
+	if server {
+		spanName = "server"
+	}
+	ctx, span := h.tracer.Start(t.Context(), spanName)
+	defer span.End()
+	ctx = context.WithValue(ctx, rpcContextKey{}, &rpcContext{})
+
+	var request stats.RPCStats = &stats.RPCInPayloadBase{
+		TransportSize: requestSize,
+		Protocol:      "grpc",
+	}
+	var response stats.RPCStats = &stats.RPCOutPayloadBase{
+		TransportSize: responseSize,
+		Protocol:      "grpc",
+	}
+	if !server {
+		request = &stats.RPCOutPayloadBase{
+			Client:        true,
+			TransportSize: requestSize,
+			Protocol:      "grpc",
+		}
+		response = &stats.RPCInPayloadBase{
+			Client:        true,
+			TransportSize: responseSize,
+			Protocol:      "grpc",
+		}
+	}
+	h.handleRPC(ctx, request, server)
+	h.handleRPC(ctx, response, server)
+
+	begin := time.Now()
+	h.handleRPC(ctx, &stats.RPCEndBase{
+		Client:    !server,
+		BeginTime: begin,
+		EndTime:   begin.Add(25 * time.Millisecond),
+		Protocol:  "grpc",
+	}, server)
+
+	assert.Equal(t, []int64{int64(requestSize)}, reqSize.values)
+	assert.Equal(t, []int64{int64(responseSize)}, respSize.values)
+	assert.Equal(t, []int64{1}, reqPerRPC.values)
+	assert.Equal(t, []int64{1}, respPerRPC.values)
+	assert.Len(t, dur.values, 1)
 }
 
 // TestServerStatus tests serverStatus function

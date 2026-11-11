@@ -72,6 +72,34 @@ func (m testIsolationModule) IsolationMode() module.IsolationMode {
 	return m.mode
 }
 
+func testDefaultCandidateModule(name, provider string, score int) testAutoModule {
+	spec := module.CapabilitySpec{
+		Name:        capTracer,
+		Cardinality: module.NamedOne,
+		Type:        reflect.TypeOf(struct{}{}),
+	}
+	return testAutoModule{
+		testCapabilityModule: testCapabilityModule{
+			name: name,
+			capabilities: []module.Capability{{
+				Spec:  spec,
+				Name:  provider,
+				Value: struct{}{},
+			}},
+		},
+		autoSpec: module.AutoSpec{
+			Provides: []module.CapabilitySpec{spec},
+			AutoRules: []module.AutoRule{
+				testAutoRule{
+					path:        "yggdrasil.observability.telemetry.stats.server",
+					description: "observability stats enabled",
+				},
+			},
+			DefaultPolicy: &module.DefaultPolicy{Score: score},
+		},
+	}
+}
+
 func testPlannerModules() []module.Module {
 	buildNamed := func(spec, name string, cardinality module.CapabilityCardinality) module.Capability {
 		return module.Capability{
@@ -322,70 +350,8 @@ func TestDryRunSelectsAutoModulesAndDefaultPolicyDeterministically(t *testing.T)
 		},
 	})
 	input.Modules = append(input.Modules,
-		testAutoModule{
-			testCapabilityModule: testCapabilityModule{
-				name: "trace.high",
-				capabilities: []module.Capability{
-					{
-						Spec: module.CapabilitySpec{
-							Name:        capTracer,
-							Cardinality: module.NamedOne,
-							Type:        reflect.TypeOf(struct{}{}),
-						},
-						Name:  "trace-high",
-						Value: struct{}{},
-					},
-				},
-			},
-			autoSpec: module.AutoSpec{
-				Provides: []module.CapabilitySpec{
-					{
-						Name:        capTracer,
-						Cardinality: module.NamedOne,
-						Type:        reflect.TypeOf(struct{}{}),
-					},
-				},
-				AutoRules: []module.AutoRule{
-					testAutoRule{
-						path:        "yggdrasil.observability.telemetry.stats.server",
-						description: "observability stats enabled",
-					},
-				},
-				DefaultPolicy: &module.DefaultPolicy{Score: 20},
-			},
-		},
-		testAutoModule{
-			testCapabilityModule: testCapabilityModule{
-				name: "trace.low",
-				capabilities: []module.Capability{
-					{
-						Spec: module.CapabilitySpec{
-							Name:        capTracer,
-							Cardinality: module.NamedOne,
-							Type:        reflect.TypeOf(struct{}{}),
-						},
-						Name:  "trace-low",
-						Value: struct{}{},
-					},
-				},
-			},
-			autoSpec: module.AutoSpec{
-				Provides: []module.CapabilitySpec{
-					{
-						Name:        capTracer,
-						Cardinality: module.NamedOne,
-						Type:        reflect.TypeOf(struct{}{}),
-					},
-				},
-				AutoRules: []module.AutoRule{
-					testAutoRule{
-						path:        "yggdrasil.observability.telemetry.stats.server",
-						description: "observability stats enabled",
-					},
-				},
-				DefaultPolicy: &module.DefaultPolicy{Score: 10},
-			},
-		},
+		testDefaultCandidateModule("trace.high", "trace-high", 20),
+		testDefaultCandidateModule("trace.low", "trace-low", 10),
 	)
 
 	result, err := Plan(context.Background(), input)
@@ -463,70 +429,8 @@ func TestDryRunRejectsInvalidAutoSpecAndAmbiguousAutoDefault(t *testing.T) {
 		},
 	})
 	ambiguous.Modules = append(ambiguous.Modules,
-		testAutoModule{
-			testCapabilityModule: testCapabilityModule{
-				name: "trace.a",
-				capabilities: []module.Capability{
-					{
-						Spec: module.CapabilitySpec{
-							Name:        capTracer,
-							Cardinality: module.NamedOne,
-							Type:        reflect.TypeOf(struct{}{}),
-						},
-						Name:  "trace-a",
-						Value: struct{}{},
-					},
-				},
-			},
-			autoSpec: module.AutoSpec{
-				Provides: []module.CapabilitySpec{
-					{
-						Name:        capTracer,
-						Cardinality: module.NamedOne,
-						Type:        reflect.TypeOf(struct{}{}),
-					},
-				},
-				AutoRules: []module.AutoRule{
-					testAutoRule{
-						path:        "yggdrasil.observability.telemetry.stats.server",
-						description: "observability stats enabled",
-					},
-				},
-				DefaultPolicy: &module.DefaultPolicy{Score: 10},
-			},
-		},
-		testAutoModule{
-			testCapabilityModule: testCapabilityModule{
-				name: "trace.b",
-				capabilities: []module.Capability{
-					{
-						Spec: module.CapabilitySpec{
-							Name:        capTracer,
-							Cardinality: module.NamedOne,
-							Type:        reflect.TypeOf(struct{}{}),
-						},
-						Name:  "trace-b",
-						Value: struct{}{},
-					},
-				},
-			},
-			autoSpec: module.AutoSpec{
-				Provides: []module.CapabilitySpec{
-					{
-						Name:        capTracer,
-						Cardinality: module.NamedOne,
-						Type:        reflect.TypeOf(struct{}{}),
-					},
-				},
-				AutoRules: []module.AutoRule{
-					testAutoRule{
-						path:        "yggdrasil.observability.telemetry.stats.server",
-						description: "observability stats enabled",
-					},
-				},
-				DefaultPolicy: &module.DefaultPolicy{Score: 10},
-			},
-		},
+		testDefaultCandidateModule("trace.a", "trace-a", 10),
+		testDefaultCandidateModule("trace.b", "trace-b", 10),
 	)
 	_, err = Plan(context.Background(), ambiguous)
 	var assemblyErr *Error

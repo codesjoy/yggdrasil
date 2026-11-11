@@ -16,7 +16,8 @@ package assembly
 
 import (
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/codesjoy/yggdrasil/v3/module"
@@ -183,12 +184,7 @@ func (p *planner) collectProviders() {
 		}
 	}
 	for specName, items := range index {
-		names := make([]string, 0, len(items))
-		for name := range items {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		p.availableProviders[specName] = names
+		p.availableProviders[specName] = slices.Sorted(maps.Keys(items))
 	}
 }
 
@@ -232,7 +228,7 @@ func (p *planner) affectedPaths() map[string][]string {
 	}
 	for key := range out {
 		out[key] = dedupStrings(out[key])
-		sort.Strings(out[key])
+		slices.Sort(out[key])
 	}
 	return out
 }

@@ -17,7 +17,9 @@ package module
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -286,11 +288,7 @@ func buildCapabilityBindings(
 	index map[string][]capabilityEntry,
 	specs map[string]CapabilitySpec,
 ) map[string]capabilityBinding {
-	specNames := make([]string, 0, len(index))
-	for specName := range index {
-		specNames = append(specNames, specName)
-	}
-	sort.Strings(specNames)
+	specNames := slices.Sorted(maps.Keys(index))
 	bindings := make(map[string]capabilityBinding, len(specNames))
 	for _, specName := range specNames {
 		spec := specs[specName]
@@ -390,7 +388,7 @@ func slicesUniq(items []string) []string {
 		seen[item] = struct{}{}
 		out = append(out, item)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

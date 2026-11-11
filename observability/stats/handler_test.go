@@ -295,70 +295,42 @@ func (c *contextTestHandler) HandleChannel(ctx context.Context, cs ChanStats) {
 
 // TestGetServerHandler tests GetServerHandler function
 func TestGetServerHandler(t *testing.T) {
-	t.Run("get server handler", func(t *testing.T) {
-		// This test doesn't set up config, so it will return an empty handler chain
-		handler := GetServerHandler()
-		assert.NotNil(t, handler)
-	})
-
-	t.Run("GetServerHandler is idempotent", func(t *testing.T) {
-		h1 := GetServerHandler()
-		h2 := GetServerHandler()
-		assert.Same(t, h1, h2)
-	})
-
-	t.Run("GetServerHandler is thread-safe", func(t *testing.T) {
-		var wg sync.WaitGroup
-		handlers := make([]Handler, 10)
-
-		for i := 0; i < 10; i++ {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-				handlers[idx] = GetServerHandler()
-			}(i)
-		}
-
-		wg.Wait()
-
-		// All handlers should be the same instance
-		for i := 1; i < len(handlers); i++ {
-			assert.Same(t, handlers[0], handlers[i])
-		}
-	})
+	testScopedHandler(t, "server", "GetServerHandler", GetServerHandler)
 }
 
 // TestGetClientHandler tests GetClientHandler function
 func TestGetClientHandler(t *testing.T) {
-	t.Run("get client handler", func(t *testing.T) {
-		// This test doesn't set up config, so it will return an empty handler chain
-		handler := GetClientHandler()
-		assert.NotNil(t, handler)
+	testScopedHandler(t, "client", "GetClientHandler", GetClientHandler)
+}
+
+func testScopedHandler(
+	t *testing.T,
+	kind string,
+	getterName string,
+	get func() Handler,
+) {
+	t.Helper()
+
+	t.Run("get "+kind+" handler", func(t *testing.T) {
+		assert.NotNil(t, get())
 	})
 
-	t.Run("GetClientHandler is idempotent", func(t *testing.T) {
-		h1 := GetClientHandler()
-		h2 := GetClientHandler()
-		assert.Same(t, h1, h2)
+	t.Run(getterName+" is idempotent", func(t *testing.T) {
+		assert.Same(t, get(), get())
 	})
 
-	t.Run("GetClientHandler is thread-safe", func(t *testing.T) {
-		var wg sync.WaitGroup
+	t.Run(getterName+" is thread-safe", func(t *testing.T) {
 		handlers := make([]Handler, 10)
-
-		for i := 0; i < 10; i++ {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-				handlers[idx] = GetClientHandler()
-			}(i)
+		var wg sync.WaitGroup
+		for index := range handlers {
+			wg.Go(func() {
+				handlers[index] = get()
+			})
 		}
-
 		wg.Wait()
 
-		// All handlers should be the same instance
-		for i := 1; i < len(handlers); i++ {
-			assert.Same(t, handlers[0], handlers[i])
+		for index := 1; index < len(handlers); index++ {
+			assert.Same(t, handlers[0], handlers[index])
 		}
 	})
 }
@@ -412,5 +384,90 @@ func TestParseHandlerNames(t *testing.T) {
 
 	t.Run("empty input", func(t *testing.T) {
 		assert.Empty(t, ParseHandlerNames(""))
+	})
+}
+
+// TestChanTagInfoBase tests ChanTagInfoBase methods.
+func TestChanTagInfoBase(t *testing.T) {
+	t.Run("create and get fields", func(t *testing.T) {
+		info := &ChanTagInfoBase{
+			RemoteEndpoint: "127.0.0.1:8080",
+			LocalEndpoint:  "127.0.0.1:3000",
+			Protocol:       "grpc",
+		}
+
+		assert.Equal(t, "127.0.0.1:8080", info.GetRemoteEndpoint())
+		assert.Equal(t, "127.0.0.1:3000", info.GetLocalEndpoint())
+		assert.Equal(t, "grpc", info.GetProtocol())
+	})
+
+	t.Run("implements ChanTagInfo interface", func(t *testing.T) {
+		var info ChanTagInfo = &ChanTagInfoBase{
+			RemoteEndpoint: "remote",
+			LocalEndpoint:  "local",
+			Protocol:       "http",
+		}
+
+		assert.Equal(t, "remote", info.GetRemoteEndpoint())
+		assert.Equal(t, "local", info.GetLocalEndpoint())
+		assert.Equal(t, "http", info.GetProtocol())
+	})
+}
+
+// TestChanBeginBase tests ChanBeginBase methods.
+func TestChanBeginBase(t *testing.T) {
+	t.Run("client channel begin", func(t *testing.T) {
+		begin := &ChanBeginBase{Client: true}
+		assert.True(t, begin.IsClient())
+		assert.Implements(t, (*ChanStats)(nil), begin)
+		assert.Implements(t, (*ChanBegin)(nil), begin)
+	})
+
+	t.Run("server channel begin", func(t *testing.T) {
+		begin := &ChanBeginBase{Client: false}
+		assert.False(t, begin.IsClient())
+	})
+}
+
+// TestChanEndBase tests ChanEndBase methods.
+func TestChanEndBase(t *testing.T) {
+	t.Run("client channel end", func(t *testing.T) {
+		end := &ChanEndBase{Client: true}
+		assert.True(t, end.IsClient())
+		assert.Implements(t, (*ChanStats)(nil), end)
+		assert.Implements(t, (*ChanEnd)(nil), end)
+	})
+
+	t.Run("server channel end", func(t *testing.T) {
+		end := &ChanEndBase{Client: false}
+		assert.False(t, end.IsClient())
+	})
+}
+
+// TestChanStatsInterface tests ChanStats interface implementations.
+func TestChanStatsInterface(t *testing.T) {
+	t.Run("ChanBeginBase implements ChanStats", func(t *testing.T) {
+		var stats ChanStats = &ChanBeginBase{Client: true}
+		assert.True(t, stats.IsClient())
+	})
+
+	t.Run("ChanEndBase implements ChanStats", func(t *testing.T) {
+		var stats ChanStats = &ChanEndBase{Client: false}
+		assert.False(t, stats.IsClient())
+	})
+}
+
+// TestChanTagInfoInterface tests ChanTagInfo interface implementation.
+func TestChanTagInfoInterface(t *testing.T) {
+	t.Run("ChanTagInfoBase implements ChanTagInfo", func(t *testing.T) {
+		var info ChanTagInfo = &ChanTagInfoBase{
+			RemoteEndpoint: "example.com:443",
+			LocalEndpoint:  "localhost:8080",
+			Protocol:       "https",
+		}
+
+		assert.Equal(t, "example.com:443", info.GetRemoteEndpoint())
+		assert.Equal(t, "localhost:8080", info.GetLocalEndpoint())
+		assert.Equal(t, "https", info.GetProtocol())
 	})
 }

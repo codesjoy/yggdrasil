@@ -91,82 +91,104 @@ func TestParseAttributes_String(t *testing.T) {
 
 // TestParseAttributes_Int64 tests parsing int64 attributes
 func TestParseAttributes_Int64(t *testing.T) {
-	t.Run("single int64", func(t *testing.T) {
-		attrsMap := map[string]interface{}{
-			"port":     int64(8080),
-			"count":    int64(42),
-			"duration": int64(1000),
-		}
-
-		attrs := ParseAttributes(attrsMap)
-
-		assert.Len(t, attrs, 3)
-		assert.Contains(t, attrs, attribute.Int64("port", 8080))
-		assert.Contains(t, attrs, attribute.Int64("count", 42))
-		assert.Contains(t, attrs, attribute.Int64("duration", 1000))
-	})
-
-	t.Run("int slice", func(t *testing.T) {
-		attrsMap := map[string]interface{}{
-			"ports": []int64{8080, 8081, 8082},
-		}
-
-		attrs := ParseAttributes(attrsMap)
-
-		assert.Len(t, attrs, 1)
-		assert.Contains(t, attrs, attribute.Int64Slice("ports", []int64{8080, 8081, 8082}))
-	})
-
-	t.Run("negative int64", func(t *testing.T) {
-		attrsMap := map[string]interface{}{
-			"offset": int64(-100),
-		}
-
-		attrs := ParseAttributes(attrsMap)
-
-		assert.Len(t, attrs, 1)
-		assert.Contains(t, attrs, attribute.Int64("offset", -100))
+	runParseAttributeTests(t, []parseAttributeTest{
+		{
+			name: "single int64",
+			input: map[string]interface{}{
+				"port":     int64(8080),
+				"count":    int64(42),
+				"duration": int64(1000),
+			},
+			expected: []attribute.KeyValue{
+				attribute.Int64("port", 8080),
+				attribute.Int64("count", 42),
+				attribute.Int64("duration", 1000),
+			},
+		},
+		{
+			name: "int slice",
+			input: map[string]interface{}{
+				"ports": []int64{8080, 8081, 8082},
+			},
+			expected: []attribute.KeyValue{
+				attribute.Int64Slice("ports", []int64{8080, 8081, 8082}),
+			},
+		},
+		{
+			name: "negative int64",
+			input: map[string]interface{}{
+				"offset": int64(-100),
+			},
+			expected: []attribute.KeyValue{
+				attribute.Int64("offset", -100),
+			},
+		},
 	})
 }
 
 // TestParseAttributes_Float64 tests parsing float64 attributes
 func TestParseAttributes_Float64(t *testing.T) {
-	t.Run("single float64", func(t *testing.T) {
-		attrsMap := map[string]interface{}{
-			"ratio":   float64(0.95),
-			"percent": float64(100.0),
-			"price":   float64(19.99),
-		}
-
-		attrs := ParseAttributes(attrsMap)
-
-		assert.Len(t, attrs, 3)
-		assert.Contains(t, attrs, attribute.Float64("ratio", 0.95))
-		assert.Contains(t, attrs, attribute.Float64("percent", 100.0))
-		assert.Contains(t, attrs, attribute.Float64("price", 19.99))
+	runParseAttributeTests(t, []parseAttributeTest{
+		{
+			name: "single float64",
+			input: map[string]interface{}{
+				"ratio":   float64(0.95),
+				"percent": float64(100.0),
+				"price":   float64(19.99),
+			},
+			expected: []attribute.KeyValue{
+				attribute.Float64("ratio", 0.95),
+				attribute.Float64("percent", 100.0),
+				attribute.Float64("price", 19.99),
+			},
+		},
+		{
+			name: "float64 slice",
+			input: map[string]interface{}{
+				"ratios": []float64{0.1, 0.5, 0.9},
+			},
+			expected: []attribute.KeyValue{
+				attribute.Float64Slice("ratios", []float64{0.1, 0.5, 0.9}),
+			},
+		},
+		{
+			name: "negative float64",
+			input: map[string]interface{}{
+				"temperature": float64(-5.5),
+			},
+			expected: []attribute.KeyValue{
+				attribute.Float64("temperature", -5.5),
+			},
+		},
 	})
+}
 
-	t.Run("float64 slice", func(t *testing.T) {
-		attrsMap := map[string]interface{}{
-			"ratios": []float64{0.1, 0.5, 0.9},
-		}
+type parseAttributeTest struct {
+	name     string
+	input    map[string]interface{}
+	expected []attribute.KeyValue
+}
 
-		attrs := ParseAttributes(attrsMap)
+func runParseAttributeTests(t *testing.T, tests []parseAttributeTest) {
+	t.Helper()
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assertParsedAttributes(t, test.input, test.expected)
+		})
+	}
+}
 
-		assert.Len(t, attrs, 1)
-		assert.Contains(t, attrs, attribute.Float64Slice("ratios", []float64{0.1, 0.5, 0.9}))
-	})
-
-	t.Run("negative float64", func(t *testing.T) {
-		attrsMap := map[string]interface{}{
-			"temperature": float64(-5.5),
-		}
-
-		attrs := ParseAttributes(attrsMap)
-
-		assert.Len(t, attrs, 1)
-		assert.Contains(t, attrs, attribute.Float64("temperature", -5.5))
-	})
+func assertParsedAttributes(
+	t *testing.T,
+	input map[string]interface{},
+	expected []attribute.KeyValue,
+) {
+	t.Helper()
+	attrs := ParseAttributes(input)
+	assert.Len(t, attrs, len(expected))
+	for _, item := range expected {
+		assert.Contains(t, attrs, item)
+	}
 }
 
 // TestParseAttributes_Default tests parsing unknown types as strings

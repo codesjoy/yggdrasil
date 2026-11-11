@@ -16,8 +16,8 @@ package settings
 
 import (
 	"fmt"
+	"maps"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
@@ -275,12 +275,7 @@ func CompileCapabilityBindings(resolved Resolved) map[string][]string {
 		securityTypes[spec.Type] = struct{}{}
 	}
 	if len(securityTypes) > 0 {
-		names := make([]string, 0, len(securityTypes))
-		for name := range securityTypes {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		out["security.profile.provider"] = names
+		out["security.profile.provider"] = slices.Sorted(maps.Keys(securityTypes))
 	}
 	if resolved.Transports.Rest != nil {
 		schemes := slices.Clone(resolved.Transports.Rest.Marshaler.Support)
@@ -426,7 +421,7 @@ func sortedHandlerTypes(in map[string]logger.HandlerSpec) []string {
 	if len(keys) == 0 {
 		keys = append(keys, "text")
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return dedupStrings(keys)
 }
 
@@ -448,6 +443,6 @@ func sortedWriterTypes(in map[string]logger.WriterSpec) []string {
 	if len(keys) == 0 {
 		keys = append(keys, "console")
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return dedupStrings(keys)
 }
