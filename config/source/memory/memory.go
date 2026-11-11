@@ -16,8 +16,8 @@
 package memory
 
 import (
-	"github.com/codesjoy/yggdrasil/v3/config/internal/tree"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
+	"github.com/codesjoy/yggdrasil/v3/internal/configtree"
 )
 
 type memory struct {
@@ -34,7 +34,7 @@ func (m *memory) Name() string {
 }
 
 func (m *memory) Read() (source.Data, error) {
-	return source.NewMapData(tree.NormalizeMap(m.data)), nil
+	return source.NewMapData(configtree.NormalizeMap(m.data)), nil
 }
 
 func (m *memory) Close() error {
@@ -45,6 +45,6 @@ func (m *memory) Close() error {
 func NewSource(name string, data map[string]any) source.Source {
 	return &memory{
 		name: name,
-		data: tree.NormalizeMap(data),
+		data: configtree.NormalizeMap(data),
 	}
 }

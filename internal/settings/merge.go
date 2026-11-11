@@ -29,15 +29,9 @@ func mergeClientServiceSettings(
 	overlay clientServiceConfigOverlay,
 ) client.ServiceSettings {
 	out := base
-	if overlay.FastFail != nil {
-		out.FastFail = *overlay.FastFail
-	}
-	if overlay.Resolver != nil {
-		out.Resolver = *overlay.Resolver
-	}
-	if overlay.Balancer != nil {
-		out.Balancer = *overlay.Balancer
-	}
+	mergePointer(&out.FastFail, overlay.FastFail)
+	mergePointer(&out.Resolver, overlay.Resolver)
+	mergePointer(&out.Balancer, overlay.Balancer)
 	if overlay.Backoff != nil {
 		out.Backoff = mergeBackoffConfig(base.Backoff, *overlay.Backoff)
 	}
@@ -74,15 +68,11 @@ func mergeHTTPClientConfig(
 	overlay HTTPClientTransport,
 ) rpchttp.ClientConfig {
 	out := base
-	if overlay.Timeout != nil {
-		out.Timeout = *overlay.Timeout
-	}
+	mergePointer(&out.Timeout, overlay.Timeout)
 	if overlay.Marshaler != nil {
 		out.Marshaler = overlay.Marshaler
 	}
-	if overlay.SecurityProfile != nil {
-		out.SecurityProfile = *overlay.SecurityProfile
-	}
+	mergePointer(&out.SecurityProfile, overlay.SecurityProfile)
 	return out
 }
 
@@ -91,30 +81,14 @@ func mergeGRPCClientConfig(
 	overlay grpcClientConfigOverlay,
 ) grpcprotocol.ClientConfig {
 	out := base
-	if overlay.WaitConnTimeout != nil {
-		out.WaitConnTimeout = *overlay.WaitConnTimeout
-	}
-	if overlay.ConnectTimeout != nil {
-		out.ConnectTimeout = *overlay.ConnectTimeout
-	}
-	if overlay.MaxSendMsgSize != nil {
-		out.MaxSendMsgSize = *overlay.MaxSendMsgSize
-	}
-	if overlay.MaxRecvMsgSize != nil {
-		out.MaxRecvMsgSize = *overlay.MaxRecvMsgSize
-	}
-	if overlay.Compressor != nil {
-		out.Compressor = *overlay.Compressor
-	}
-	if overlay.BackOffMaxDelay != nil {
-		out.BackOffMaxDelay = *overlay.BackOffMaxDelay
-	}
-	if overlay.MinConnectTimeout != nil {
-		out.MinConnectTimeout = *overlay.MinConnectTimeout
-	}
-	if overlay.Network != nil {
-		out.Network = *overlay.Network
-	}
+	mergePointer(&out.WaitConnTimeout, overlay.WaitConnTimeout)
+	mergePointer(&out.ConnectTimeout, overlay.ConnectTimeout)
+	mergePointer(&out.MaxSendMsgSize, overlay.MaxSendMsgSize)
+	mergePointer(&out.MaxRecvMsgSize, overlay.MaxRecvMsgSize)
+	mergePointer(&out.Compressor, overlay.Compressor)
+	mergePointer(&out.BackOffMaxDelay, overlay.BackOffMaxDelay)
+	mergePointer(&out.MinConnectTimeout, overlay.MinConnectTimeout)
+	mergePointer(&out.Network, overlay.Network)
 	out.Transport = mergeGRPCTransportConfig(base.Transport, overlay.Transport)
 	return out
 }
@@ -124,30 +98,14 @@ func mergeGRPCTransportConfig(
 	overlay grpcClientTransportOptionsOverlay,
 ) grpcprotocol.ClientTransportOptions {
 	out := base
-	if overlay.UserAgent != nil {
-		out.UserAgent = *overlay.UserAgent
-	}
-	if overlay.SecurityProfile != nil {
-		out.SecurityProfile = *overlay.SecurityProfile
-	}
-	if overlay.Authority != nil {
-		out.Authority = *overlay.Authority
-	}
-	if overlay.KeepaliveParams != nil {
-		out.KeepaliveParams = *overlay.KeepaliveParams
-	}
-	if overlay.InitialWindowSize != nil {
-		out.InitialWindowSize = *overlay.InitialWindowSize
-	}
-	if overlay.InitialConnWindowSize != nil {
-		out.InitialConnWindowSize = *overlay.InitialConnWindowSize
-	}
-	if overlay.WriteBufferSize != nil {
-		out.WriteBufferSize = *overlay.WriteBufferSize
-	}
-	if overlay.ReadBufferSize != nil {
-		out.ReadBufferSize = *overlay.ReadBufferSize
-	}
+	mergePointer(&out.UserAgent, overlay.UserAgent)
+	mergePointer(&out.SecurityProfile, overlay.SecurityProfile)
+	mergePointer(&out.Authority, overlay.Authority)
+	mergePointer(&out.KeepaliveParams, overlay.KeepaliveParams)
+	mergePointer(&out.InitialWindowSize, overlay.InitialWindowSize)
+	mergePointer(&out.InitialConnWindowSize, overlay.InitialConnWindowSize)
+	mergePointer(&out.WriteBufferSize, overlay.WriteBufferSize)
+	mergePointer(&out.ReadBufferSize, overlay.ReadBufferSize)
 	if overlay.MaxHeaderListSize != nil {
 		out.MaxHeaderListSize = overlay.MaxHeaderListSize
 	}
@@ -156,19 +114,17 @@ func mergeGRPCTransportConfig(
 
 func mergeBackoffConfig(base backoff.Config, overlay backoffConfigOverlay) backoff.Config {
 	out := base
-	if overlay.BaseDelay != nil {
-		out.BaseDelay = *overlay.BaseDelay
-	}
-	if overlay.Multiplier != nil {
-		out.Multiplier = *overlay.Multiplier
-	}
-	if overlay.Jitter != nil {
-		out.Jitter = *overlay.Jitter
-	}
-	if overlay.MaxDelay != nil {
-		out.MaxDelay = *overlay.MaxDelay
-	}
+	mergePointer(&out.BaseDelay, overlay.BaseDelay)
+	mergePointer(&out.Multiplier, overlay.Multiplier)
+	mergePointer(&out.Jitter, overlay.Jitter)
+	mergePointer(&out.MaxDelay, overlay.MaxDelay)
 	return out
+}
+
+func mergePointer[T any](target *T, overlay *T) {
+	if overlay != nil {
+		*target = *overlay
+	}
 }
 
 func mergeRemoteAttributes(base, overlay map[string]any) map[string]any {

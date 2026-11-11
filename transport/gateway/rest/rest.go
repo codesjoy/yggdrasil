@@ -37,6 +37,7 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	"github.com/codesjoy/yggdrasil/v3/rpc/status"
+	transportmeta "github.com/codesjoy/yggdrasil/v3/transport/internal/httpmeta"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/listenaddr"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/peer"
@@ -403,7 +404,7 @@ func cloneStringMap(in map[string]string) map[string]string {
 }
 
 func (s *ServeMux) extractInMetadata(r *http.Request) metadata.MD {
-	md := metadata.New(nil)
+	md := transportmeta.ExtractMetadata(r.Header, MetadataHeaderPrefix)
 	for _, item := range s.acceptHeaders {
 		vals := r.Header.Values(item)
 		if vals == nil {
@@ -411,17 +412,11 @@ func (s *ServeMux) extractInMetadata(r *http.Request) metadata.MD {
 		}
 		md.Append(item, vals...)
 	}
-
-	for key, vals := range r.Header {
-		if strings.HasPrefix(key, MetadataHeaderPrefix) {
-			md.Append(key[len(MetadataHeaderPrefix):], vals...)
-		}
-	}
 	return md
 }
 
 func (s *ServeMux) getPeer(r *http.Request) *peer.Peer {
-	remoteIP, port := parseRemoteAddr(r.RemoteAddr)
+	remoteIP, port := transportmeta.ParseRemoteAddr(r.RemoteAddr)
 	clientIP := remoteIP
 	if s.isTrustedProxy(remoteIP) {
 		if forwarded, ok := s.forwardedClientIP(r, remoteIP); ok {
@@ -476,21 +471,6 @@ func parseTrustedProxyCIDRs(values []string) ([]netip.Prefix, error) {
 		out = append(out, netip.PrefixFrom(address, bits))
 	}
 	return out, nil
-}
-
-func parseRemoteAddr(value string) (netip.Addr, int) {
-	value = strings.TrimSpace(value)
-	host, portText, err := net.SplitHostPort(value)
-	if err != nil {
-		host = strings.Trim(value, "[]")
-		portText = ""
-	}
-	address, err := netip.ParseAddr(strings.Trim(host, "[]"))
-	if err != nil {
-		return netip.Addr{}, 0
-	}
-	port, _ := strconv.Atoi(portText)
-	return address.Unmap(), port
 }
 
 func (s *ServeMux) isTrustedProxy(address netip.Addr) bool {
@@ -616,12 +596,12 @@ func (s *ServeMux) writeResponse(
 	ctx := r.Context()
 	header, _ := metadata.FromHeaderCtx(ctx)
 	trailerHeader, _ := metadata.FromTrailerCtx(ctx)
-	s.handleResponseHeader(w, header)
+	transportmeta.WriteMetadata(w, header, s.outgoingHeaderMatcher)
 
-	doForwardTrailers := s.requestAcceptsTrailers(r)
+	doForwardTrailers := transportmeta.AcceptsTrailers(r)
 	forwardTrailers := doForwardTrailers && trailerHeader.Len() > 0
 	if forwardTrailers {
-		s.handleForwardResponseTrailerHeader(w, trailerHeader)
+		transportmeta.DeclareTrailers(w, trailerHeader, s.outgoingTrailerMatcher)
 		w.Header().Set("Transfer-Encoding", "chunked")
 	}
 
@@ -632,16 +612,7 @@ func (s *ServeMux) writeResponse(
 		slog.Error("failed to write response", slog.Any("error", err))
 	}
 	if forwardTrailers {
-		s.handleForwardResponseTrailer(w, trailerHeader)
-	}
-}
-
-func (s *ServeMux) handleResponseHeader(w http.ResponseWriter, md metadata.MD) {
-	for k, vs := range md {
-		h := s.outgoingHeaderMatcher(k)
-		for _, v := range vs {
-			w.Header().Add(h, v)
-		}
+		transportmeta.WriteTrailers(w, trailerHeader, s.outgoingTrailerMatcher)
 	}
 }
 
@@ -650,26 +621,6 @@ func (s *ServeMux) outgoingHeaderMatcher(key string) string {
 		return key
 	}
 	return MetadataHeaderPrefix + key
-}
-
-func (s *ServeMux) requestAcceptsTrailers(req *http.Request) bool {
-	te := req.Header.Get("TE")
-	return strings.Contains(strings.ToLower(te), "trailers")
-}
-
-func (s *ServeMux) handleForwardResponseTrailerHeader(w http.ResponseWriter, md metadata.MD) {
-	for k := range md {
-		w.Header().Add("Trailer", s.outgoingTrailerMatcher(k))
-	}
-}
-
-func (s *ServeMux) handleForwardResponseTrailer(w http.ResponseWriter, md metadata.MD) {
-	for k, vs := range md {
-		h := s.outgoingTrailerMatcher(k)
-		for _, v := range vs {
-			w.Header().Add(h, v)
-		}
-	}
 }
 
 func (s *ServeMux) outgoingTrailerMatcher(key string) string {

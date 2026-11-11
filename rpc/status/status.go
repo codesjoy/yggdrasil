@@ -23,6 +23,7 @@ import (
 	"maps"
 	"net/http"
 
+	"github.com/codesjoy/pkg/basic/xerror"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	statuspb "google.golang.org/genproto/googleapis/rpc/status"
@@ -33,6 +34,11 @@ import (
 const (
 	// HTTPStatusClientClosed represents the http status code for client closed.
 	HTTPStatusClientClosed = 499
+)
+
+var (
+	_ xerror.CodeCarrier   = (*Status)(nil)
+	_ xerror.ReasonCarrier = (*Status)(nil)
 )
 
 // Status represents a status.
@@ -307,4 +313,22 @@ func statusCodeToHTTPCode(stuCode code.Code) int32 {
 		return http.StatusInternalServerError
 	}
 	return http.StatusInternalServerError
+}
+
+func fromXError(err error) (*Status, bool) {
+	errorCode, ok := xerror.CodeOf(err)
+	if !ok {
+		return nil, false
+	}
+
+	st := WithCode(errorCode, err)
+	reason, domain, metadata, ok := xerror.ReasonOf(err)
+	if ok {
+		_ = st.WithDetails(&errdetails.ErrorInfo{
+			Reason:   reason,
+			Domain:   domain,
+			Metadata: metadata,
+		})
+	}
+	return st, true
 }

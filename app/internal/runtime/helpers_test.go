@@ -23,43 +23,6 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 )
 
-func TestCopyIntoMap(t *testing.T) {
-	t.Run("copies all entries", func(t *testing.T) {
-		dst := map[string]int{}
-		src := map[string]int{"a": 1, "b": 2}
-		CopyIntoMap(dst, src)
-		assert.Equal(t, 1, dst["a"])
-		assert.Equal(t, 2, dst["b"])
-	})
-
-	t.Run("overwrites existing", func(t *testing.T) {
-		dst := map[string]int{"a": 10}
-		src := map[string]int{"a": 1}
-		CopyIntoMap(dst, src)
-		assert.Equal(t, 1, dst["a"])
-	})
-}
-
-func TestCopyPreferredIntoMap(t *testing.T) {
-	t.Run("preferred overrides source", func(t *testing.T) {
-		dst := map[string]int{}
-		src := map[string]int{"a": 1, "b": 2}
-		preferred := map[string]int{"a": 10}
-		CopyPreferredIntoMap(dst, src, preferred)
-		assert.Equal(t, 10, dst["a"])
-		assert.Equal(t, 2, dst["b"])
-	})
-
-	t.Run("source fills missing", func(t *testing.T) {
-		dst := map[string]int{}
-		src := map[string]int{"a": 1, "b": 2}
-		preferred := map[string]int{}
-		CopyPreferredIntoMap(dst, src, preferred)
-		assert.Equal(t, 1, dst["a"])
-		assert.Equal(t, 2, dst["b"])
-	})
-}
-
 type stubNamedProvider struct {
 	name string
 }

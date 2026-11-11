@@ -24,8 +24,6 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-
-	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler/internal/convert"
 )
 
 // JSONPbBuilder returns the framework built-in jsonpb marshaler builder.
@@ -381,21 +379,15 @@ func decodeNonProtoField(
 		if rv.IsNil() {
 			rv.Set(reflect.MakeMap(rv.Type()))
 		}
-		conv, ok := convFromType[rv.Type().Key().Kind()]
-		if !ok {
-			return fmt.Errorf("unsupported type of map field key: %v", rv.Type().Key())
-		}
-
 		m := make(map[string]*json.RawMessage)
 		if err := d.Decode(&m); err != nil {
 			return err
 		}
 		for k, v := range m {
-			result := conv.Call([]reflect.Value{reflect.ValueOf(k)})
-			if err := result[1].Interface(); err != nil {
-				return err.(error)
+			bk, err := parseMapKey(k, rv.Type().Key())
+			if err != nil {
+				return err
 			}
-			bk := result[0]
 			bv := reflect.New(rv.Type().Elem())
 			if v == nil {
 				null := json.RawMessage("null")
@@ -458,6 +450,41 @@ func decodeNonProtoField(
 	return d.Decode(v)
 }
 
+func parseMapKey(value string, target reflect.Type) (reflect.Value, error) {
+	out := reflect.New(target).Elem()
+	switch target.Kind() {
+	case reflect.String:
+		out.SetString(value)
+	case reflect.Bool:
+		parsed, err := strconv.ParseBool(value)
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		out.SetBool(parsed)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		parsed, err := strconv.ParseInt(value, 0, target.Bits())
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		out.SetInt(parsed)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		parsed, err := strconv.ParseUint(value, 0, target.Bits())
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		out.SetUint(parsed)
+	case reflect.Float32, reflect.Float64:
+		parsed, err := strconv.ParseFloat(value, target.Bits())
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		out.SetFloat(parsed)
+	default:
+		return reflect.Value{}, fmt.Errorf("unsupported type of map field key: %v", target)
+	}
+	return out, nil
+}
+
 type protoEnum interface {
 	fmt.Stringer
 	EnumDescriptor() ([]byte, []int)
@@ -470,16 +497,4 @@ var typeProtoMessage = reflect.TypeOf((*proto.Message)(nil)).Elem()
 // Delimiter for newline encoded JSON streams.
 func (j *JSONPb) Delimiter() []byte {
 	return []byte("\n")
-}
-
-var convFromType = map[reflect.Kind]reflect.Value{
-	reflect.String:  reflect.ValueOf(convert.String),
-	reflect.Bool:    reflect.ValueOf(convert.Bool),
-	reflect.Float64: reflect.ValueOf(convert.Float64),
-	reflect.Float32: reflect.ValueOf(convert.Float32),
-	reflect.Int64:   reflect.ValueOf(convert.Int64),
-	reflect.Int32:   reflect.ValueOf(convert.Int32),
-	reflect.Uint64:  reflect.ValueOf(convert.Uint64),
-	reflect.Uint32:  reflect.ValueOf(convert.Uint32),
-	reflect.Slice:   reflect.ValueOf(convert.Bytes),
 }

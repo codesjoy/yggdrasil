@@ -493,6 +493,72 @@ func TestDecodeNonProtoField_Map(t *testing.T) {
 	assert.Equal(t, "bar", v["foo"])
 }
 
+func TestDecodeNonProtoField_MapKeys(t *testing.T) {
+	m := NewJSONPbMarshalerWithConfig(nil)
+	tests := []struct {
+		name    string
+		input   string
+		target  any
+		assert  func(t *testing.T, target any)
+		wantErr string
+	}{
+		{
+			name:   "bool",
+			input:  `{"true":"yes","false":"no"}`,
+			target: &map[bool]string{},
+			assert: func(t *testing.T, target any) {
+				assert.Equal(
+					t,
+					map[bool]string{true: "yes", false: "no"},
+					*target.(*map[bool]string),
+				)
+			},
+		},
+		{
+			name:   "signed integer",
+			input:  `{"-10":"value"}`,
+			target: &map[int32]string{},
+			assert: func(t *testing.T, target any) {
+				assert.Equal(t, map[int32]string{-10: "value"}, *target.(*map[int32]string))
+			},
+		},
+		{
+			name:   "unsigned integer",
+			input:  `{"10":"value"}`,
+			target: &map[uint64]string{},
+			assert: func(t *testing.T, target any) {
+				assert.Equal(t, map[uint64]string{10: "value"}, *target.(*map[uint64]string))
+			},
+		},
+		{
+			name:   "float",
+			input:  `{"1.5":"value"}`,
+			target: &map[float64]string{},
+			assert: func(t *testing.T, target any) {
+				assert.Equal(t, map[float64]string{1.5: "value"}, *target.(*map[float64]string))
+			},
+		},
+		{
+			name:    "unsupported",
+			input:   `{"1":"value"}`,
+			target:  &map[complex64]string{},
+			wantErr: "unsupported type of map field key",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := m.Unmarshal([]byte(test.input), test.target)
+			if test.wantErr != "" {
+				require.ErrorContains(t, err, test.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			test.assert(t, test.target)
+		})
+	}
+}
+
 func TestDecodeNonProtoField_Slice(t *testing.T) {
 	m, err := NewJSONPbMarshaler()
 	require.NoError(t, err)

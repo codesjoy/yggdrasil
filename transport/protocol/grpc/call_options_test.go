@@ -43,6 +43,7 @@ func (c testCodec) Name() string {
 }
 
 func TestCallContentSubtypeSelectsRegisteredCodec(t *testing.T) {
+	ConfigureBuiltinCodecs()
 	ctx := WithCallOptions(context.Background(), CallContentSubtype(rawenc.Name))
 	info := defaultCallInfo()
 
@@ -54,6 +55,7 @@ func TestCallContentSubtypeSelectsRegisteredCodec(t *testing.T) {
 }
 
 func TestCallContentSubtypeSelectsJSONRawCodec(t *testing.T) {
+	ConfigureBuiltinCodecs()
 	ctx := WithCallOptions(context.Background(), CallContentSubtype(jsonrawenc.Name))
 	info := defaultCallInfo()
 
@@ -76,6 +78,7 @@ func TestForceCodecUsesCodecNameAsContentSubtype(t *testing.T) {
 }
 
 func TestExplicitContentSubtypeWinsOverForcedCodecName(t *testing.T) {
+	ConfigureBuiltinCodecs()
 	forced := testCodec{name: "forced"}
 	ctx := WithCallOptions(
 		context.Background(),
@@ -102,6 +105,7 @@ func TestForceCodecRejectsEmptyEffectiveSubtype(t *testing.T) {
 }
 
 func TestForceJSONRawCodecUsesCodecNameAsContentSubtype(t *testing.T) {
+	ConfigureBuiltinCodecs()
 	ctx := WithCallOptions(context.Background(), ForceCodec(getCodecOrPanic(jsonrawenc.Name)))
 	info := defaultCallInfo()
 

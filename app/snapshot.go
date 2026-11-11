@@ -17,7 +17,7 @@ package app
 import (
 	"fmt"
 	"log/slog"
-	"reflect"
+	"maps"
 
 	"github.com/go-chi/chi/v5"
 	"go.opentelemetry.io/otel/metric"
@@ -26,6 +26,7 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/discovery/registry"
 	"github.com/codesjoy/yggdrasil/v3/discovery/resolver"
+	"github.com/codesjoy/yggdrasil/v3/internal/configtree"
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
 	"github.com/codesjoy/yggdrasil/v3/observability/logger"
 	xotel "github.com/codesjoy/yggdrasil/v3/observability/otel"
@@ -81,115 +82,19 @@ type Snapshot struct {
 }
 
 func cloneMap[K comparable, V any](in map[K]V) map[K]V {
-	if len(in) == 0 {
+	out := maps.Clone(in)
+	if out == nil {
 		return map[K]V{}
-	}
-	out := make(map[K]V, len(in))
-	for key, value := range in {
-		out[key] = value
 	}
 	return out
 }
 
 func cloneResolvedSettings(in settings.Resolved) settings.Resolved {
-	cloned := cloneReflectValue(reflect.ValueOf(in))
-	if !cloned.IsValid() {
+	cloned, ok := configtree.NormalizeValue(in).(settings.Resolved)
+	if !ok {
 		return settings.Resolved{}
 	}
-	return cloned.Interface().(settings.Resolved)
-}
-
-func cloneReflectValue(value reflect.Value) reflect.Value {
-	if !value.IsValid() {
-		return value
-	}
-	switch value.Kind() {
-	case reflect.Interface:
-		return cloneReflectInterface(value)
-	case reflect.Pointer:
-		return cloneReflectPointer(value)
-	case reflect.Map:
-		return cloneReflectMap(value)
-	case reflect.Slice:
-		return cloneReflectSlice(value)
-	case reflect.Array:
-		return cloneReflectArray(value)
-	case reflect.Struct:
-		return cloneReflectStruct(value)
-	default:
-		return value
-	}
-}
-
-func cloneReflectInterface(value reflect.Value) reflect.Value {
-	if value.IsNil() {
-		return reflect.Zero(value.Type())
-	}
-	cloned := cloneReflectValue(value.Elem())
-	out := reflect.New(value.Type()).Elem()
-	out.Set(cloned)
-	return out
-}
-
-func cloneReflectPointer(value reflect.Value) reflect.Value {
-	if value.IsNil() {
-		return reflect.Zero(value.Type())
-	}
-	out := reflect.New(value.Type().Elem())
-	out.Elem().Set(cloneReflectValue(value.Elem()))
-	return out
-}
-
-func cloneReflectMap(value reflect.Value) reflect.Value {
-	if value.IsNil() {
-		return reflect.Zero(value.Type())
-	}
-	out := reflect.MakeMapWithSize(value.Type(), value.Len())
-	iter := value.MapRange()
-	for iter.Next() {
-		out.SetMapIndex(
-			cloneReflectValue(iter.Key()),
-			cloneReflectValue(iter.Value()),
-		)
-	}
-	return out
-}
-
-func cloneReflectSlice(value reflect.Value) reflect.Value {
-	if value.IsNil() {
-		return reflect.Zero(value.Type())
-	}
-	out := reflect.MakeSlice(value.Type(), value.Len(), value.Cap())
-	for index := 0; index < value.Len(); index++ {
-		out.Index(index).Set(cloneReflectValue(value.Index(index)))
-	}
-	return out
-}
-
-func cloneReflectArray(value reflect.Value) reflect.Value {
-	out := reflect.New(value.Type()).Elem()
-	for index := 0; index < value.Len(); index++ {
-		out.Index(index).Set(cloneReflectValue(value.Index(index)))
-	}
-	return out
-}
-
-func cloneReflectStruct(value reflect.Value) reflect.Value {
-	out := reflect.New(value.Type()).Elem()
-	if value.CanInterface() {
-		out.Set(value)
-	}
-	for index := 0; index < value.NumField(); index++ {
-		field := out.Field(index)
-		if !field.CanSet() {
-			continue
-		}
-		cloned := cloneReflectValue(value.Field(index))
-		if cloned.IsValid() {
-			field.Set(cloned)
-		}
-	}
-	return out
+	return cloned
 }
 
 // Copy returns a detached snapshot copy.
@@ -278,8 +183,7 @@ func cloneRESTConfig(config *rest.Config) *rest.Config {
 	if config == nil {
 		return nil
 	}
-	cloned := cloneReflectValue(reflect.ValueOf(config))
-	out, _ := cloned.Interface().(*rest.Config)
+	out, _ := configtree.NormalizeValue(config).(*rest.Config)
 	return out
 }
 

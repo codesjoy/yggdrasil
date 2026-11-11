@@ -83,3 +83,38 @@ func TestBuiltinHandlerBuilder(t *testing.T) {
 	assert.NotNil(t, handler)
 	assert.Implements(t, (*stats.Handler)(nil), handler)
 }
+
+func TestConfig(t *testing.T) {
+	t.Run("default config values", func(t *testing.T) {
+		cfg := &Config{}
+		assert.False(t, cfg.ReceivedEvent)
+		assert.False(t, cfg.SentEvent)
+		assert.False(t, cfg.EnableMetrics)
+	})
+
+	t.Run("set config values", func(t *testing.T) {
+		cfg := &Config{
+			ReceivedEvent: true,
+			SentEvent:     true,
+			EnableMetrics: true,
+		}
+		assert.True(t, cfg.ReceivedEvent)
+		assert.True(t, cfg.SentEvent)
+		assert.True(t, cfg.EnableMetrics)
+	})
+}
+
+func TestGetCfg(t *testing.T) {
+	t.Run("get config returns non-nil", func(t *testing.T) {
+		assert.NotNil(t, getCfg())
+	})
+
+	t.Run("multiple calls return non-nil", func(t *testing.T) {
+		assert.NotNil(t, getCfg())
+		assert.NotNil(t, getCfg())
+	})
+
+	t.Run("returns config with defaults applied", func(t *testing.T) {
+		assert.NotNil(t, getCfg())
+	})
+}

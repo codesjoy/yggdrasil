@@ -27,6 +27,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	remote "github.com/codesjoy/yggdrasil/v3/transport"
+	transportmeta "github.com/codesjoy/yggdrasil/v3/transport/internal/httpmeta"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/peer"
 )
 
@@ -97,7 +98,11 @@ func TestServeHTTP_CancelsStreamContextWhenHandlerReturns(t *testing.T) {
 
 func TestWriteMetadata(t *testing.T) {
 	rec := httptest.NewRecorder()
-	writeMetadata(rec, metadata.Pairs("key1", "val1", "key2", "val2a", "key2", "val2b"))
+	transportmeta.WriteMetadata(
+		rec,
+		metadata.Pairs("key1", "val1", "key2", "val2a", "key2", "val2b"),
+		transportmeta.PrefixMatcher(MetadataHeaderPrefix),
+	)
 	assert.Equal(t, "val1", rec.Header().Get(MetadataHeaderPrefix+"key1"))
 	assert.Equal(t, []string{"val2a", "val2b"}, rec.Header().Values(MetadataHeaderPrefix+"key2"))
 }
@@ -106,28 +111,36 @@ func TestRequestAcceptsTrailers(t *testing.T) {
 	t.Run("accepts trailers", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
 		req.Header.Set("TE", "trailers")
-		assert.True(t, requestAcceptsTrailers(req))
+		assert.True(t, transportmeta.AcceptsTrailers(req))
 	})
 	t.Run("no TE header", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
-		assert.False(t, requestAcceptsTrailers(req))
+		assert.False(t, transportmeta.AcceptsTrailers(req))
 	})
 	t.Run("TE without trailers", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
 		req.Header.Set("TE", "gzip")
-		assert.False(t, requestAcceptsTrailers(req))
+		assert.False(t, transportmeta.AcceptsTrailers(req))
 	})
 }
 
 func TestWriteTrailers(t *testing.T) {
 	rec := httptest.NewRecorder()
-	writeTrailers(rec, metadata.Pairs("trailer-key", "val1"))
+	transportmeta.WriteTrailers(
+		rec,
+		metadata.Pairs("trailer-key", "val1"),
+		transportmeta.PrefixMatcher(MetadataTrailerPrefix),
+	)
 	assert.Equal(t, "val1", rec.Header().Get(MetadataTrailerPrefix+"trailer-key"))
 }
 
 func TestDeclareTrailers(t *testing.T) {
 	rec := httptest.NewRecorder()
-	declareTrailers(rec, metadata.Pairs("a", "1", "b", "2"))
+	transportmeta.DeclareTrailers(
+		rec,
+		metadata.Pairs("a", "1", "b", "2"),
+		transportmeta.PrefixMatcher(MetadataTrailerPrefix),
+	)
 	got := rec.Header().Values("Trailer")
 	assert.Len(t, got, 2)
 }
@@ -137,7 +150,7 @@ func TestExtractMetadataWithPrefix(t *testing.T) {
 	h.Set(MetadataHeaderPrefix+"key1", "val1")
 	h.Set(MetadataHeaderPrefix+"key2", "val2")
 	h.Set("Other-Header", "ignored")
-	md := extractMetadataWithPrefix(h, MetadataHeaderPrefix)
+	md := transportmeta.ExtractMetadata(h, MetadataHeaderPrefix)
 	assert.Equal(t, []string{"val1"}, md.Get("key1"))
 	assert.Equal(t, []string{"val2"}, md.Get("key2"))
 	_, ok := md["Other-Header"]
@@ -148,7 +161,7 @@ func TestAttachPeer(t *testing.T) {
 	t.Run("valid remote addr", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
 		req.RemoteAddr = "192.168.1.1:12345"
-		ctx := attachPeer(context.Background(), req, nil, nil)
+		ctx := transportmeta.AttachPeer(context.Background(), req, nil, nil)
 		p, ok := peer.FromContext(ctx)
 		require.True(t, ok)
 		assert.Equal(t, "192.168.1.1:12345", p.Addr.String())

@@ -270,63 +270,108 @@ func (l *logging) logAttrs(ctx context.Context, level slog.Level, fields ...slog
 	slog.LogAttrs(ctx, level, "access", fields...)
 }
 
-// UnaryServerInterceptor is a unary server interceptor.
-func (l *logging) UnaryServerInterceptor(
-	ctx context.Context,
-	req interface{},
-	info *interceptor.UnaryServerInfo,
-	handler interceptor.UnaryHandler,
-) (resp interface{}, err error) {
+type observation struct {
+	ctx           context.Context
+	kind          string
+	method        string
+	request       any
+	markSlow      bool
+	warnOnSlow    bool
+	printRequest  bool
+	printResponse bool
+}
+
+func observeRPC[T any](
+	logger *logging,
+	item observation,
+	call func() (T, error),
+	response func(T) any,
+) (result T, err error) {
 	startTime := time.Now()
 	defer func() {
-		var (
-			st     = status.FromError(err)
-			fields = make([]slog.Attr, 0)
-			event  = "normal"
-			cost   = time.Since(startTime)
-		)
-		if l.cfg.SlowThreshold <= cost {
+		cost := time.Since(startTime)
+		statusInfo := status.FromError(err)
+		event := "normal"
+		fields := make([]slog.Attr, 0, 8)
+		if logger.cfg.SlowThreshold <= cost && item.markSlow {
 			event = "slow"
 		}
-		if rec := recover(); rec != nil {
-			switch rec := rec.(type) {
+		if recovered := recover(); recovered != nil {
+			switch recovered := recovered.(type) {
 			case error:
-				err = rec
+				err = recovered
 			default:
-				err = fmt.Errorf("%v", rec)
+				err = fmt.Errorf("%v", recovered)
 			}
-			st = status.FromError(err)
+			statusInfo = status.FromError(err)
 			stack := make([]byte, 4096)
 			stack = stack[:runtime.Stack(stack, true)]
 			fields = append(fields, slog.String("stack", string(stack)))
 			event = "recover"
 		}
 		fields = append(fields,
-			slog.String("type", "unary"),
-			slog.String("method", info.FullMethod),
-			slog.Float64("cost", float64(cost)/float64(time.Millisecond)),
-			slog.Int("code", int(st.Code())),
-			slog.String("event", event))
-		if l.cfg.PrintReqAndRes {
-			fields = append(fields, slog.Any("req", req))
+			slog.String("type", item.kind),
+			slog.String("method", item.method),
+			slog.Float64("cost", float64(cost)/float64(time.Millisecond)))
+		if item.kind == "unary" {
+			fields = append(
+				fields,
+				slog.Int("code", int(statusInfo.Code())),
+				slog.String("event", event),
+			)
+		} else {
+			fields = append(
+				fields,
+				slog.String("event", event),
+				slog.Int("code", int(statusInfo.Code())),
+			)
 		}
-		var lv slog.Level
+		if logger.cfg.PrintReqAndRes && item.printRequest {
+			fields = append(fields, slog.Any("req", item.request))
+		}
+
+		level := slog.LevelInfo
 		if err != nil {
 			fields = append(fields, slog.Any("error", err))
-			if st.HTTPCode() >= http.StatusInternalServerError {
-				lv = slog.LevelError
+			if statusInfo.HTTPCode() >= http.StatusInternalServerError {
+				level = slog.LevelError
 			} else {
-				lv = slog.LevelWarn
+				level = slog.LevelWarn
 			}
 		} else {
-			if l.cfg.PrintReqAndRes {
-				fields = append(fields, slog.Any("res", resp))
+			if logger.cfg.PrintReqAndRes && item.printResponse && response != nil {
+				fields = append(fields, slog.Any("res", response(result)))
 			}
-			lv = slog.LevelInfo
+			if item.warnOnSlow && event == "slow" {
+				level = slog.LevelWarn
+			}
 		}
-		l.logAttrs(ctx, lv, fields...)
+		logger.logAttrs(item.ctx, level, fields...)
 	}()
-	return handler(ctx, req)
+	return call()
+}
+
+// UnaryServerInterceptor is a unary server interceptor.
+func (l *logging) UnaryServerInterceptor(
+	ctx context.Context,
+	req interface{},
+	info *interceptor.UnaryServerInfo,
+	handler interceptor.UnaryHandler,
+) (any, error) {
+	return observeRPC(
+		l,
+		observation{
+			ctx:           ctx,
+			kind:          "unary",
+			method:        info.FullMethod,
+			request:       req,
+			markSlow:      true,
+			printRequest:  true,
+			printResponse: true,
+		},
+		func() (any, error) { return handler(ctx, req) },
+		func(resp any) any { return resp },
+	)
 }
 
 // StreamServerInterceptor is a stream server interceptor.
@@ -335,48 +380,20 @@ func (l *logging) StreamServerInterceptor(
 	ss stream.ServerStream,
 	info *interceptor.StreamServerInfo,
 	handler stream.Handler,
-) (err error) {
-	startTime := time.Now()
-	defer func() {
-		var (
-			st     = status.FromError(err)
-			fields = make([]slog.Attr, 0)
-			event  = "normal"
-			cost   = time.Since(startTime)
-		)
-		if rec := recover(); rec != nil {
-			switch rec := rec.(type) {
-			case error:
-				err = rec
-			default:
-				err = fmt.Errorf("%v", rec)
-			}
-			st = status.FromError(err)
-			stack := make([]byte, 4096)
-			stack = stack[:runtime.Stack(stack, true)]
-			fields = append(fields, slog.String("stack", string(stack)))
-			event = "recover"
-		}
-		fields = append(fields,
-			slog.String("type", "stream"),
-			slog.String("method", info.FullMethod),
-			slog.Float64("cost", float64(cost)/float64(time.Millisecond)),
-			slog.String("event", event),
-			slog.Int("code", int(st.Code())))
-		var lv slog.Level
-		if err != nil {
-			fields = append(fields, slog.Any("error", err))
-			if st.HTTPCode() >= http.StatusInternalServerError {
-				lv = slog.LevelError
-			} else {
-				lv = slog.LevelWarn
-			}
-		} else {
-			lv = slog.LevelInfo
-		}
-		l.logAttrs(ss.Context(), lv, fields...)
-	}()
-	return handler(srv, ss)
+) error {
+	_, err := observeRPC(
+		l,
+		observation{
+			ctx:    ss.Context(),
+			kind:   "stream",
+			method: info.FullMethod,
+		},
+		func() (struct{}, error) {
+			return struct{}{}, handler(srv, ss)
+		},
+		nil,
+	)
+	return err
 }
 
 // UnaryClientInterceptor is a unary client interceptor.
@@ -385,75 +402,25 @@ func (l *logging) UnaryClientInterceptor(
 	method string,
 	req, reply any,
 	invoker interceptor.UnaryInvoker,
-) (err error) {
-	startTime := time.Now()
-	defer func() {
-		var (
-			st     = status.FromError(err)
-			fields = make([]slog.Attr, 0)
-			event  = "normal"
-			cost   = time.Since(startTime)
-		)
-		if l.cfg.SlowThreshold <= cost {
-			event = "slow"
-		}
-		if rec := recover(); rec != nil {
-			switch rec := rec.(type) {
-			case error:
-				err = rec
-			default:
-				err = fmt.Errorf("%v", rec)
-			}
-			st = status.FromError(err)
-			stack := make([]byte, 4096)
-			stack = stack[:runtime.Stack(stack, true)]
-			fields = append(fields, slog.String("stack", string(stack)))
-			event = "recover"
-		}
-		l.logUnaryClient(ctx, method, req, reply, st, event, cost, err, fields)
-	}()
-	err = invoker(ctx, method, req, reply)
-	return
-}
-
-func (l *logging) logUnaryClient(
-	ctx context.Context,
-	method string,
-	req, reply any,
-	st *status.Status,
-	event string,
-	cost time.Duration,
-	err error,
-	fields []slog.Attr,
-) {
-	fields = append(fields,
-		slog.String("type", "unary"),
-		slog.String("method", method),
-		slog.Float64("cost", float64(cost)/float64(time.Millisecond)),
-		slog.Int("code", int(st.Code())),
-		slog.String("event", event))
-	if l.cfg.PrintReqAndRes {
-		fields = append(fields, slog.Any("req", req))
-	}
-	var lv slog.Level
-	if err != nil {
-		fields = append(fields, slog.Any("error", err))
-		if st.HTTPCode() >= http.StatusInternalServerError {
-			lv = slog.LevelError
-		} else {
-			lv = slog.LevelWarn
-		}
-	} else {
-		if l.cfg.PrintReqAndRes {
-			fields = append(fields, slog.Any("res", reply))
-		}
-		if l.cfg.SlowThreshold <= cost {
-			lv = slog.LevelWarn
-		} else {
-			lv = slog.LevelInfo
-		}
-	}
-	l.logAttrs(ctx, lv, fields...)
+) error {
+	_, err := observeRPC(
+		l,
+		observation{
+			ctx:           ctx,
+			kind:          "unary",
+			method:        method,
+			request:       req,
+			markSlow:      true,
+			warnOnSlow:    true,
+			printRequest:  true,
+			printResponse: true,
+		},
+		func() (struct{}, error) {
+			return struct{}{}, invoker(ctx, method, req, reply)
+		},
+		func(struct{}) any { return reply },
+	)
+	return err
 }
 
 // StreamClientInterceptor is a stream client interceptor.
@@ -462,47 +429,17 @@ func (l *logging) StreamClientInterceptor(
 	desc *stream.Desc,
 	method string,
 	streamer interceptor.Streamer,
-) (res stream.ClientStream, err error) {
-	startTime := time.Now()
-	defer func() {
-		var (
-			st     = status.FromError(err)
-			fields = make([]slog.Attr, 0)
-			event  = "normal"
-			cost   = time.Since(startTime)
-		)
-		if rec := recover(); rec != nil {
-			switch rec := rec.(type) {
-			case error:
-				err = rec
-			default:
-				err = fmt.Errorf("%v", rec)
-			}
-			st = status.FromError(err)
-			stack := make([]byte, 4096)
-			stack = stack[:runtime.Stack(stack, true)]
-			fields = append(fields, slog.String("stack", string(stack)))
-			event = "recover"
-		}
-		fields = append(fields,
-			slog.String("type", "stream"),
-			slog.String("method", method),
-			slog.Float64("cost", float64(cost)/float64(time.Millisecond)),
-			slog.String("event", event),
-			slog.Int("code", int(st.Code())))
-
-		var lv slog.Level
-		if err != nil {
-			fields = append(fields, slog.Any("error", err))
-			if st.HTTPCode() >= http.StatusInternalServerError {
-				lv = slog.LevelError
-			} else {
-				lv = slog.LevelWarn
-			}
-		} else {
-			lv = slog.LevelInfo
-		}
-		l.logAttrs(ctx, lv, fields...)
-	}()
-	return streamer(ctx, desc, method)
+) (stream.ClientStream, error) {
+	return observeRPC(
+		l,
+		observation{
+			ctx:    ctx,
+			kind:   "stream",
+			method: method,
+		},
+		func() (stream.ClientStream, error) {
+			return streamer(ctx, desc, method)
+		},
+		nil,
+	)
 }

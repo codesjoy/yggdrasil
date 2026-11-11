@@ -878,3 +878,10 @@ func splitDotPath(path string) []string {
 	}
 	return out
 }
+
+func normalizedHandlerType(typeName string) string {
+	if typeName == "console" {
+		return "text"
+	}
+	return typeName
+}

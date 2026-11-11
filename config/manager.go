@@ -22,8 +22,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/codesjoy/yggdrasil/v3/config/internal/tree"
 	"github.com/codesjoy/yggdrasil/v3/config/source"
+	"github.com/codesjoy/yggdrasil/v3/internal/configtree"
 )
 
 // Priority defines layer precedence.
@@ -57,6 +57,11 @@ type watcher struct {
 }
 
 var errManagerClosed = errors.New("config manager is closed")
+
+var (
+	defaultMu      sync.RWMutex
+	defaultManager = NewManager()
+)
 
 // Manager owns layered configuration sources and a current immutable snapshot.
 type Manager struct {
@@ -384,7 +389,7 @@ func (m *Manager) mergeLocked() map[string]any {
 
 	merged := map[string]any{}
 	for _, item := range layers {
-		merged = tree.MergeMaps(merged, item.data)
+		merged = configtree.MergeMaps(merged, item.data)
 	}
 	return merged
 }
@@ -464,5 +469,24 @@ func decodeSourceData(data source.Data) (map[string]any, error) {
 	if err := data.Unmarshal(&out); err != nil {
 		return nil, err
 	}
-	return tree.NormalizeMap(out), nil
+	return configtree.NormalizeMap(out), nil
+}
+
+// Default returns the process-global configuration manager used by yggdrasil bootstrapping.
+func Default() *Manager {
+	defaultMu.RLock()
+	defer defaultMu.RUnlock()
+	return defaultManager
+}
+
+// SetDefault swaps the process-global configuration manager and returns the previous one.
+func SetDefault(next *Manager) *Manager {
+	if next == nil {
+		next = NewManager()
+	}
+	defaultMu.Lock()
+	prev := defaultManager
+	defaultManager = next
+	defaultMu.Unlock()
+	return prev
 }

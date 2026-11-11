@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package tree provides internal config tree normalization helpers.
-package tree
+// Package configtree provides internal configuration tree normalization helpers.
+package configtree
 
 import (
 	"fmt"

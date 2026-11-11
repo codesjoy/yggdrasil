@@ -135,7 +135,7 @@ func Compile(root Root) (Resolved, error) {
 		return Resolved{}, err
 	}
 
-	resolved.CapabilityBindings = compileCapabilityBindings(resolved)
+	resolved.CapabilityBindings = CompileCapabilityBindings(resolved)
 
 	return resolved, nil
 }
@@ -248,7 +248,9 @@ func normalizeExtensionOrderList(raw any) ([]string, bool) {
 	}
 }
 
-func compileCapabilityBindings(resolved Resolved) map[string][]string {
+// CompileCapabilityBindings derives the built-in capability bindings from
+// resolved settings.
+func CompileCapabilityBindings(resolved Resolved) map[string][]string {
 	out := map[string][]string{}
 	out["observability.logger.handler"] = sortedHandlerTypes(resolved.Logging.Handlers)
 	out["observability.logger.writer"] = sortedWriterTypes(resolved.Logging.Writers)
@@ -419,13 +421,20 @@ func sortedHandlerTypes(in map[string]logger.HandlerSpec) []string {
 		if spec.Type == "" {
 			continue
 		}
-		keys = append(keys, spec.Type)
+		keys = append(keys, normalizedHandlerType(spec.Type))
 	}
 	if len(keys) == 0 {
 		keys = append(keys, "text")
 	}
 	sort.Strings(keys)
 	return dedupStrings(keys)
+}
+
+func normalizedHandlerType(typeName string) string {
+	if typeName == "console" {
+		return "text"
+	}
+	return typeName
 }
 
 func sortedWriterTypes(in map[string]logger.WriterSpec) []string {

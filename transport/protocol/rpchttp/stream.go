@@ -21,7 +21,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -35,16 +34,15 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	"github.com/codesjoy/yggdrasil/v3/rpc/status"
 	"github.com/codesjoy/yggdrasil/v3/rpc/stream"
+	transportmeta "github.com/codesjoy/yggdrasil/v3/transport/internal/httpmeta"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
-	"github.com/codesjoy/yggdrasil/v3/transport/support/peer"
-	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
 )
 
 const (
 	// MetadataHeaderPrefix is the prefix for metadata headers.
-	MetadataHeaderPrefix = "Yggdrasil-Metadata-"
+	MetadataHeaderPrefix = transportmeta.MetadataHeaderPrefix
 	// MetadataTrailerPrefix is the prefix for metadata trailers.
-	MetadataTrailerPrefix = "Yggdrasil-Trailer-"
+	MetadataTrailerPrefix = transportmeta.MetadataTrailerPrefix
 )
 
 type httpClientStream struct {
@@ -415,13 +413,13 @@ func (cs *httpClientStream) readResponse(
 	execution responseExecution,
 	resp *http.Response,
 ) {
-	headerMD := extractMetadataWithPrefix(resp.Header, MetadataHeaderPrefix)
+	headerMD := transportmeta.ExtractMetadata(resp.Header, MetadataHeaderPrefix)
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		cs.finishResponse(headerMD, nil, nil, err, execution.headersReady)
 		return
 	}
-	trailerMD := extractMetadataWithPrefix(resp.Trailer, MetadataTrailerPrefix)
+	trailerMD := transportmeta.ExtractMetadata(resp.Trailer, MetadataTrailerPrefix)
 	if err = execution.statusError(resp.StatusCode, body); err != nil {
 		cs.finishResponse(headerMD, trailerMD, nil, err, execution.headersReady)
 		execution.statsHandler.HandleRPC(execution.ctx, &stats.RPCEndBase{
@@ -548,7 +546,10 @@ func (ss *httpServerStream) Start(isClientStream, isServerStream bool) error {
 	})
 	ss.statsHandler.HandleRPC(ss.ctx, &stats.RPCServerInHeaderBase{
 		RPCInHeaderBase: stats.RPCInHeaderBase{
-			Header:   extractMetadataWithPrefix(ss.req.Header, MetadataHeaderPrefix),
+			Header: transportmeta.ExtractMetadata(
+				ss.req.Header,
+				MetadataHeaderPrefix,
+			),
 			Protocol: Protocol,
 		},
 		FullMethod:     ss.method,
@@ -583,7 +584,7 @@ func (ss *httpServerStream) Finish(reply any, err error) {
 	statsHandler := ss.statsHandler
 	ss.mu.Unlock()
 
-	writeMetadata(w, inMD)
+	transportmeta.WriteMetadata(w, inMD, transportmeta.PrefixMatcher(MetadataHeaderPrefix))
 
 	statsHandler.HandleRPC(ss.ctx, &stats.OutHeaderBase{
 		Client:        false,
@@ -603,7 +604,7 @@ func (ss *httpServerStream) Finish(reply any, err error) {
 	}
 
 	if forwardTrailers {
-		writeTrailers(w, trMD)
+		transportmeta.WriteTrailers(w, trMD, transportmeta.PrefixMatcher(MetadataTrailerPrefix))
 		statsHandler.HandleRPC(ss.ctx, &stats.OutTrailerBase{Client: false, Trailer: trMD})
 	}
 	statsHandler.HandleRPC(ss.ctx, &stats.RPCEndBase{
@@ -616,10 +617,14 @@ func (ss *httpServerStream) Finish(reply any, err error) {
 }
 
 func prepareServerTrailers(w http.ResponseWriter, req *http.Request, trailer metadata.MD) bool {
-	if !requestAcceptsTrailers(req) || trailer.Len() == 0 {
+	if !transportmeta.AcceptsTrailers(req) || trailer.Len() == 0 {
 		return false
 	}
-	declareTrailers(w, trailer)
+	transportmeta.DeclareTrailers(
+		w,
+		trailer,
+		transportmeta.PrefixMatcher(MetadataTrailerPrefix),
+	)
 	w.Header().Del("Content-Length")
 	return true
 }
@@ -738,67 +743,6 @@ func (ss *httpServerStream) RecvMsg(m any) error {
 		return nil
 	}
 	return inbound.Unmarshal(body, m)
-}
-
-func extractMetadataWithPrefix(h http.Header, prefix string) metadata.MD {
-	md := metadata.MD{}
-	for key, vals := range h {
-		if strings.HasPrefix(key, prefix) {
-			md.Append(key[len(prefix):], vals...)
-		}
-	}
-	return md
-}
-
-func writeMetadata(w http.ResponseWriter, md metadata.MD) {
-	for k, vs := range md {
-		for _, v := range vs {
-			w.Header().Add(MetadataHeaderPrefix+k, v)
-		}
-	}
-}
-
-func requestAcceptsTrailers(req *http.Request) bool {
-	return strings.Contains(strings.ToLower(req.Header.Get("TE")), "trailers")
-}
-
-func declareTrailers(w http.ResponseWriter, md metadata.MD) {
-	for k := range md {
-		w.Header().Add("Trailer", MetadataTrailerPrefix+k)
-	}
-}
-
-func writeTrailers(w http.ResponseWriter, md metadata.MD) {
-	for k, vs := range md {
-		for _, v := range vs {
-			w.Header().Add(MetadataTrailerPrefix+k, v)
-		}
-	}
-}
-
-func attachPeer(
-	ctx context.Context,
-	r *http.Request,
-	localAddr net.Addr,
-	authInfo security.AuthInfo,
-) context.Context {
-	host, portStr, err := net.SplitHostPort(r.RemoteAddr)
-	port := 0
-	if err == nil {
-		port, _ = strconv.Atoi(portStr)
-	} else {
-		host = r.RemoteAddr
-	}
-	p := &peer.Peer{
-		Addr: &net.TCPAddr{
-			IP:   net.ParseIP(host),
-			Port: port,
-		},
-		LocalAddr: localAddr,
-		AuthInfo:  authInfo,
-		Protocol:  "http",
-	}
-	return peer.WithContext(ctx, p)
 }
 
 var _ stream.ServerStream = (*httpServerStream)(nil)

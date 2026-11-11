@@ -19,8 +19,22 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/codesjoy/yggdrasil/v3/config"
 	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 )
+
+// Config is the configuration for the OpenTelemetry provider.
+type Config struct {
+	ReceivedEvent bool `default:"true"`
+	SentEvent     bool `default:"true"`
+	EnableMetrics bool `default:"true"`
+}
+
+func getCfg() *Config {
+	globalCfg := &Config{}
+	_ = config.NewSnapshot(stats.CurrentSettings().Providers.OTel).Decode(globalCfg)
+	return globalCfg
+}
 
 // HandlerRuntime contains App-local OTel dependencies for the built-in stats
 // handler.

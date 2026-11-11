@@ -14,10 +14,12 @@
 
 package rest
 
+import transportmeta "github.com/codesjoy/yggdrasil/v3/transport/internal/httpmeta"
+
 // MetadataHeaderPrefix is the http prefix that represents custom metadata
 // parameters to or from an RPC call.
-const MetadataHeaderPrefix = "Yggdrasil-Metadata-"
+const MetadataHeaderPrefix = transportmeta.MetadataHeaderPrefix
 
 // MetadataTrailerPrefix is prepended to RPC metadata as it is converted to
 // HTTP headers in a response handled by rest
-const MetadataTrailerPrefix = "Yggdrasil-Trailer-"
+const MetadataTrailerPrefix = transportmeta.MetadataTrailerPrefix

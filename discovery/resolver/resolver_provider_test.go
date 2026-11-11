@@ -21,6 +21,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type testResolver struct{ kind string }
+
+func (t *testResolver) AddWatch(string, Client) error { return nil }
+func (t *testResolver) DelWatch(string, Client) error { return nil }
+func (t *testResolver) Type() string                  { return t.kind }
+
+func TestGetDefaultResolverWithoutConfigReturnsNil(t *testing.T) {
+	r, err := Get(DefaultResolverName)
+	require.NoError(t, err)
+	require.Nil(t, r)
+}
+
+func TestGetResolverFromDiscoveryTree(t *testing.T) {
+	RegisterBuilder("mock", func(name string) (Resolver, error) {
+		return &testResolver{kind: name}, nil
+	})
+	Configure(map[string]Spec{"demo": {Type: "mock"}})
+
+	r, err := Get("demo")
+	require.NoError(t, err)
+	require.Equal(t, "demo", r.Type())
+}
+
 func TestNewProvider(t *testing.T) {
 	p := NewProvider("test-type", func(name string) (Resolver, error) {
 		return &testResolver{kind: name}, nil
@@ -121,4 +144,11 @@ func TestBaseState(t *testing.T) {
 	assert.Equal(t, map[string]any{"region": "us"}, bs.GetAttributes())
 	require.Len(t, bs.GetEndpoints(), 1)
 	assert.Equal(t, "http/localhost:9090", bs.GetEndpoints()[0].Name())
+}
+
+func RegisterBuilder(typeName string, f func(string) (Resolver, error)) {
+	mu.Lock()
+	defer mu.Unlock()
+	providers[typeName] = NewProvider(typeName, f)
+	resolver = map[string]Resolver{}
 }

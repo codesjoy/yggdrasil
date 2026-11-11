@@ -25,6 +25,7 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	remote "github.com/codesjoy/yggdrasil/v3/transport"
+	transportmeta "github.com/codesjoy/yggdrasil/v3/transport/internal/httpmeta"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
 )
@@ -179,7 +180,10 @@ func (s *server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	ctx = metadata.WithInContext(ctx, extractMetadataWithPrefix(r.Header, MetadataHeaderPrefix))
+	ctx = metadata.WithInContext(
+		ctx,
+		transportmeta.ExtractMetadata(r.Header, MetadataHeaderPrefix),
+	)
 	ctx = s.statsHandler.TagRPC(ctx, &stats.RPCTagInfoBase{FullMethod: method})
 	ctx = metadata.WithStreamContext(ctx)
 	localAddr := s.localAddr()
@@ -188,7 +192,7 @@ func (s *server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
-	ctx = attachPeer(ctx, r, localAddr, authInfo)
+	ctx = transportmeta.AttachPeer(ctx, r, localAddr, authInfo)
 
 	ssCtx, cancel := context.WithCancel(ctx)
 	defer cancel()

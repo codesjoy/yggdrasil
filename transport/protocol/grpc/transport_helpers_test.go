@@ -23,6 +23,7 @@ import (
 	stpb "google.golang.org/genproto/googleapis/rpc/status"
 
 	"github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc/encoding"
+	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
 )
 
 func TestBuiltinCodecsAndCompressorAvailableWithoutExtraImports(t *testing.T) {
@@ -74,4 +75,27 @@ func TestBuiltinCodecsAndCompressorAvailableWithoutExtraImports(t *testing.T) {
 	_, err = roundTrip.ReadFrom(reader)
 	require.NoError(t, err)
 	assert.Equal(t, "gzip-payload", roundTrip.String())
+}
+
+func TestBuildTransportCredentialsWithProfilesFallsBackToInsecureWhenProfileEmpty(
+	t *testing.T,
+) {
+	creds, err := buildTransportCredentialsWithProfiles(nil, "", "", true, "")
+	require.NoError(t, err)
+	require.NotNil(t, creds)
+	require.Equal(t, "insecure", creds.Info().SecurityProtocol)
+}
+
+func TestBuildTransportCredentialsWithProfilesUsesTLSMaterial(t *testing.T) {
+	creds, err := buildTransportCredentialsWithProfiles(map[string]security.Profile{
+		"tls": mockProfile{
+			name: "tls",
+			material: security.Material{
+				Mode:      security.ModeTLS,
+				ClientTLS: nil,
+			},
+		},
+	}, "tls", "", true, "")
+	require.Error(t, err)
+	require.Nil(t, creds)
 }

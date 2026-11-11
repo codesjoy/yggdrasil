@@ -692,40 +692,6 @@ func TestLogging_StatusCodeConversion(t *testing.T) {
 	})
 }
 
-// TestInitGlobalLogging tests initGlobalLogging function
-func TestInitGlobalLogging(t *testing.T) {
-	t.Run("initialize global logging", func(t *testing.T) {
-		// This test verifies that initGlobalLogging can be called
-		// The actual behavior depends on config system
-		// We just verify it doesn't panic when config is properly set
-
-		// Note: This test requires proper config setup
-		// For now, we skip testing the init function directly
-		// as it calls os.Exit(1) on config error
-		t.Skip("requires config system setup")
-	})
-}
-
-// TestConfigFromEnv tests loading config from environment
-func TestConfigFromEnv(t *testing.T) {
-	t.Run("load config with defaults", func(t *testing.T) {
-		// This would require setting up the config system
-		// Skipping for now as it needs proper config infrastructure
-		t.Skip("requires config system setup")
-	})
-}
-
-// TestGlobalRegistration tests that logging interceptors are registered
-func TestGlobalRegistration(t *testing.T) {
-	t.Run("verify interceptors are registered", func(t *testing.T) {
-		// The init() function registers the interceptors
-		// We can verify they exist in the interceptor registry
-		// This requires access to the internal registry which is not exported
-		// For now, we just verify the package can be imported
-		t.Skip("requires access to internal registry")
-	})
-}
-
 // BenchmarkUnaryServerInterceptor benchmarks the unary server interceptor
 func BenchmarkUnaryServerInterceptor(b *testing.B) {
 	l := &logging{cfg: &Config{SlowThreshold: time.Second}}
@@ -767,32 +733,42 @@ func BenchmarkUnaryClientInterceptor(b *testing.B) {
 	}
 }
 
-func TestBuiltinUnaryClientProviders(t *testing.T) {
-	providers := BuiltinUnaryClientProviders()
-	assert.Len(t, providers, 2)
-	assert.Equal(t, "logging", providers[0].Name())
-	assert.Equal(t, "logger", providers[1].Name())
+func TestBuiltinProviders(t *testing.T) {
+	tests := []struct {
+		name string
+		get  func() []string
+	}{
+		{
+			name: "TestBuiltinUnaryClientProviders",
+			get:  func() []string { return builtinProviderNames(BuiltinUnaryClientProviders()) },
+		},
+		{
+			name: "TestBuiltinStreamClientProviders",
+			get:  func() []string { return builtinProviderNames(BuiltinStreamClientProviders()) },
+		},
+		{
+			name: "TestBuiltinUnaryServerProviders",
+			get:  func() []string { return builtinProviderNames(BuiltinUnaryServerProviders()) },
+		},
+		{
+			name: "TestBuiltinStreamServerProviders",
+			get:  func() []string { return builtinProviderNames(BuiltinStreamServerProviders()) },
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, []string{"logging", "logger"}, test.get())
+		})
+	}
 }
 
-func TestBuiltinStreamClientProviders(t *testing.T) {
-	providers := BuiltinStreamClientProviders()
-	assert.Len(t, providers, 2)
-	assert.Equal(t, "logging", providers[0].Name())
-	assert.Equal(t, "logger", providers[1].Name())
-}
-
-func TestBuiltinUnaryServerProviders(t *testing.T) {
-	providers := BuiltinUnaryServerProviders()
-	assert.Len(t, providers, 2)
-	assert.Equal(t, "logging", providers[0].Name())
-	assert.Equal(t, "logger", providers[1].Name())
-}
-
-func TestBuiltinStreamServerProviders(t *testing.T) {
-	providers := BuiltinStreamServerProviders()
-	assert.Len(t, providers, 2)
-	assert.Equal(t, "logging", providers[0].Name())
-	assert.Equal(t, "logger", providers[1].Name())
+func builtinProviderNames[T interface{ Name() string }](providers []T) []string {
+	names := make([]string, len(providers))
+	for index, provider := range providers {
+		names[index] = provider.Name()
+	}
+	return names
 }
 
 func TestBuiltinProvidersWithConfig(t *testing.T) {

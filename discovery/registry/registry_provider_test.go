@@ -22,6 +22,79 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type testRegistry struct{ kind string }
+
+func (t *testRegistry) Register(context.Context, Instance) error   { return nil }
+func (t *testRegistry) Deregister(context.Context, Instance) error { return nil }
+func (t *testRegistry) Type() string                               { return t.kind }
+
+func TestGetLoadsRegistryFromDiscoveryTree(t *testing.T) {
+	RegisterBuilder("mock", func(cfg map[string]any) (Registry, error) {
+		return &testRegistry{kind: cfg["name"].(string)}, nil
+	})
+	Configure(Spec{Type: "mock", Config: map[string]any{"name": "demo"}})
+
+	reg, err := Get()
+	require.NoError(t, err)
+	require.Equal(t, "demo", reg.Type())
+}
+
+func TestNewMultiRegistry(t *testing.T) {
+	RegisterBuilder("child", func(cfg map[string]any) (Registry, error) {
+		return &testRegistry{kind: cfg["name"].(string)}, nil
+	})
+
+	reg, err := newMultiRegistry(map[string]any{
+		"registries": []any{
+			map[string]any{"type": "child", "config": map[string]any{"name": "a"}},
+			map[string]any{"type": "child", "config": map[string]any{"name": "b"}},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, multiRegistryType, reg.Type())
+}
+
+func TestNewMultiRegistryFailFastPrecedence(t *testing.T) {
+	RegisterBuilder("child", func(cfg map[string]any) (Registry, error) {
+		return &testRegistry{kind: cfg["name"].(string)}, nil
+	})
+
+	tests := []struct {
+		name     string
+		config   map[string]any
+		failFast bool
+	}{
+		{
+			name: "legacy key",
+			config: map[string]any{
+				"failFast": true,
+				"registries": []any{
+					map[string]any{"type": "child", "config": map[string]any{"name": "a"}},
+				},
+			},
+			failFast: true,
+		},
+		{
+			name: "canonical key wins",
+			config: map[string]any{
+				"fail_fast": false,
+				"failFast":  true,
+				"registries": []any{
+					map[string]any{"type": "child", "config": map[string]any{"name": "a"}},
+				},
+			},
+			failFast: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reg, err := newMultiRegistry(tt.config)
+			require.NoError(t, err)
+			require.Equal(t, tt.failFast, reg.(*multiRegistry).failFast)
+		})
+	}
+}
+
 func TestNewProvider(t *testing.T) {
 	p := NewProvider("test-type", func(cfg map[string]any) (Registry, error) {
 		return &testRegistry{kind: "test-type"}, nil
@@ -215,4 +288,11 @@ func TestMultiRegistryDeregistersEveryChild(t *testing.T) {
 	require.NoError(t, mr.Deregister(context.Background(), nil))
 	require.Equal(t, 1, first.deregister)
 	require.Equal(t, 1, second.deregister)
+}
+
+func RegisterBuilder(typeName string, constructor Builder) {
+	mu.Lock()
+	defer mu.Unlock()
+	providers[typeName] = NewProvider(typeName, constructor)
+	defaultReg = nil
 }

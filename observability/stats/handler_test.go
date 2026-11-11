@@ -403,3 +403,14 @@ func TestRegisterHandlerBuilder_Concurrency(t *testing.T) {
 		assert.NotNil(t, retrieved)
 	})
 }
+
+func TestParseHandlerNames(t *testing.T) {
+	t.Run("trim empty and dedup", func(t *testing.T) {
+		names := ParseHandlerNames(" otel,otel, , custom , otel ,custom ")
+		assert.Equal(t, []string{"otel", "custom"}, names)
+	})
+
+	t.Run("empty input", func(t *testing.T) {
+		assert.Empty(t, ParseHandlerNames(""))
+	})
+}

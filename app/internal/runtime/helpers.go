@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"reflect"
@@ -34,7 +35,6 @@ import (
 	"github.com/codesjoy/yggdrasil/v3/observability/logger"
 	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 	statsotel "github.com/codesjoy/yggdrasil/v3/observability/stats/otel"
-	"github.com/codesjoy/yggdrasil/v3/rpc/interceptor"
 	"github.com/codesjoy/yggdrasil/v3/transport/gateway/rest"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/security"
@@ -73,34 +73,6 @@ func ResolveNamedRuntimeCapabilities[T any](
 	)
 }
 
-// ResolveOrderedRuntimeCapabilities resolves ordered module capabilities from the hub.
-func ResolveOrderedRuntimeCapabilities[T any](
-	hub *module.Hub,
-	bindings map[string][]string,
-	key string,
-	spec module.CapabilitySpec,
-) (map[string]T, error) {
-	return ResolveOrderedCapabilityMap[T](hub, bindings[key], spec)
-}
-
-// CopyIntoMap copies all entries into the destination map.
-func CopyIntoMap[K comparable, V any](dst map[K]V, src map[K]V) {
-	for key, value := range src {
-		dst[key] = value
-	}
-}
-
-// CopyPreferredIntoMap copies entries, applying preferred overrides when present.
-func CopyPreferredIntoMap[K comparable, V any](dst map[K]V, src map[K]V, preferred map[K]V) {
-	for key, value := range src {
-		if override, ok := preferred[key]; ok {
-			dst[key] = override
-			continue
-		}
-		dst[key] = value
-	}
-}
-
 // ResolveOrderedCapabilityMap resolves ordered capabilities into a name-keyed map.
 func ResolveOrderedCapabilityMap[T any](
 	hub *module.Hub,
@@ -123,7 +95,7 @@ func BindLoggerWriterBuilders(
 	resolved settings.Resolved,
 	builders map[string]logger.WriterBuilder,
 ) map[string]logger.WriterBuilder {
-	out := cloneMap(builders)
+	out := maps.Clone(builders)
 	if _, ok := out["console"]; ok {
 		out["console"] = func(string) (io.Writer, error) {
 			return os.Stdout, nil
@@ -148,7 +120,7 @@ func BindLoggerHandlerBuilders(
 	builders map[string]logger.HandlerBuilder,
 	writerBuilders map[string]logger.WriterBuilder,
 ) map[string]logger.HandlerBuilder {
-	out := cloneMap(builders)
+	out := maps.Clone(builders)
 	buildWriter := func(name string) (io.Writer, error) {
 		spec := resolved.Logging.Writers[name]
 		writerType := spec.Type
@@ -197,7 +169,7 @@ func BindStatsHandlerBuilders(
 	resolved settings.Resolved,
 	builders map[string]stats.HandlerBuilder,
 ) map[string]stats.HandlerBuilder {
-	out := cloneMap(builders)
+	out := maps.Clone(builders)
 	if _, ok := out["otel"]; ok {
 		cfg := statsotel.Config{}
 		_ = settings.DecodePayload(&cfg, resolved.Telemetry.Stats.Providers.OTel)
@@ -215,7 +187,7 @@ func BindStatsHandlerBuildersWithRuntime(
 	meterProvider metric.MeterProvider,
 	propagator propagation.TextMapPropagator,
 ) map[string]stats.HandlerBuilder {
-	out := cloneMap(builders)
+	out := maps.Clone(builders)
 	if _, ok := out["otel"]; ok {
 		cfg := statsotel.Config{}
 		_ = settings.DecodePayload(&cfg, resolved.Telemetry.Stats.Providers.OTel)
@@ -304,34 +276,6 @@ func MapNamedProviders[T namedProvider](items []T) map[string]T {
 	return out
 }
 
-// MapUnaryServerProviders converts unary server providers into a lookup map.
-func MapUnaryServerProviders(
-	items []interceptor.UnaryServerInterceptorProvider,
-) map[string]interceptor.UnaryServerInterceptorProvider {
-	return MapNamedProviders(items)
-}
-
-// MapStreamServerProviders converts stream server providers into a lookup map.
-func MapStreamServerProviders(
-	items []interceptor.StreamServerInterceptorProvider,
-) map[string]interceptor.StreamServerInterceptorProvider {
-	return MapNamedProviders(items)
-}
-
-// MapUnaryClientProviders converts unary client providers into a lookup map.
-func MapUnaryClientProviders(
-	items []interceptor.UnaryClientInterceptorProvider,
-) map[string]interceptor.UnaryClientInterceptorProvider {
-	return MapNamedProviders(items)
-}
-
-// MapStreamClientProviders converts stream client providers into a lookup map.
-func MapStreamClientProviders(
-	items []interceptor.StreamClientInterceptorProvider,
-) map[string]interceptor.StreamClientInterceptorProvider {
-	return MapNamedProviders(items)
-}
-
 // ResolvedRequiresRestart reports whether changes in resolved settings require a restart.
 func ResolvedRequiresRestart(current, next settings.Resolved) bool {
 	return !reflect.DeepEqual(current.Server, next.Server) ||
@@ -341,15 +285,4 @@ func ResolvedRequiresRestart(current, next settings.Resolved) bool {
 		!reflect.DeepEqual(current.Transports, next.Transports) ||
 		!reflect.DeepEqual(current.Extensions, next.Extensions) ||
 		!reflect.DeepEqual(current.Telemetry.Stats, next.Telemetry.Stats)
-}
-
-func cloneMap[K comparable, V any](in map[K]V) map[K]V {
-	if len(in) == 0 {
-		return map[K]V{}
-	}
-	out := make(map[K]V, len(in))
-	for key, value := range in {
-		out[key] = value
-	}
-	return out
 }

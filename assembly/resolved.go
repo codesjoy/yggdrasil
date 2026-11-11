@@ -16,13 +16,8 @@ package assembly
 
 import (
 	"encoding/json"
-	"sort"
-	"strings"
 
 	"github.com/codesjoy/yggdrasil/v3/internal/settings"
-	"github.com/codesjoy/yggdrasil/v3/observability/logger"
-	"github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc"
-	"github.com/codesjoy/yggdrasil/v3/transport/protocol/rpchttp"
 )
 
 func (p *planner) buildEffectiveResolved() (settings.Resolved, error) {
@@ -58,6 +53,7 @@ func (p *planner) buildEffectiveResolved() (settings.Resolved, error) {
 	applyRESTChain(&effective, chainRESTAll, p.selectedChains[chainRESTAll])
 	applyRESTChain(&effective, chainRESTRPC, p.selectedChains[chainRESTRPC])
 	applyRESTChain(&effective, chainRESTWeb, p.selectedChains[chainRESTWeb])
+	effective.CapabilityBindings = settings.CompileCapabilityBindings(effective)
 	return effective, nil
 }
 
@@ -134,155 +130,4 @@ func applyRESTChain(target *settings.Resolved, path string, chain Chain) {
 		target.Transports.Rest.Middleware.Web = append([]string(nil), chain.Items...)
 		target.OrderedExtensions.RestWeb = append([]string(nil), chain.Items...)
 	}
-}
-
-func compileCapabilityBindings(resolved settings.Resolved) map[string][]string {
-	out := map[string][]string{}
-	out[capLoggerHandler] = sortedHandlerTypes(resolved.Logging.Handlers)
-	out[capLoggerWriter] = sortedWriterTypes(resolved.Logging.Writers)
-	if resolved.Telemetry.Tracer != "" {
-		out[capTracer] = []string{resolved.Telemetry.Tracer}
-	}
-	if resolved.Telemetry.Meter != "" {
-		out[capMeter] = []string{resolved.Telemetry.Meter}
-	}
-	statsNames := dedupStrings(append(
-		parseStatsHandlerNames(resolved.Telemetry.Stats.Server),
-		parseStatsHandlerNames(resolved.Telemetry.Stats.Client)...,
-	))
-	if len(statsNames) > 0 {
-		out[capStatsHandler] = statsNames
-	}
-	securityTypes := map[string]struct{}{}
-	for _, spec := range resolved.Transports.SecurityProfiles {
-		if spec.Type != "" {
-			securityTypes[spec.Type] = struct{}{}
-		}
-	}
-	if len(securityTypes) > 0 {
-		out[capSecurity] = sortedKeys(securityTypes)
-	}
-	if resolved.Transports.Rest != nil {
-		schemes := append([]string(nil), resolved.Transports.Rest.Marshaler.Support...)
-		if len(schemes) == 0 {
-			schemes = []string{"jsonpb"}
-		}
-		out[capMarshaler] = dedupStrings(schemes)
-	}
-	serverProtocols := dedupStrings(append([]string(nil), resolved.Server.Transports...))
-	if len(serverProtocols) > 0 {
-		out[capServerTrans] = serverProtocols
-	}
-	clientProtocols := []string{grpc.Protocol, rpchttp.Protocol}
-	for _, cfg := range resolved.Clients.Services {
-		for _, endpoint := range cfg.Remote.Endpoints {
-			if endpoint.Protocol != "" {
-				clientProtocols = append(clientProtocols, endpoint.Protocol)
-			}
-		}
-	}
-	out[capClientTrans] = dedupStrings(clientProtocols)
-	out[capUnaryServer] = dedupStrings(append([]string(nil), resolved.Server.Interceptors.Unary...))
-	out[capStreamServer] = dedupStrings(
-		append([]string(nil), resolved.Server.Interceptors.Stream...),
-	)
-	var clientUnary []string
-	var clientStream []string
-	for _, cfg := range resolved.Clients.Services {
-		clientUnary = append(clientUnary, cfg.Interceptors.Unary...)
-		clientStream = append(clientStream, cfg.Interceptors.Stream...)
-	}
-	if len(clientUnary) > 0 {
-		out[capUnaryClient] = dedupStrings(clientUnary)
-	}
-	if len(clientStream) > 0 {
-		out[capStreamClient] = dedupStrings(clientStream)
-	}
-	restMiddlewares := []string{"marshaler"}
-	if resolved.Transports.Rest != nil {
-		restMiddlewares = append(restMiddlewares, resolved.Transports.Rest.Middleware.All...)
-		restMiddlewares = append(restMiddlewares, resolved.Transports.Rest.Middleware.RPC...)
-		restMiddlewares = append(restMiddlewares, resolved.Transports.Rest.Middleware.Web...)
-	}
-	out[capRESTMW] = dedupStrings(restMiddlewares)
-	if resolved.Discovery.Registry.Type != "" {
-		out[capRegistry] = []string{resolved.Discovery.Registry.Type}
-	}
-	var resolverTypes []string
-	for _, spec := range resolved.Discovery.Resolvers {
-		if spec.Type != "" {
-			resolverTypes = append(resolverTypes, spec.Type)
-		}
-	}
-	if len(resolverTypes) > 0 {
-		out[capResolver] = dedupStrings(resolverTypes)
-	}
-	balancerTypes := []string{"round_robin"}
-	for _, spec := range resolved.Balancers.Defaults {
-		if spec.Type != "" {
-			balancerTypes = append(balancerTypes, spec.Type)
-		}
-	}
-	for _, items := range resolved.Balancers.Services {
-		for _, spec := range items {
-			if spec.Type != "" {
-				balancerTypes = append(balancerTypes, spec.Type)
-			}
-		}
-	}
-	out[capBalancer] = dedupStrings(balancerTypes)
-	return out
-}
-
-func sortedHandlerTypes(in map[string]logger.HandlerSpec) []string {
-	keys := make([]string, 0, len(in))
-	for _, spec := range in {
-		if spec.Type == "" {
-			continue
-		}
-		keys = append(keys, normalizedHandlerType(spec.Type))
-	}
-	if len(keys) == 0 {
-		keys = append(keys, "text")
-	}
-	sort.Strings(keys)
-	return dedupStrings(keys)
-}
-
-func sortedWriterTypes(in map[string]logger.WriterSpec) []string {
-	keys := make([]string, 0, len(in))
-	for _, spec := range in {
-		if spec.Type == "" {
-			continue
-		}
-		keys = append(keys, spec.Type)
-	}
-	if len(keys) == 0 {
-		keys = append(keys, "console")
-	}
-	sort.Strings(keys)
-	return dedupStrings(keys)
-}
-
-func normalizedHandlerType(typeName string) string {
-	if typeName == "console" {
-		return "text"
-	}
-	return typeName
-}
-
-func parseStatsHandlerNames(raw string) []string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-	parts := strings.Split(raw, ",")
-	out := make([]string, 0, len(parts))
-	for _, item := range parts {
-		item = strings.TrimSpace(item)
-		if item != "" {
-			out = append(out, item)
-		}
-	}
-	return out
 }

@@ -32,6 +32,7 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/observability/stats"
 	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
+	transportmeta "github.com/codesjoy/yggdrasil/v3/transport/internal/httpmeta"
 	"github.com/codesjoy/yggdrasil/v3/transport/protocol/grpc/encoding/proto/codec_perf"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/peer"
@@ -712,7 +713,7 @@ func TestHTTPClientStream_RecvMsg_AlreadyReceived(t *testing.T) {
 func TestAttachPeer_InvalidRemoteAddr(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	req.RemoteAddr = "justahost"
-	ctx := attachPeer(context.Background(), req, nil, nil)
+	ctx := transportmeta.AttachPeer(context.Background(), req, nil, nil)
 	p, ok := peer.FromContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, p)

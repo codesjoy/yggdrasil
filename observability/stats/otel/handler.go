@@ -61,12 +61,22 @@ type handler struct {
 	rpcResponsesPerRPC metric.Int64Histogram
 	propagator         propagation.TextMapPropagator
 
-	handleRPC func(context.Context, stats.RPCStats, bool)
+	server bool
 }
 
 func newHandler(isSvr bool) handler {
 	cfg := getCfg()
 	return newHandlerWithConfig(cfg, isSvr)
+}
+
+func newSvrHandler() *handler {
+	h := newHandler(true)
+	return &h
+}
+
+func newCliHandler() *handler {
+	h := newHandler(false)
+	return &h
 }
 
 func newHandlerWithConfig(cfg *Config, isSvr bool) handler {
@@ -97,6 +107,7 @@ func newHandlerWithRuntime(cfg *Config, isSvr bool, runtime HandlerRuntime) hand
 		cfg:        cfg,
 		tracer:     tracer,
 		propagator: propagator,
+		server:     isSvr,
 	}
 	meter := meterProvider.Meter("github.com/codesjoy/yggdrasil/v3",
 		metric.WithInstrumentationVersion("yggdrasil"),
@@ -168,35 +179,63 @@ func newHandlerWithRuntime(cfg *Config, isSvr bool, runtime HandlerRuntime) hand
 				h.rpcResponsesPerRPC = noop.Int64Histogram{}
 			}
 		}
-		h.handleRPC = h.handleWithMetrics
-	} else {
-		h.handleRPC = h.handleWithOutMetrics
 	}
 
 	return h
 }
 
 func newSvrHandlerWithConfig(cfg *Config) stats.Handler {
-	h := newHandlerWithConfig(cfg, true)
-	return &serverHandler{handler: h}
+	return newSvrHandlerWithRuntime(cfg, HandlerRuntime{})
 }
 
 func newCliHandlerWithConfig(cfg *Config) stats.Handler {
-	h := newHandlerWithConfig(cfg, false)
-	return &clientHandler{handler: h}
+	return newCliHandlerWithRuntime(cfg, HandlerRuntime{})
 }
 
 func newSvrHandlerWithRuntime(cfg *Config, runtime HandlerRuntime) stats.Handler {
 	h := newHandlerWithRuntime(cfg, true, runtime)
-	return &serverHandler{handler: h}
+	return &h
 }
 
 func newCliHandlerWithRuntime(cfg *Config, runtime HandlerRuntime) stats.Handler {
 	h := newHandlerWithRuntime(cfg, false, runtime)
-	return &clientHandler{handler: h}
+	return &h
 }
 
-func (h *handler) handleWithMetrics(ctx context.Context, rs stats.RPCStats, isServer bool) {
+// TagRPC attaches the framework span and telemetry context to one RPC.
+func (h *handler) TagRPC(ctx context.Context, info stats.RPCTagInfo) context.Context {
+	if h.server {
+		ctx = extract(ctx, h.propagator)
+	}
+	spanName, attrs := parseFullMethod(info.GetFullMethod())
+	attrs = append(attrs, semconv.RPCSystemKey.String("yggdrasil"))
+	kind := trace.SpanKindClient
+	if h.server {
+		kind = trace.SpanKindServer
+		ctx = trace.ContextWithRemoteSpanContext(ctx, trace.SpanContextFromContext(ctx))
+	}
+	ctx, _ = h.tracer.Start(ctx, spanName, trace.WithSpanKind(kind), trace.WithAttributes(attrs...))
+	ctx = context.WithValue(ctx, rpcContextKey{}, &rpcContext{metricAttrs: attrs})
+	if h.server {
+		return ctx
+	}
+	return inject(ctx, h.propagator)
+}
+
+// HandleRPC processes one RPC stats event.
+func (h *handler) HandleRPC(ctx context.Context, rs stats.RPCStats) {
+	h.handleRPC(ctx, rs, h.server)
+}
+
+// TagChannel returns the context unchanged for channel stats.
+func (*handler) TagChannel(ctx context.Context, _ stats.ChanTagInfo) context.Context {
+	return ctx
+}
+
+// HandleChannel is a no-op for unsupported channel stats.
+func (*handler) HandleChannel(context.Context, stats.ChanStats) {}
+
+func (h *handler) handleRPC(ctx context.Context, rs stats.RPCStats, isServer bool) {
 	span := trace.SpanFromContext(ctx)
 	rctx, _ := ctx.Value(rpcContextKey{}).(*rpcContext)
 	var metricAttrs []attribute.KeyValue
@@ -212,18 +251,22 @@ func (h *handler) handleWithMetrics(ctx context.Context, rs stats.RPCStats, isSe
 			messageID = atomic.AddInt64(&rctx.messagesReceived, 1)
 			if rs.IsClient() {
 				atomic.AddInt64(&rctx.responses, 1)
-				h.rpcResponseSize.Record(
-					ctx,
-					int64(rs.GetTransportSize()),
-					metric.WithAttributes(metricAttrs...),
-				)
+				if h.cfg.EnableMetrics && h.rpcResponseSize != nil {
+					h.rpcResponseSize.Record(
+						ctx,
+						int64(rs.GetTransportSize()),
+						metric.WithAttributes(metricAttrs...),
+					)
+				}
 			} else {
 				atomic.AddInt64(&rctx.requests, 1)
-				h.rpcRequestSize.Record(
-					ctx,
-					int64(rs.GetTransportSize()),
-					metric.WithAttributes(metricAttrs...),
-				)
+				if h.cfg.EnableMetrics && h.rpcRequestSize != nil {
+					h.rpcRequestSize.Record(
+						ctx,
+						int64(rs.GetTransportSize()),
+						metric.WithAttributes(metricAttrs...),
+					)
+				}
 			}
 		}
 
@@ -242,18 +285,22 @@ func (h *handler) handleWithMetrics(ctx context.Context, rs stats.RPCStats, isSe
 			messageID = atomic.AddInt64(&rctx.messagesSent, 1)
 			if rs.IsClient() {
 				atomic.AddInt64(&rctx.requests, 1)
-				h.rpcRequestSize.Record(
-					ctx,
-					int64(rs.GetTransportSize()),
-					metric.WithAttributes(metricAttrs...),
-				)
+				if h.cfg.EnableMetrics && h.rpcRequestSize != nil {
+					h.rpcRequestSize.Record(
+						ctx,
+						int64(rs.GetTransportSize()),
+						metric.WithAttributes(metricAttrs...),
+					)
+				}
 			} else {
 				atomic.AddInt64(&rctx.responses, 1)
-				h.rpcResponseSize.Record(
-					ctx,
-					int64(rs.GetTransportSize()),
-					metric.WithAttributes(metricAttrs...),
-				)
+				if h.cfg.EnableMetrics && h.rpcResponseSize != nil {
+					h.rpcResponseSize.Record(
+						ctx,
+						int64(rs.GetTransportSize()),
+						metric.WithAttributes(metricAttrs...),
+					)
+				}
 			}
 		}
 
@@ -295,82 +342,25 @@ func (h *handler) handleWithMetrics(ctx context.Context, rs stats.RPCStats, isSe
 		// Use floating point division here for higher precision (instead of Millisecond method).
 		elapsedTime := float64(rs.GetEndTime().Sub(rs.GetBeginTime())) / float64(time.Millisecond)
 
-		h.rpcDuration.Record(ctx, elapsedTime, metric.WithAttributes(metricAttrs...))
-		if rctx != nil {
-			h.rpcRequestsPerRPC.Record(
-				ctx,
-				atomic.LoadInt64(&rctx.requests),
-				metric.WithAttributes(metricAttrs...),
-			)
-			h.rpcResponsesPerRPC.Record(
-				ctx,
-				atomic.LoadInt64(&rctx.responses),
-				metric.WithAttributes(metricAttrs...),
-			)
+		if h.cfg.EnableMetrics && h.rpcDuration != nil {
+			h.rpcDuration.Record(ctx, elapsedTime, metric.WithAttributes(metricAttrs...))
 		}
-	default:
-		return
-	}
-}
-
-func (h *handler) handleWithOutMetrics(ctx context.Context, rs stats.RPCStats, isServer bool) {
-	span := trace.SpanFromContext(ctx)
-	rctx, _ := ctx.Value(rpcContextKey{}).(*rpcContext)
-	var messageID int64
-	switch rs := rs.(type) {
-	case stats.RPCBegin:
-	case stats.RPCInPayload:
-		if rctx != nil {
-			messageID = atomic.AddInt64(&rctx.messagesReceived, 1)
-		}
-
-		if h.cfg.ReceivedEvent {
-			span.AddEvent("message",
-				trace.WithAttributes(
-					semconv.MessageTypeReceived,
-					semconv.MessageIDKey.Int64(messageID),
-					messageTransportSizeKey.Int(rs.GetTransportSize()),
-					messageDataSizeKey.Int(len(rs.GetData())),
-				),
-			)
-		}
-	case stats.RPCOutPayload:
-		if rctx != nil {
-			messageID = atomic.AddInt64(&rctx.messagesSent, 1)
-		}
-
-		if h.cfg.SentEvent {
-			span.AddEvent("message",
-				trace.WithAttributes(
-					semconv.MessageTypeSent,
-					semconv.MessageIDKey.Int64(messageID),
-					protocolKey.String(rs.GetProtocol()),
-					messageTransportSizeKey.Int(rs.GetTransportSize()),
-					messageDataSizeKey.Int(len(rs.GetData())),
-				),
-			)
-		}
-	case stats.RPCOutTrailer:
-	case stats.RPCOutHeader:
-		span.SetAttributes(protocolKey.String(rs.GetProtocol()))
-		span.SetAttributes(peerEndpointKey.String(rs.GetRemoteEndpoint()))
-	case stats.RPCEnd:
-		var rpcStatusAttr attribute.KeyValue
-
-		if rs.Error() != nil {
-			s := status.FromError(rs.Error())
-			if isServer {
-				statusCode, msg := serverStatus(s)
-				span.SetStatus(statusCode, msg)
-			} else {
-				span.SetStatus(codes.Error, s.Message())
+		if h.cfg.EnableMetrics && rctx != nil {
+			if h.rpcRequestsPerRPC != nil {
+				h.rpcRequestsPerRPC.Record(
+					ctx,
+					atomic.LoadInt64(&rctx.requests),
+					metric.WithAttributes(metricAttrs...),
+				)
 			}
-			rpcStatusAttr = codeKey.Int(int(s.Code()))
-		} else {
-			rpcStatusAttr = codeKey.Int(int(code.Code_OK))
+			if h.rpcResponsesPerRPC != nil {
+				h.rpcResponsesPerRPC.Record(
+					ctx,
+					atomic.LoadInt64(&rctx.responses),
+					metric.WithAttributes(metricAttrs...),
+				)
+			}
 		}
-		span.SetAttributes(rpcStatusAttr)
-		span.End()
 	default:
 		return
 	}

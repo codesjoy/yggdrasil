@@ -38,6 +38,7 @@ import (
 
 	"github.com/codesjoy/yggdrasil/v3/rpc/metadata"
 	rpcstatus "github.com/codesjoy/yggdrasil/v3/rpc/status"
+	transportmeta "github.com/codesjoy/yggdrasil/v3/transport/internal/httpmeta"
 	"github.com/codesjoy/yggdrasil/v3/transport/support/marshaler"
 )
 
@@ -563,26 +564,24 @@ func TestServeMux_OutgoingTrailerMatcher(t *testing.T) {
 }
 
 func TestServeMux_RequestAcceptsTrailers(t *testing.T) {
-	mux := &ServeMux{}
-
 	// With TE: trailers header
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("TE", "trailers")
-	assert.True(t, mux.requestAcceptsTrailers(r))
+	assert.True(t, transportmeta.AcceptsTrailers(r))
 
 	// With TE header containing trailers among other values
 	r2 := httptest.NewRequest("GET", "/", nil)
 	r2.Header.Set("TE", "trailers, gzip")
-	assert.True(t, mux.requestAcceptsTrailers(r2))
+	assert.True(t, transportmeta.AcceptsTrailers(r2))
 
 	// Without TE header
 	r3 := httptest.NewRequest("GET", "/", nil)
-	assert.False(t, mux.requestAcceptsTrailers(r3))
+	assert.False(t, transportmeta.AcceptsTrailers(r3))
 
 	// TE header without trailers
 	r4 := httptest.NewRequest("GET", "/", nil)
 	r4.Header.Set("TE", "gzip")
-	assert.False(t, mux.requestAcceptsTrailers(r4))
+	assert.False(t, transportmeta.AcceptsTrailers(r4))
 }
 
 func TestServeMux_HandleResponseHeader(t *testing.T) {
@@ -596,7 +595,7 @@ func TestServeMux_HandleResponseHeader(t *testing.T) {
 		"other":    "other-value",
 	})
 
-	mux.handleResponseHeader(w, md)
+	transportmeta.WriteMetadata(w, md, mux.outgoingHeaderMatcher)
 
 	assert.Equal(t, "custom-value", w.Header().Get("x-custom"))
 	assert.Equal(t, "other-value", w.Header().Get(MetadataHeaderPrefix+"other"))
@@ -610,7 +609,7 @@ func TestServeMux_HandleForwardResponseTrailerHeader(t *testing.T) {
 	w := httptest.NewRecorder()
 	md := metadata.Pairs("x-grpc-status", "0", "x-extra", "extra-val")
 
-	mux.handleForwardResponseTrailerHeader(w, md)
+	transportmeta.DeclareTrailers(w, md, mux.outgoingTrailerMatcher)
 
 	trailers := w.Header().Values("Trailer")
 	assert.Contains(t, trailers, "x-grpc-status")
@@ -625,7 +624,7 @@ func TestServeMux_HandleForwardResponseTrailer(t *testing.T) {
 	w := httptest.NewRecorder()
 	md := metadata.Pairs("x-grpc-status", "0", "x-extra", "extra-val")
 
-	mux.handleForwardResponseTrailer(w, md)
+	transportmeta.WriteTrailers(w, md, mux.outgoingTrailerMatcher)
 
 	assert.Equal(t, "0", w.Header().Get("x-grpc-status"))
 	assert.Equal(t, "extra-val", w.Header().Get(MetadataTrailerPrefix+"x-extra"))

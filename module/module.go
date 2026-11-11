@@ -18,6 +18,8 @@ package module
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 
 	"github.com/codesjoy/yggdrasil/v3/config"
 	configchain "github.com/codesjoy/yggdrasil/v3/config/chain"
@@ -147,6 +149,91 @@ func (s ReloadState) withError(err error) ReloadState {
 	}
 	s.LastErrorText = err.Error()
 	return s
+}
+
+// AutoMode is the resolved planning mode exposed to module auto rules.
+type AutoMode struct {
+	Name    string
+	Profile string
+	Bundle  string
+}
+
+// AutoRuleContext is the deterministic input visible to one auto rule.
+type AutoRuleContext struct {
+	AppName  string
+	Snapshot config.Snapshot
+	Mode     AutoMode
+}
+
+// AutoRule determines whether one module should join the auto assembly result.
+type AutoRule interface {
+	Match(ctx AutoRuleContext) bool
+	Describe() string
+	AffectedPaths() []string
+}
+
+// DefaultPolicy declares module fallback preference for default selection.
+type DefaultPolicy struct {
+	Profiles []string
+	Score    int
+}
+
+// AutoSpec declares the auto-assembly contract of one module.
+type AutoSpec struct {
+	Provides      []CapabilitySpec
+	AutoRules     []AutoRule
+	DefaultPolicy *DefaultPolicy
+}
+
+// AutoDescribed exposes optional auto-assembly metadata.
+type AutoDescribed interface {
+	AutoSpec() AutoSpec
+}
+
+// Scope describes the runtime lifetime contract of one module.
+type Scope int
+
+const (
+	// ScopeApp lives for the entire App lifetime.
+	ScopeApp Scope = iota
+	// ScopeProvider exposes factories/providers without owning hot-path instances.
+	ScopeProvider
+	// ScopeRuntimeFactory builds hot-path runtime objects and must not be registered in Hub.
+	ScopeRuntimeFactory
+)
+
+// Scoped exposes the declared runtime scope of one module.
+type Scoped interface {
+	Scope() Scope
+}
+
+func moduleScope(mod Module) Scope {
+	if scoped, ok := mod.(Scoped); ok {
+		return scoped.Scope()
+	}
+	return ScopeApp
+}
+
+// StopOnce guards one stop path and returns the first result for all later calls.
+type StopOnce struct {
+	once sync.Once
+	err  error
+}
+
+// Do executes fn at most once. Panics are converted into errors and cached.
+func (s *StopOnce) Do(ctx context.Context, fn func(context.Context) error) error {
+	if fn == nil {
+		return nil
+	}
+	s.once.Do(func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				s.err = fmt.Errorf("stop panic recovered: %v", recovered)
+			}
+		}()
+		s.err = fn(ctx)
+	})
+	return s.err
 }
 
 var (

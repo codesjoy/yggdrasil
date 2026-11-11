@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/genproto/googleapis/rpc/code"
 
 	"github.com/codesjoy/yggdrasil/v3/observability/stats"
@@ -73,7 +74,7 @@ func TestNewHandler(t *testing.T) {
 	})
 }
 
-// TestHandleWithOutMetrics tests handleWithOutMetrics function
+// TestHandleWithOutMetrics tests handleRPC function
 func TestHandleWithOutMetrics(t *testing.T) {
 	t.Run("handle RPCBegin", func(*testing.T) {
 		h := newHandler(false)
@@ -85,7 +86,7 @@ func TestHandleWithOutMetrics(t *testing.T) {
 		}
 
 		// Should not panic
-		h.handleWithOutMetrics(ctx, rs, false)
+		h.handleRPC(ctx, rs, false)
 	})
 
 	t.Run("handle RPCEnd", func(*testing.T) {
@@ -104,7 +105,7 @@ func TestHandleWithOutMetrics(t *testing.T) {
 		}
 
 		// Should not panic
-		h.handleWithOutMetrics(ctx, rs, true)
+		h.handleRPC(ctx, rs, true)
 	})
 
 	t.Run("handle RPCEnd with error", func(*testing.T) {
@@ -123,11 +124,11 @@ func TestHandleWithOutMetrics(t *testing.T) {
 		}
 
 		// Should not panic
-		h.handleWithOutMetrics(ctx, rs, false)
+		h.handleRPC(ctx, rs, false)
 	})
 }
 
-// TestHandleWithMetrics tests handleWithMetrics function
+// TestHandleWithMetrics tests handleRPC function
 func TestHandleWithMetrics(t *testing.T) {
 	t.Run("handle RPCInPayload", func(*testing.T) {
 		cfg := &Config{EnableMetrics: true}
@@ -152,7 +153,7 @@ func TestHandleWithMetrics(t *testing.T) {
 		}
 
 		// Should not panic
-		h.handleWithMetrics(ctx, rs, true)
+		h.handleRPC(ctx, rs, true)
 	})
 
 	t.Run("handle RPCOutPayload", func(*testing.T) {
@@ -178,7 +179,7 @@ func TestHandleWithMetrics(t *testing.T) {
 		}
 
 		// Should not panic
-		h.handleWithMetrics(ctx, rs, false)
+		h.handleRPC(ctx, rs, false)
 	})
 }
 
@@ -201,18 +202,18 @@ func TestHandleWithMetrics_RequestResponseSemantics(t *testing.T) {
 		defer span.End()
 		ctx = context.WithValue(ctx, rpcContextKey{}, &rpcContext{})
 
-		h.handleWithMetrics(ctx, &stats.RPCInPayloadBase{
+		h.handleRPC(ctx, &stats.RPCInPayloadBase{
 			Client:        false,
 			TransportSize: 12,
 			Protocol:      "grpc",
 		}, true)
-		h.handleWithMetrics(ctx, &stats.RPCOutPayloadBase{
+		h.handleRPC(ctx, &stats.RPCOutPayloadBase{
 			Client:        false,
 			TransportSize: 34,
 			Protocol:      "grpc",
 		}, true)
 		begin := time.Now()
-		h.handleWithMetrics(ctx, &stats.RPCEndBase{
+		h.handleRPC(ctx, &stats.RPCEndBase{
 			Client:    false,
 			BeginTime: begin,
 			EndTime:   begin.Add(25 * time.Millisecond),
@@ -244,18 +245,18 @@ func TestHandleWithMetrics_RequestResponseSemantics(t *testing.T) {
 		defer span.End()
 		ctx = context.WithValue(ctx, rpcContextKey{}, &rpcContext{})
 
-		h.handleWithMetrics(ctx, &stats.RPCOutPayloadBase{
+		h.handleRPC(ctx, &stats.RPCOutPayloadBase{
 			Client:        true,
 			TransportSize: 56,
 			Protocol:      "grpc",
 		}, false)
-		h.handleWithMetrics(ctx, &stats.RPCInPayloadBase{
+		h.handleRPC(ctx, &stats.RPCInPayloadBase{
 			Client:        true,
 			TransportSize: 78,
 			Protocol:      "grpc",
 		}, false)
 		begin := time.Now()
-		h.handleWithMetrics(ctx, &stats.RPCEndBase{
+		h.handleRPC(ctx, &stats.RPCEndBase{
 			Client:    true,
 			BeginTime: begin,
 			EndTime:   begin.Add(25 * time.Millisecond),
@@ -359,8 +360,7 @@ func TestNewHandlerWithConfig_MetricsDisabled(t *testing.T) {
 	cfg := &Config{EnableMetrics: false}
 	h := newHandlerWithConfig(cfg, true)
 	assert.NotNil(t, h)
-	// handleRPC should be handleWithOutMetrics when metrics disabled
-	assert.NotNil(t, h.handleRPC)
+	assert.True(t, h.server)
 }
 
 func TestHandleWithMetrics_RPCOutHeader(t *testing.T) {
@@ -376,7 +376,7 @@ func TestHandleWithMetrics_RPCOutHeader(t *testing.T) {
 		RemoteEndpoint: "server:8080",
 	}
 	// Should not panic
-	h.handleWithMetrics(ctx, rs, false)
+	h.handleRPC(ctx, rs, false)
 }
 
 func TestHandleWithMetrics_RPCOutTrailer(t *testing.T) {
@@ -388,7 +388,7 @@ func TestHandleWithMetrics_RPCOutTrailer(t *testing.T) {
 
 	rs := &stats.OutTrailerBase{Client: true}
 	// No-op case
-	h.handleWithMetrics(ctx, rs, false)
+	h.handleRPC(ctx, rs, false)
 }
 
 func TestHandleWithMetrics_DefaultCase(t *testing.T) {
@@ -397,7 +397,7 @@ func TestHandleWithMetrics_DefaultCase(t *testing.T) {
 
 	ctx := context.Background()
 	// Unknown stats type should return early without panic
-	h.handleWithMetrics(ctx, &stats.RPCBeginBase{}, false)
+	h.handleRPC(ctx, &stats.RPCBeginBase{}, false)
 }
 
 func TestHandleWithOutMetrics_RPCInPayload_NoContext(t *testing.T) {
@@ -414,7 +414,7 @@ func TestHandleWithOutMetrics_RPCInPayload_NoContext(t *testing.T) {
 		TransportSize: 10,
 		Protocol:      "grpc",
 	}
-	h.handleWithOutMetrics(ctx, rs, false)
+	h.handleRPC(ctx, rs, false)
 }
 
 func TestHandleWithOutMetrics_RPCOutPayload_NoContext(t *testing.T) {
@@ -431,7 +431,7 @@ func TestHandleWithOutMetrics_RPCOutPayload_NoContext(t *testing.T) {
 		TransportSize: 10,
 		Protocol:      "grpc",
 	}
-	h.handleWithOutMetrics(ctx, rs, false)
+	h.handleRPC(ctx, rs, false)
 }
 
 func TestHandleWithOutMetrics_RPCOutHeader(t *testing.T) {
@@ -446,14 +446,14 @@ func TestHandleWithOutMetrics_RPCOutHeader(t *testing.T) {
 		Protocol:       "grpc",
 		RemoteEndpoint: "server:8080",
 	}
-	h.handleWithOutMetrics(ctx, rs, false)
+	h.handleRPC(ctx, rs, false)
 }
 
 func TestHandleWithOutMetrics_DefaultCase(t *testing.T) {
 	h := newHandler(false)
 	ctx := context.Background()
 	// Unknown stats type should return early
-	h.handleWithOutMetrics(ctx, &stats.RPCBeginBase{}, false)
+	h.handleRPC(ctx, &stats.RPCBeginBase{}, false)
 }
 
 func TestHandleWithMetrics_RPCEnd_WithNilRpcContext(t *testing.T) {
@@ -467,7 +467,7 @@ func TestHandleWithMetrics_RPCEnd_WithNilRpcContext(t *testing.T) {
 
 	begin := time.Now()
 	// No rpcContext in context, should still record duration
-	h.handleWithMetrics(ctx, &stats.RPCEndBase{
+	h.handleRPC(ctx, &stats.RPCEndBase{
 		Client:    false,
 		BeginTime: begin,
 		EndTime:   begin.Add(10 * time.Millisecond),
@@ -492,7 +492,7 @@ func TestHandleWithMetrics_ReceivedEventDisabled(t *testing.T) {
 		TransportSize: 10,
 		Protocol:      "grpc",
 	}
-	h.handleWithMetrics(ctx, rs, true)
+	h.handleRPC(ctx, rs, true)
 }
 
 func TestHandleWithMetrics_SentEventDisabled(t *testing.T) {
@@ -509,7 +509,7 @@ func TestHandleWithMetrics_SentEventDisabled(t *testing.T) {
 		TransportSize: 10,
 		Protocol:      "grpc",
 	}
-	h.handleWithMetrics(ctx, rs, false)
+	h.handleRPC(ctx, rs, false)
 }
 
 func TestHandleWithMetrics_ServerErrorStatus(t *testing.T) {
@@ -523,7 +523,7 @@ func TestHandleWithMetrics_ServerErrorStatus(t *testing.T) {
 	ctx = context.WithValue(ctx, rpcContextKey{}, &rpcContext{})
 
 	begin := time.Now()
-	h.handleWithMetrics(ctx, &stats.RPCEndBase{
+	h.handleRPC(ctx, &stats.RPCEndBase{
 		Client:    false,
 		BeginTime: begin,
 		EndTime:   begin.Add(10 * time.Millisecond),
@@ -546,4 +546,140 @@ func TestNewCliHandlerWithConfig(t *testing.T) {
 	h := newCliHandlerWithConfig(cfg)
 	assert.NotNil(t, h)
 	assert.Implements(t, (*stats.Handler)(nil), h)
+}
+
+func TestHandlerRoleBehavior(t *testing.T) {
+	roles := []struct {
+		name   string
+		server bool
+		new    func() *handler
+	}{
+		{name: "client", new: newCliHandler},
+		{name: "server", server: true, new: newSvrHandler},
+	}
+
+	for _, role := range roles {
+		t.Run(role.name, func(t *testing.T) {
+			h := role.new()
+			ctx := context.Background()
+			info := &stats.RPCTagInfoBase{FullMethod: "/test.service/Method"}
+
+			ctx = h.TagRPC(ctx, info)
+			assert.NotNil(t, trace.SpanFromContext(ctx))
+			rpcState, ok := ctx.Value(rpcContextKey{}).(*rpcContext)
+			assert.True(t, ok)
+			assert.NotEmpty(t, rpcState.metricAttrs)
+
+			h.HandleRPC(ctx, &stats.RPCBeginBase{
+				Client:    !role.server,
+				BeginTime: time.Now(),
+				Protocol:  "grpc",
+			})
+			h.HandleRPC(ctx, &stats.OutHeaderBase{
+				Client:         !role.server,
+				RemoteEndpoint: "remote:8080",
+				Protocol:       "grpc",
+			})
+			h.HandleRPC(ctx, &stats.OutTrailerBase{Client: !role.server})
+			h.HandleRPC(ctx, &stats.RPCEndBase{
+				Client:    !role.server,
+				BeginTime: time.Now(),
+				EndTime:   time.Now(),
+				Protocol:  "grpc",
+			})
+
+			assert.Equal(t, ctx, h.TagChannel(ctx, &stats.ChanTagInfoBase{Protocol: "grpc"}))
+			h.HandleChannel(ctx, &stats.ChanBeginBase{Client: !role.server})
+		})
+	}
+}
+
+func TestHandlerRoleLifecycleMetrics(t *testing.T) {
+	roles := []struct {
+		name        string
+		server      bool
+		new         func() *handler
+		requestSize int
+		replySize   int
+	}{
+		{
+			name:        "client",
+			new:         newCliHandler,
+			requestSize: 50,
+			replySize:   100,
+		},
+		{
+			name:        "server",
+			server:      true,
+			new:         newSvrHandler,
+			requestSize: 100,
+			replySize:   200,
+		},
+	}
+
+	for _, role := range roles {
+		t.Run(role.name, func(t *testing.T) {
+			h := role.new()
+			h.cfg = &Config{EnableMetrics: true}
+			reqSize := &spyInt64Histogram{}
+			respSize := &spyInt64Histogram{}
+			reqPerRPC := &spyInt64Histogram{}
+			respPerRPC := &spyInt64Histogram{}
+			dur := &spyFloat64Histogram{}
+			h.rpcRequestSize = reqSize
+			h.rpcResponseSize = respSize
+			h.rpcRequestsPerRPC = reqPerRPC
+			h.rpcResponsesPerRPC = respPerRPC
+			h.rpcDuration = dur
+
+			ctx := h.TagRPC(
+				context.Background(),
+				&stats.RPCTagInfoBase{FullMethod: "/test.service/Method"},
+			)
+			inSize, outSize := role.replySize, role.requestSize
+			if role.server {
+				inSize, outSize = role.requestSize, role.replySize
+			}
+			inPayload := &stats.RPCInPayloadBase{
+				Client:        !role.server,
+				TransportSize: inSize,
+				Protocol:      "grpc",
+			}
+			outPayload := &stats.RPCOutPayloadBase{
+				Client:        !role.server,
+				TransportSize: outSize,
+				Protocol:      "grpc",
+			}
+			if role.server {
+				h.HandleRPC(ctx, inPayload)
+				h.HandleRPC(ctx, outPayload)
+			} else {
+				h.HandleRPC(ctx, outPayload)
+				h.HandleRPC(ctx, inPayload)
+			}
+			begin := time.Now()
+			h.HandleRPC(ctx, &stats.RPCEndBase{
+				Client:    !role.server,
+				BeginTime: begin,
+				EndTime:   begin.Add(25 * time.Millisecond),
+				Protocol:  "grpc",
+			})
+
+			assert.Equal(t, []int64{int64(role.requestSize)}, reqSize.values)
+			assert.Equal(t, []int64{int64(role.replySize)}, respSize.values)
+			assert.Equal(t, []int64{1}, reqPerRPC.values)
+			assert.Equal(t, []int64{1}, respPerRPC.values)
+			assert.Len(t, dur.values, 1)
+		})
+	}
+}
+
+func TestHandlerRoleContextPreserved(t *testing.T) {
+	type contextKey struct{}
+	for _, role := range []func() *handler{newCliHandler, newSvrHandler} {
+		h := role()
+		ctx := context.WithValue(context.Background(), contextKey{}, "value")
+		ctx = h.TagRPC(ctx, &stats.RPCTagInfoBase{FullMethod: "/test/method"})
+		assert.Equal(t, "value", ctx.Value(contextKey{}))
+	}
 }

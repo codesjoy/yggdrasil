@@ -22,8 +22,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/codesjoy/yggdrasil/v3/config"
@@ -599,21 +599,13 @@ func dedupStrings(values []string) []string {
 }
 
 func sortedKeys[T any](items map[string]T) []string {
-	out := make([]string, 0, len(items))
-	for key := range items {
-		out = append(out, key)
-	}
-	sort.Strings(out)
-	return out
+	return slices.Sorted(maps.Keys(items))
 }
 
 func cloneStringMap(in map[string]string) map[string]string {
-	if len(in) == 0 {
+	out := maps.Clone(in)
+	if out == nil {
 		return map[string]string{}
-	}
-	out := make(map[string]string, len(in))
-	for key, value := range in {
-		out[key] = value
 	}
 	return out
 }
@@ -693,12 +685,7 @@ func unionKeys[T any](left, right map[string]T) []string {
 	for key := range right {
 		set[key] = struct{}{}
 	}
-	keys := make([]string, 0, len(set))
-	for key := range set {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
+	return slices.Sorted(maps.Keys(set))
 }
 
 func overrideDecisions(items []Decision) map[string]string {

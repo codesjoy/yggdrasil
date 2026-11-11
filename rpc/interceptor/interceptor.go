@@ -17,10 +17,8 @@ package interceptor
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"sync"
 
 	"github.com/codesjoy/yggdrasil/v3/rpc/stream"
@@ -142,43 +140,23 @@ type StreamServerInterceptorProvider interface {
 	New() StreamServerInterceptor
 }
 
-type unaryClientProvider struct {
+type clientProvider[I any] struct {
 	name    string
-	builder UnaryClientIntBuilder
+	builder func(string) I
 }
 
-func (p unaryClientProvider) Name() string { return p.name }
-func (p unaryClientProvider) New(serviceName string) UnaryClientInterceptor {
+func (p clientProvider[I]) Name() string { return p.name }
+func (p clientProvider[I]) New(serviceName string) I {
 	return p.builder(serviceName)
 }
 
-type streamClientProvider struct {
+type serverProvider[I any] struct {
 	name    string
-	builder StreamClientIntBuilder
+	builder func() I
 }
 
-func (p streamClientProvider) Name() string { return p.name }
-func (p streamClientProvider) New(serviceName string) StreamClientInterceptor {
-	return p.builder(serviceName)
-}
-
-type unaryServerProvider struct {
-	name    string
-	builder UnaryServerIntBuilder
-}
-
-func (p unaryServerProvider) Name() string { return p.name }
-func (p unaryServerProvider) New() UnaryServerInterceptor {
-	return p.builder()
-}
-
-type streamServerProvider struct {
-	name    string
-	builder StreamServerIntBuilder
-}
-
-func (p streamServerProvider) Name() string { return p.name }
-func (p streamServerProvider) New() StreamServerInterceptor {
+func (p serverProvider[I]) Name() string { return p.name }
+func (p serverProvider[I]) New() I {
 	return p.builder()
 }
 
@@ -187,7 +165,7 @@ func NewUnaryClientInterceptorProvider(
 	name string,
 	builder UnaryClientIntBuilder,
 ) UnaryClientInterceptorProvider {
-	return unaryClientProvider{name: name, builder: builder}
+	return clientProvider[UnaryClientInterceptor]{name: name, builder: builder}
 }
 
 // NewStreamClientInterceptorProvider wraps a builder as stream client provider.
@@ -195,7 +173,7 @@ func NewStreamClientInterceptorProvider(
 	name string,
 	builder StreamClientIntBuilder,
 ) StreamClientInterceptorProvider {
-	return streamClientProvider{name: name, builder: builder}
+	return clientProvider[StreamClientInterceptor]{name: name, builder: builder}
 }
 
 // NewUnaryServerInterceptorProvider wraps a builder as unary server provider.
@@ -203,7 +181,7 @@ func NewUnaryServerInterceptorProvider(
 	name string,
 	builder UnaryServerIntBuilder,
 ) UnaryServerInterceptorProvider {
-	return unaryServerProvider{name: name, builder: builder}
+	return serverProvider[UnaryServerInterceptor]{name: name, builder: builder}
 }
 
 // NewStreamServerInterceptorProvider wraps a builder as stream server provider.
@@ -211,7 +189,7 @@ func NewStreamServerInterceptorProvider(
 	name string,
 	builder StreamServerIntBuilder,
 ) StreamServerInterceptorProvider {
-	return streamServerProvider{name: name, builder: builder}
+	return serverProvider[StreamServerInterceptor]{name: name, builder: builder}
 }
 
 var (
@@ -222,21 +200,32 @@ var (
 	streamServerProviders = map[string]StreamServerInterceptorProvider{}
 )
 
-// ConfigureUnaryClientProviders replaces all unary client interceptor providers.
-func ConfigureUnaryClientProviders(next []UnaryClientInterceptorProvider) error {
-	target := map[string]UnaryClientInterceptorProvider{}
+func configureProviderMap[P interface{ Name() string }](
+	next []P,
+	kind string,
+) (map[string]P, error) {
+	target := make(map[string]P, len(next))
 	for _, item := range next {
-		if item == nil {
+		if any(item) == nil {
 			continue
 		}
 		name := item.Name()
 		if name == "" {
-			return errors.New("unary client interceptor provider name is empty")
+			return nil, fmt.Errorf("%s interceptor provider name is empty", kind)
 		}
 		if _, exists := target[name]; exists {
-			return fmt.Errorf("duplicate unary client interceptor provider %q", name)
+			return nil, fmt.Errorf("duplicate %s interceptor provider %q", kind, name)
 		}
 		target[name] = item
+	}
+	return target, nil
+}
+
+// ConfigureUnaryClientProviders replaces all unary client interceptor providers.
+func ConfigureUnaryClientProviders(next []UnaryClientInterceptorProvider) error {
+	target, err := configureProviderMap(next, "unary client")
+	if err != nil {
+		return err
 	}
 	mu.Lock()
 	unaryClientProviders = target
@@ -246,19 +235,9 @@ func ConfigureUnaryClientProviders(next []UnaryClientInterceptorProvider) error 
 
 // ConfigureUnaryServerProviders replaces all unary server interceptor providers.
 func ConfigureUnaryServerProviders(next []UnaryServerInterceptorProvider) error {
-	target := map[string]UnaryServerInterceptorProvider{}
-	for _, item := range next {
-		if item == nil {
-			continue
-		}
-		name := item.Name()
-		if name == "" {
-			return errors.New("unary server interceptor provider name is empty")
-		}
-		if _, exists := target[name]; exists {
-			return fmt.Errorf("duplicate unary server interceptor provider %q", name)
-		}
-		target[name] = item
+	target, err := configureProviderMap(next, "unary server")
+	if err != nil {
+		return err
 	}
 	mu.Lock()
 	unaryServerProviders = target
@@ -268,19 +247,9 @@ func ConfigureUnaryServerProviders(next []UnaryServerInterceptorProvider) error 
 
 // ConfigureStreamClientProviders replaces all stream client interceptor providers.
 func ConfigureStreamClientProviders(next []StreamClientInterceptorProvider) error {
-	target := map[string]StreamClientInterceptorProvider{}
-	for _, item := range next {
-		if item == nil {
-			continue
-		}
-		name := item.Name()
-		if name == "" {
-			return errors.New("stream client interceptor provider name is empty")
-		}
-		if _, exists := target[name]; exists {
-			return fmt.Errorf("duplicate stream client interceptor provider %q", name)
-		}
-		target[name] = item
+	target, err := configureProviderMap(next, "stream client")
+	if err != nil {
+		return err
 	}
 	mu.Lock()
 	streamClientProviders = target
@@ -290,19 +259,9 @@ func ConfigureStreamClientProviders(next []StreamClientInterceptorProvider) erro
 
 // ConfigureStreamServerProviders replaces all stream server interceptor providers.
 func ConfigureStreamServerProviders(next []StreamServerInterceptorProvider) error {
-	target := map[string]StreamServerInterceptorProvider{}
-	for _, item := range next {
-		if item == nil {
-			continue
-		}
-		name := item.Name()
-		if name == "" {
-			return errors.New("stream server interceptor provider name is empty")
-		}
-		if _, exists := target[name]; exists {
-			return fmt.Errorf("duplicate stream server interceptor provider %q", name)
-		}
-		target[name] = item
+	target, err := configureProviderMap(next, "stream server")
+	if err != nil {
+		return err
 	}
 	mu.Lock()
 	streamServerProviders = target
@@ -361,12 +320,30 @@ func buildInterceptorList[P interface{ Name() string }, I any](
 	return out, nil
 }
 
+func buildInterceptorListLenient[P interface{ Name() string }, I any](
+	names []string,
+	providers map[string]P,
+	kind string,
+	build func(P) I,
+) []I {
+	out := make([]I, 0, len(names))
+	for _, name := range names {
+		provider, ok := providers[name]
+		if !ok || any(provider) == nil {
+			slog.Warn("not found "+kind+" interceptor", slog.String("name", name))
+			continue
+		}
+		out = append(out, build(provider))
+	}
+	return out
+}
+
 // ChainUnaryClientInterceptors chains all unary client interceptors into one.
 //
 // Deprecated: use ChainUnaryClientInterceptorsE to observe missing providers.
 func ChainUnaryClientInterceptors(serviceName string, names []string) UnaryClientInterceptor {
 	mu.RLock()
-	providers := maps.Clone(unaryClientProviders)
+	providers := unaryClientProviders
 	mu.RUnlock()
 	return ChainUnaryClientInterceptorsWithProviders(serviceName, names, providers)
 }
@@ -378,7 +355,7 @@ func ChainUnaryClientInterceptorsE(
 	names []string,
 ) (UnaryClientInterceptor, error) {
 	mu.RLock()
-	providers := maps.Clone(unaryClientProviders)
+	providers := unaryClientProviders
 	mu.RUnlock()
 	return ChainUnaryClientInterceptorsWithProvidersE(serviceName, names, providers)
 }
@@ -389,30 +366,14 @@ func ChainUnaryClientInterceptorsWithProviders(
 	names []string,
 	providers map[string]UnaryClientInterceptorProvider,
 ) UnaryClientInterceptor {
-	interceptors := make([]UnaryClientInterceptor, 0, len(names))
-	for _, item := range names {
-		if provider := providers[item]; provider != nil {
-			interceptors = append(interceptors, provider.New(serviceName))
-		} else {
-			slog.Warn("not found unary client interceptor", slog.String("name", item))
-		}
-	}
-	if len(interceptors) == 0 {
-		return func(ctx context.Context, method string, req, reply interface{}, invoker UnaryInvoker) error {
-			return invoker(ctx, method, req, reply)
-		}
-	} else if len(interceptors) == 1 {
-		return interceptors[0]
-	}
-	return func(ctx context.Context, method string, req, reply interface{}, invoker UnaryInvoker) error {
-		return interceptors[0](
-			ctx,
-			method,
-			req,
-			reply,
-			getChainUnaryInvoker(interceptors, 0, invoker),
-		)
-	}
+	return chainUnaryClientInterceptors(buildInterceptorListLenient(
+		names,
+		providers,
+		"unary client",
+		func(provider UnaryClientInterceptorProvider) UnaryClientInterceptor {
+			return provider.New(serviceName)
+		},
+	))
 }
 
 // ChainUnaryClientInterceptorsWithProvidersE chains unary client interceptors
@@ -460,33 +421,15 @@ func chainUnaryClientInterceptors(
 		req, reply interface{},
 		invoker UnaryInvoker,
 	) error {
-		return interceptors[0](
-			ctx,
-			method,
-			req,
-			reply,
-			getChainUnaryInvoker(interceptors, 0, invoker),
-		)
-	}
-}
-
-// getChainUnaryInvoker recursively generate the chained unary invoker.
-func getChainUnaryInvoker(
-	interceptors []UnaryClientInterceptor,
-	curr int,
-	finalInvoker UnaryInvoker,
-) UnaryInvoker {
-	if curr == len(interceptors)-1 {
-		return finalInvoker
-	}
-	return func(ctx context.Context, method string, req, reply interface{}) error {
-		return interceptors[curr+1](
-			ctx,
-			method,
-			req,
-			reply,
-			getChainUnaryInvoker(interceptors, curr+1, finalInvoker),
-		)
+		next := invoker
+		for i := len(interceptors) - 1; i >= 0; i-- {
+			current := interceptors[i]
+			downstream := next
+			next = func(ctx context.Context, method string, req, reply any) error {
+				return current(ctx, method, req, reply, downstream)
+			}
+		}
+		return next(ctx, method, req, reply)
 	}
 }
 
@@ -495,7 +438,7 @@ func getChainUnaryInvoker(
 // Deprecated: use ChainStreamClientInterceptorsE to observe missing providers.
 func ChainStreamClientInterceptors(serviceName string, names []string) StreamClientInterceptor {
 	mu.RLock()
-	providers := maps.Clone(streamClientProviders)
+	providers := streamClientProviders
 	mu.RUnlock()
 	return ChainStreamClientInterceptorsWithProviders(serviceName, names, providers)
 }
@@ -507,7 +450,7 @@ func ChainStreamClientInterceptorsE(
 	names []string,
 ) (StreamClientInterceptor, error) {
 	mu.RLock()
-	providers := maps.Clone(streamClientProviders)
+	providers := streamClientProviders
 	mu.RUnlock()
 	return ChainStreamClientInterceptorsWithProvidersE(serviceName, names, providers)
 }
@@ -518,24 +461,14 @@ func ChainStreamClientInterceptorsWithProviders(
 	names []string,
 	providers map[string]StreamClientInterceptorProvider,
 ) StreamClientInterceptor {
-	interceptors := make([]StreamClientInterceptor, 0, len(names))
-	for _, item := range names {
-		if provider := providers[item]; provider != nil {
-			interceptors = append(interceptors, provider.New(serviceName))
-		} else {
-			slog.Warn("not found stream client interceptor", slog.String("name", item))
-		}
-	}
-	if len(interceptors) == 0 {
-		return func(ctx context.Context, desc *stream.Desc, method string, streamer Streamer) (stream.ClientStream, error) {
-			return streamer(ctx, desc, method)
-		}
-	} else if len(interceptors) == 1 {
-		return interceptors[0]
-	}
-	return func(ctx context.Context, desc *stream.Desc, method string, streamer Streamer) (stream.ClientStream, error) {
-		return interceptors[0](ctx, desc, method, getChainStreamer(interceptors, 0, streamer))
-	}
+	return chainStreamClientInterceptors(buildInterceptorListLenient(
+		names,
+		providers,
+		"stream client",
+		func(provider StreamClientInterceptorProvider) StreamClientInterceptor {
+			return provider.New(serviceName)
+		},
+	))
 }
 
 // ChainStreamClientInterceptorsWithProvidersE chains stream client
@@ -583,26 +516,19 @@ func chainStreamClientInterceptors(
 		method string,
 		streamer Streamer,
 	) (stream.ClientStream, error) {
-		return interceptors[0](ctx, desc, method, getChainStreamer(interceptors, 0, streamer))
-	}
-}
-
-// getChainStreamer recursively generate the chained client stream constructor.
-func getChainStreamer(
-	interceptors []StreamClientInterceptor,
-	curr int,
-	finalStreamer Streamer,
-) Streamer {
-	if curr == len(interceptors)-1 {
-		return finalStreamer
-	}
-	return func(ctx context.Context, desc *stream.Desc, method string) (stream.ClientStream, error) {
-		return interceptors[curr+1](
-			ctx,
-			desc,
-			method,
-			getChainStreamer(interceptors, curr+1, finalStreamer),
-		)
+		next := streamer
+		for i := len(interceptors) - 1; i >= 0; i-- {
+			current := interceptors[i]
+			downstream := next
+			next = func(
+				ctx context.Context,
+				desc *stream.Desc,
+				method string,
+			) (stream.ClientStream, error) {
+				return current(ctx, desc, method, downstream)
+			}
+		}
+		return next(ctx, desc, method)
 	}
 }
 
@@ -611,7 +537,7 @@ func getChainStreamer(
 // Deprecated: use ChainUnaryServerInterceptorsE to observe missing providers.
 func ChainUnaryServerInterceptors(names []string) UnaryServerInterceptor {
 	mu.RLock()
-	providers := maps.Clone(unaryServerProviders)
+	providers := unaryServerProviders
 	mu.RUnlock()
 	return ChainUnaryServerInterceptorsWithProviders(names, providers)
 }
@@ -622,7 +548,7 @@ func ChainUnaryServerInterceptorsE(
 	names []string,
 ) (UnaryServerInterceptor, error) {
 	mu.RLock()
-	providers := maps.Clone(unaryServerProviders)
+	providers := unaryServerProviders
 	mu.RUnlock()
 	return ChainUnaryServerInterceptorsWithProvidersE(names, providers)
 }
@@ -632,27 +558,14 @@ func ChainUnaryServerInterceptorsWithProviders(
 	names []string,
 	providers map[string]UnaryServerInterceptorProvider,
 ) UnaryServerInterceptor {
-	interceptors := make([]UnaryServerInterceptor, 0, len(names))
-	for _, item := range names {
-		provider := providers[item]
-		if provider == nil {
-			slog.Warn("not found unary server interceptor", slog.String("name", item))
-			continue
-		}
-		interceptors = append(interceptors, provider.New())
-	}
-
-	if len(interceptors) == 0 {
-		return func(ctx context.Context, req interface{}, _ *UnaryServerInfo, handler UnaryHandler) (interface{}, error) {
-			return handler(ctx, req)
-		}
-	} else if len(interceptors) == 1 {
-		return interceptors[0]
-	}
-
-	return func(ctx context.Context, req interface{}, info *UnaryServerInfo, handler UnaryHandler) (interface{}, error) {
-		return interceptors[0](ctx, req, info, getChainUnaryHandler(interceptors, 0, info, handler))
-	}
+	return chainUnaryServerInterceptors(buildInterceptorListLenient(
+		names,
+		providers,
+		"unary server",
+		func(provider UnaryServerInterceptorProvider) UnaryServerInterceptor {
+			return provider.New()
+		},
+	))
 }
 
 // ChainUnaryServerInterceptorsWithProvidersE chains unary server interceptors
@@ -699,31 +612,15 @@ func chainUnaryServerInterceptors(
 		info *UnaryServerInfo,
 		handler UnaryHandler,
 	) (interface{}, error) {
-		return interceptors[0](ctx, req, info, getChainUnaryHandler(
-			interceptors,
-			0,
-			info,
-			handler,
-		))
-	}
-}
-
-func getChainUnaryHandler(
-	interceptors []UnaryServerInterceptor,
-	curr int,
-	info *UnaryServerInfo,
-	finalHandler UnaryHandler,
-) UnaryHandler {
-	if curr == len(interceptors)-1 {
-		return finalHandler
-	}
-	return func(ctx context.Context, req interface{}) (interface{}, error) {
-		return interceptors[curr+1](
-			ctx,
-			req,
-			info,
-			getChainUnaryHandler(interceptors, curr+1, info, finalHandler),
-		)
+		next := handler
+		for i := len(interceptors) - 1; i >= 0; i-- {
+			current := interceptors[i]
+			downstream := next
+			next = func(ctx context.Context, req any) (any, error) {
+				return current(ctx, req, info, downstream)
+			}
+		}
+		return next(ctx, req)
 	}
 }
 
@@ -732,7 +629,7 @@ func getChainUnaryHandler(
 // Deprecated: use ChainStreamServerInterceptorsE to observe missing providers.
 func ChainStreamServerInterceptors(names []string) StreamServerInterceptor {
 	mu.RLock()
-	providers := maps.Clone(streamServerProviders)
+	providers := streamServerProviders
 	mu.RUnlock()
 	return ChainStreamServerInterceptorsWithProviders(names, providers)
 }
@@ -743,7 +640,7 @@ func ChainStreamServerInterceptorsE(
 	names []string,
 ) (StreamServerInterceptor, error) {
 	mu.RLock()
-	providers := maps.Clone(streamServerProviders)
+	providers := streamServerProviders
 	mu.RUnlock()
 	return ChainStreamServerInterceptorsWithProvidersE(names, providers)
 }
@@ -753,26 +650,14 @@ func ChainStreamServerInterceptorsWithProviders(
 	names []string,
 	providers map[string]StreamServerInterceptorProvider,
 ) StreamServerInterceptor {
-	interceptors := make([]StreamServerInterceptor, 0, len(names))
-	for _, item := range names {
-		provider := providers[item]
-		if provider == nil {
-			slog.Warn("not found stream server interceptor", slog.String("name", item))
-			continue
-		}
-		interceptors = append(interceptors, provider.New())
-	}
-
-	if len(interceptors) == 0 {
-		return func(srv interface{}, ss stream.ServerStream, _ *StreamServerInfo, handler stream.Handler) error {
-			return handler(srv, ss)
-		}
-	} else if len(interceptors) == 1 {
-		return interceptors[0]
-	}
-	return func(srv interface{}, ss stream.ServerStream, info *StreamServerInfo, handler stream.Handler) error {
-		return interceptors[0](srv, ss, info, getChainStreamHandler(interceptors, 0, info, handler))
-	}
+	return chainStreamServerInterceptors(buildInterceptorListLenient(
+		names,
+		providers,
+		"stream server",
+		func(provider StreamServerInterceptorProvider) StreamServerInterceptor {
+			return provider.New()
+		},
+	))
 }
 
 // ChainStreamServerInterceptorsWithProvidersE chains stream server
@@ -819,30 +704,14 @@ func chainStreamServerInterceptors(
 		info *StreamServerInfo,
 		handler stream.Handler,
 	) error {
-		return interceptors[0](srv, ss, info, getChainStreamHandler(
-			interceptors,
-			0,
-			info,
-			handler,
-		))
-	}
-}
-
-func getChainStreamHandler(
-	interceptors []StreamServerInterceptor,
-	curr int,
-	info *StreamServerInfo,
-	finalHandler stream.Handler,
-) stream.Handler {
-	if curr == len(interceptors)-1 {
-		return finalHandler
-	}
-	return func(srv interface{}, stream stream.ServerStream) error {
-		return interceptors[curr+1](
-			srv,
-			stream,
-			info,
-			getChainStreamHandler(interceptors, curr+1, info, finalHandler),
-		)
+		next := handler
+		for i := len(interceptors) - 1; i >= 0; i-- {
+			current := interceptors[i]
+			downstream := next
+			next = func(srv any, stream stream.ServerStream) error {
+				return current(srv, stream, info, downstream)
+			}
+		}
+		return next(srv, ss)
 	}
 }

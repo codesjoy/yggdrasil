@@ -107,7 +107,7 @@ func (p *planner) build() (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	bindings := compileCapabilityBindings(effective)
+	bindings := effective.CapabilityBindings
 	if err := p.validateBindings(bindings); err != nil {
 		return nil, err
 	}
